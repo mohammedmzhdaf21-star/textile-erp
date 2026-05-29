@@ -1,0 +1,497 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ItemType {
+  ROLL
+  PIECE
+  REMANENT
+}
+enum SoldUnit {
+  METER
+  PIECE
+}
+enum TaskPart {
+  PART_1
+  PART_2
+  PART_3
+  PART_4
+}
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+enum PaymentMethod {
+  CASH
+  CARD
+  TRANSFER
+  CREDIT
+}
+enum RefundMethod {
+  CASH
+  CARD
+  STORE_CREDIT
+}
+enum UserRole {
+  ADMIN
+  MANAGER
+  EMPLOYEE
+  TRUSTEE
+}
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  VOID
+  RESTORE
+  LOGIN
+  LOGOUT
+  REFUND
+}
+enum NotificationType {
+  LOW_STOCK
+  TASK_ASSIGNED
+  SALE_VOIDED
+  COMMISSION_PAID
+  SYSTEM
+  BROADCAST
+}
+
+model Branch {
+  id        String    @id @db.VarChar(5)
+  name      String    @db.VarChar(100)
+  address   String?   @db.VarChar(500)
+  phone     String?   @db.VarChar(20)
+  isActive  Boolean   @default(true)
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  sales              Sale[]
+  inventory          InventoryItem[]
+  tasks              Task[]
+  permissions        TrusteePermission[]
+  employees          BranchEmployee[]
+  notifications      Notification[]
+  customers          Customer[]
+  auditLogs          AuditLog[]
+  trusteePayments    PaidTrusteeCommissionHistory[]
+
+  @@index([isActive])
+  @@map("branches")
+}
+
+model Customer {
+  id        String    @id @default(uuid())
+  name      String    @db.VarChar(200)
+  phone     String    @unique @db.VarChar(20)
+  email     String?   @unique @db.VarChar(255)
+  address   String?   @db.VarChar(500)
+  notes     String?   @db.Text
+
+  branchId  String?   @db.VarChar(5)
+  branch    Branch?   @relation(fields: [branchId], references: [id], onDelete: SetNull)
+
+  isActive  Boolean   @default(true)
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  sales     Sale[]
+
+  @@index([phone])
+  @@index([branchId])
+  @@index([isActive])
+  @@map("customers")
+}
+
+model Color {
+  id        String    @id @default(uuid())
+  name      String    @unique @db.VarChar(50)
+  hexCode   String?   @db.VarChar(7)
+  isActive  Boolean   @default(true)
+  createdAt DateTime  @default(now())
+
+  inventoryItems InventoryItem[]
+  saleItems      SaleItem[]
+
+  @@map("colors")
+}
+
+model InventoryItem {
+  id          String    @id
+  branchId    String    @db.VarChar(5)
+  branch      Branch    @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  code        Int
+  colorId     String
+  color       Color     @relation(fields: [colorId], references: [id], onDelete: Restrict)
+  type        ItemType
+  meters      Decimal?  @db.Decimal(10, 2)
+  pieceLength Decimal?  @db.Decimal(10, 2)
+  quantity    Int       @default(1)
+
+  costPrice   Decimal?  @db.Decimal(12, 2)
+  version     Int       @default(0)
+  isArchived  Boolean   @default(false)
+  deletedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  saleItems   SaleItem[]
+
+  @@unique([branchId, code, colorId, type])
+  @@index([branchId, code])
+  @@index([branchId, type])
+  @@index([colorId])
+  @@index([isArchived])
+  @@map("inventory_items")
+}
+
+model Sale {
+  id            String        @id @default(uuid())
+  branchId      String        @db.VarChar(5)
+  branch        Branch        @relation(fields: [branchId], references: [id], onDelete: Restrict)
+
+  employeeId    String
+  employee      Employee      @relation("SaleEmployee", fields: [employeeId], references: [id], onDelete: Restrict)
+
+  customerId    String?
+  customer      Customer?     @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  customerName  String        @db.VarChar(200)
+  customerPhone String        @db.VarChar(20)
+
+  totalPrice    Decimal       @db.Decimal(12, 2)
+  discount      Decimal       @default(0) @db.Decimal(12, 2)
+  paymentMethod PaymentMethod @default(CASH)
+  notes         String?       @db.Text
+
+  isVoided      Boolean       @default(false)
+  voidedById    String?
+  voidedBy      Employee?     @relation("SaleVoidedBy", fields: [voidedById], references: [id], onDelete: SetNull)
+  voidedAt      DateTime?
+  voidedReason  String?       @db.VarChar(500)
+
+  createdAt     DateTime      @default(now())
+
+  items         SaleItem[]
+  refunds       Refund[]
+
+  @@index([branchId, createdAt])
+  @@index([employeeId, createdAt])
+  @@index([customerPhone])
+  @@index([customerId])
+  @@index([isVoided])
+  @@map("sales")
+}
+
+model SaleItem {
+  id              String         @id @default(uuid())
+  saleId          String
+  sale            Sale           @relation(fields: [saleId], references: [id], onDelete: Cascade)
+
+  inventoryItemId String?
+  inventoryItem   InventoryItem? @relation(fields: [inventoryItemId], references: [id], onDelete: SetNull)
+
+  isPlainCloth    Boolean        @default(false)
+  plainClothName  String?        @db.VarChar(50)
+  scannedCode     Int?
+
+  colorId         String
+  color           Color          @relation(fields: [colorId], references: [id], onDelete: Restrict)
+
+  soldAsUnit      SoldUnit
+  quantitySold    Decimal        @db.Decimal(10, 2)
+  soldPrice       Decimal        @db.Decimal(12, 2)
+  lineDiscount    Decimal        @default(0) @db.Decimal(12, 2)
+  createdAt       DateTime       @default(now())
+
+  @@index([saleId])
+  @@index([inventoryItemId])
+  @@index([colorId])
+  @@map("sale_items")
+}
+
+model Refund {
+  id            String       @id @default(uuid())
+  saleId        String
+  sale          Sale         @relation(fields: [saleId], references: [id], onDelete: Restrict)
+  amount        Decimal      @db.Decimal(12, 2)
+  method        RefundMethod @default(CASH)
+  reason        String       @db.VarChar(500)
+  processedById String
+  processedBy   Employee     @relation(fields: [processedById], references: [id], onDelete: Restrict)
+  createdAt     DateTime     @default(now())
+
+  @@index([saleId])
+  @@index([processedById])
+  @@map("refunds")
+}
+
+model PlainClothPricing {
+  id        String   @id @db.VarChar(50)
+  name      String   @db.VarChar(100)
+  pricePerM Decimal  @db.Decimal(12, 2)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  wholeDeals WholeClothDeal[]
+
+  @@map("plain_cloth_pricing")
+}
+
+model WholeClothDeal {
+  id                  String            @id @default(uuid())
+  plainClothPricingId String            @db.VarChar(50)
+  plainCloth          PlainClothPricing @relation(fields: [plainClothPricingId], references: [id], onDelete: Cascade)
+
+  length              Decimal           @db.Decimal(6, 2)
+  dealPrice           Decimal           @db.Decimal(12, 2)
+  isActive            Boolean           @default(true)
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+
+  @@unique([plainClothPricingId, length])
+  @@map("whole_cloth_deals")
+}
+
+model Task {
+  id              String       @id @default(uuid())
+  branchId        String       @db.VarChar(5)
+  branch          Branch       @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  text            String       @db.Text
+  partType        TaskPart
+  priority        TaskPriority @default(MEDIUM)
+  isCompleted     Boolean      @default(false)
+
+  completedById   String?
+  completedBy     Employee?    @relation("TaskCompletedBy", fields: [completedById], references: [id], onDelete: SetNull)
+  completedAt     DateTime?
+
+  assignedToId    String?
+  assignedTo      Employee?    @relation("TaskAssignedTo", fields: [assignedToId], references: [id], onDelete: SetNull)
+
+  date            DateTime     @default(now())
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  @@index([branchId, isCompleted])
+  @@index([date])
+  @@index([partType])
+  @@index([priority])
+  @@index([assignedToId])
+  @@map("tasks")
+}
+
+model Employee {
+  id                  String    @id @default(uuid())
+  name                String    @db.VarChar(100)
+  email               String    @unique @db.VarChar(255)
+  phone               String?   @db.VarChar(20)
+  role                UserRole  @default(EMPLOYEE)
+
+  passwordHash        String    @db.VarChar(255)
+  lastLoginAt         DateTime?
+  failedLoginAttempts Int       @default(0)
+  lockedUntil         DateTime?
+
+  isActive            Boolean   @default(true)
+  deletedAt           DateTime?
+  hireDate            DateTime  @default(now())
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  sales            Sale[]                          @relation("SaleEmployee")
+  voidedSales      Sale[]                          @relation("SaleVoidedBy")
+  commissions      PaidCommissionHistory[]
+  branches         BranchEmployee[]
+  tasksDone        Task[]                          @relation("TaskCompletedBy")
+  tasksAssigned    Task[]                          @relation("TaskAssignedTo")
+  refundsProcessed Refund[]
+  notifications    Notification[]
+  auditLogs        AuditLog[]
+  sessions         Session[]
+  settingsUpdated  Setting[]
+
+  @@index([email])
+  @@index([isActive])
+  @@index([role])
+  @@map("employees")
+}
+
+model Session {
+  id               String    @id @default(uuid())
+  employeeId       String
+  employee         Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  refreshTokenHash String    @unique @db.VarChar(255)
+  userAgent        String?   @db.VarChar(500)
+  ipAddress        String?   @db.VarChar(45)
+  expiresAt        DateTime
+  revokedAt        DateTime?
+  createdAt        DateTime  @default(now())
+
+  @@index([employeeId])
+  @@index([refreshTokenHash])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+model BranchEmployee {
+  id            String    @id @default(uuid())
+  branchId      String    @db.VarChar(5)
+  branch        Branch    @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  employeeId    String
+  employee      Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  isActive      Boolean   @default(true)
+  assignedAt    DateTime  @default(now())
+  deactivatedAt DateTime?
+
+  @@unique([branchId, employeeId])
+  @@index([employeeId])
+  @@index([isActive])
+  @@map("branch_employees")
+}
+
+model PaidCommissionHistory {
+  id         String    @id @default(uuid())
+  employeeId String
+  employee   Employee  @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  amountPaid Decimal   @db.Decimal(12, 2)
+  periodFrom DateTime?
+  periodTo   DateTime?
+  paidAt     DateTime  @default(now())
+  notes      String?   @db.VarChar(500)
+
+  @@index([employeeId, paidAt])
+  @@map("paid_commission_history")
+}
+
+model Trustee {
+  id          String                          @id @default(uuid())
+  name        String                          @unique @db.VarChar(100)
+  contactInfo String?                         @db.VarChar(255)
+  isActive    Boolean                         @default(true)
+  deletedAt   DateTime?
+  createdAt   DateTime                        @default(now())
+  updatedAt   DateTime                        @updatedAt
+
+  permissions TrusteePermission[]
+  payments    PaidTrusteeCommissionHistory[]
+
+  @@map("trustees")
+}
+
+model TrusteePermission {
+  id         String   @id @default(uuid())
+
+  trusteeId  String
+  trustee    Trustee  @relation(fields: [trusteeId], references: [id], onDelete: Cascade)
+
+  branchId   String   @db.VarChar(5)
+  branch     Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  percentage Decimal  @db.Decimal(5, 2)
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([trusteeId, branchId])
+  @@index([branchId])
+  @@map("trustee_permissions")
+}
+
+model PaidTrusteeCommissionHistory {
+  id         String    @id @default(uuid())
+
+  trusteeId  String
+  trustee    Trustee   @relation(fields: [trusteeId], references: [id], onDelete: Restrict)
+
+  branchId   String    @db.VarChar(5)
+  branch     Branch    @relation(fields: [branchId], references: [id], onDelete: Restrict)
+
+  amountPaid Decimal   @db.Decimal(12, 2)
+  periodFrom DateTime?
+  periodTo   DateTime?
+  paidAt     DateTime  @default(now())
+  notes      String?   @db.VarChar(500)
+
+  @@index([trusteeId, paidAt])
+  @@index([branchId])
+  @@map("paid_trustee_commission_history")
+}
+
+model Notification {
+  id          String           @id @default(uuid())
+  type        NotificationType
+  title       String           @db.VarChar(200)
+  message     String           @db.Text
+
+  recipientId String?
+  recipient   Employee?        @relation(fields: [recipientId], references: [id], onDelete: Cascade)
+  isBroadcast Boolean          @default(false)
+
+  branchId    String?          @db.VarChar(5)
+  branch      Branch?          @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  isRead      Boolean          @default(false)
+  readAt      DateTime?
+  metadata    Json?
+  expiresAt   DateTime?
+  createdAt   DateTime         @default(now())
+
+  @@index([recipientId, isRead])
+  @@index([branchId])
+  @@index([type])
+  @@index([expiresAt])
+  @@map("notifications")
+}
+
+model AuditLog {
+  id               String      @id @default(uuid())
+  entityType       String      @db.VarChar(50)
+  entityId         String      @db.VarChar(100)
+  action           AuditAction
+
+  performedById    String?
+  performedBy      Employee?   @relation(fields: [performedById], references: [id], onDelete: SetNull)
+  performedByEmail String?     @db.VarChar(255)
+
+  branchId         String?     @db.VarChar(5)
+  branch           Branch?     @relation(fields: [branchId], references: [id], onDelete: SetNull)
+
+  changes          Json?
+  ipAddress        String?     @db.VarChar(45)
+  userAgent        String?     @db.VarChar(500)
+  createdAt        DateTime    @default(now())
+
+  @@index([entityType, entityId])
+  @@index([performedById, createdAt])
+  @@index([branchId])
+  @@index([action])
+  @@map("audit_logs")
+}
+
+model Setting {
+  key         String    @id @db.VarChar(100)
+  value       Json
+  description String?   @db.VarChar(500)
+
+  updatedById String?
+  updatedBy   Employee? @relation(fields: [updatedById], references: [id], onDelete: SetNull)
+
+  updatedAt   DateTime  @updatedAt
+  createdAt   DateTime  @default(now())
+
+  @@index([updatedById])
+  @@map("settings")
+}
