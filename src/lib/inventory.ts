@@ -28,6 +28,8 @@ export interface CreateInventoryInput {
   costPrice?: number;
   qrCodeValue?: string;
   qrCodeDataUrl?: string;
+  pictureName?: string;
+  pictureDataUrl?: string;
 }
 
 export interface UpdateInventoryInput {
@@ -146,6 +148,8 @@ export async function createInventoryItem(
         costPrice: input.costPrice,
         qrCodeValue: input.qrCodeValue || input.id,
         qrCodeDataUrl: input.qrCodeDataUrl,
+        pictureName: input.pictureName,
+        pictureDataUrl: input.pictureDataUrl,
       },
       include: { color: true, branch: true },
     });
