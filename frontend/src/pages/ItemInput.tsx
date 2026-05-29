@@ -33,6 +33,8 @@ const BRANCH_CODE_BY_ID: Record<string, string> = {
   B003: 'C',
 };
 
+const MAX_PICTURE_BYTES = 2 * 1024 * 1024;
+
 const ItemInputPage: React.FC = () => {
   const [branches, setBranches] = useState<Branch[]>([]);
   const [colors, setColors] = useState<Color[]>([]);
@@ -55,6 +57,9 @@ const ItemInputPage: React.FC = () => {
   const [createdItemId, setCreatedItemId] = useState<string | null>(null);
   const [createdItemQrDataUrl, setCreatedItemQrDataUrl] = useState<string>('');
   const [createdItemQrSvg, setCreatedItemQrSvg] = useState<string>('');
+  const [pictureName, setPictureName] = useState<string>('');
+  const [pictureDataUrl, setPictureDataUrl] = useState<string>('');
+  const [createdPictureDataUrl, setCreatedPictureDataUrl] = useState<string>('');
   const nextCodeRequestId = useRef(0);
 
   useEffect(() => {
@@ -208,6 +213,39 @@ const ItemInputPage: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [branchId, colorId, type, loadingDefaults]);
 
+  const handlePictureChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      setErrorMessage('Please choose an image file for the item picture.');
+      event.target.value = '';
+      return;
+    }
+
+    if (file.size > MAX_PICTURE_BYTES) {
+      setErrorMessage('Item picture must be 2 MB or smaller.');
+      event.target.value = '';
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      setPictureName(file.name);
+      setPictureDataUrl(String(reader.result || ''));
+      setErrorMessage(null);
+    };
+    reader.onerror = () => {
+      setErrorMessage('Failed to read the selected picture.');
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const clearPicture = () => {
+    setPictureName('');
+    setPictureDataUrl('');
+  };
+
   const handleCreateItem = async () => {
     const currentUser = getCurrentUser();
     if (!currentUser) {
@@ -255,6 +293,8 @@ const ItemInputPage: React.FC = () => {
       costPrice: costPrice > 0 ? costPrice : undefined,
       qrCodeValue: id,
       qrCodeDataUrl: createdQrDataUrl,
+      pictureName: pictureName || undefined,
+      pictureDataUrl: pictureDataUrl || undefined,
     };
     if (type === 'ROLL' || type === 'REMANENT') payload.meters = Number(meters);
     if (type === 'PIECE') {
@@ -272,12 +312,14 @@ const ItemInputPage: React.FC = () => {
       setCreatedItemId(id);
       setCreatedItemQrDataUrl(savedQrDataUrl);
       setCreatedItemQrSvg(createdQrSvg);
+      setCreatedPictureDataUrl(pictureDataUrl);
       setScanId('');
       setItemId('');
       setMeters(1);
       setQuantity(1);
       setPieceLength(1);
       setCostPrice(0);
+      clearPicture();
       await loadNextAvailableCode();
     } catch (error: any) {
       const status = error?.response?.status;
@@ -458,6 +500,34 @@ const ItemInputPage: React.FC = () => {
             </div>
           </div>
 
+          <section className="mt-6 rounded-3xl border border-gray-200 bg-white p-5 shadow-sm">
+            <h4 className="text-base font-semibold text-black">Item picture</h4>
+            <p className="mt-1 text-sm text-gray-500">
+              Add a product photo. It is saved with this inventory item for future use.
+            </p>
+            <input
+              type="file"
+              accept="image/*"
+              onChange={handlePictureChange}
+              className="mt-4 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
+            />
+            {pictureDataUrl && (
+              <div className="mt-4 rounded-2xl border border-gray-200 bg-gray-50 p-3">
+                <img
+                  src={pictureDataUrl}
+                  alt={pictureName || 'Selected item picture'}
+                  className="h-36 w-full rounded-xl border border-gray-200 bg-white object-contain p-2"
+                />
+                <div className="mt-3 flex items-center justify-between gap-3 text-sm">
+                  <span className="truncate text-gray-700">{pictureName}</span>
+                  <button type="button" className="font-semibold text-red-600" onClick={clearPicture}>
+                    Remove
+                  </button>
+                </div>
+              </div>
+            )}
+          </section>
+
           <div className="mt-6 rounded-2xl bg-gray-50 p-4 text-sm text-gray-600">
             When the same color and code are used for both roll and pieces, the system groups them by code while keeping roll meters and piece quantities separate.
             {sameTypeExists && (
@@ -509,6 +579,16 @@ const ItemInputPage: React.FC = () => {
                 >
                   Download created QR
                 </a>
+                {createdPictureDataUrl && (
+                  <div className="mt-4">
+                    <p className="font-semibold">Saved item picture</p>
+                    <img
+                      src={createdPictureDataUrl}
+                      alt={`Saved picture for ${createdItemId}`}
+                      className="mt-2 h-32 w-full rounded-xl border border-green-200 bg-white object-contain p-2"
+                    />
+                  </div>
+                )}
               </div>
             )}
           </section>
