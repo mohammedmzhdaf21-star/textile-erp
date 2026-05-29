@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import QRCode from 'qrcode';
 import api from '../lib/api';
 import { getCurrentUser } from '../lib/auth';
@@ -52,7 +52,10 @@ const ItemInputPage: React.FC = () => {
   const [sameGroupItems, setSameGroupItems] = useState<InventoryItemView[]>([]);
   const [scanId, setScanId] = useState<string>('');
   const [qrDataUrl, setQrDataUrl] = useState<string>('');
-  const [createdQr, setCreatedQr] = useState<{ id: string; dataUrl: string } | null>(null);
+  const [createdItemId, setCreatedItemId] = useState<string | null>(null);
+  const [createdItemQrDataUrl, setCreatedItemQrDataUrl] = useState<string>('');
+  const [createdItemQrSvg, setCreatedItemQrSvg] = useState<string>('');
+  const nextCodeRequestId = useRef(0);
 
   useEffect(() => {
     setLoadingDefaults(true);
@@ -167,6 +170,8 @@ const ItemInputPage: React.FC = () => {
 
   const loadNextAvailableCode = async () => {
     if (!branchId || !colorId) return;
+    const requestId = nextCodeRequestId.current + 1;
+    nextCodeRequestId.current = requestId;
     setLoadingNextCode(true);
     try {
       const response = await api.get('/inventory', {
@@ -182,14 +187,18 @@ const ItemInputPage: React.FC = () => {
         (max: number, item: InventoryItemView) => Math.max(max, Number(item.code || 0)),
         0
       );
+      if (requestId !== nextCodeRequestId.current) return;
       setCode(maxCode + 1);
       setItemId('');
       setScanId('');
     } catch (error) {
+      if (requestId !== nextCodeRequestId.current) return;
       console.error('Failed to load next available code', error);
       setErrorMessage('Failed to find the next available code. You can still enter one manually.');
     } finally {
-      setLoadingNextCode(false);
+      if (requestId === nextCodeRequestId.current) {
+        setLoadingNextCode(false);
+      }
     }
   };
 
@@ -222,6 +231,21 @@ const ItemInputPage: React.FC = () => {
       return alert('Enter or scan an item ID.');
     }
 
+    const createdQrDataUrl =
+      qrValue === id && qrDataUrl
+        ? qrDataUrl
+        : await QRCode.toDataURL(id, {
+            errorCorrectionLevel: 'M',
+            margin: 1,
+            width: 220,
+          });
+    const createdQrSvg = await QRCode.toString(id, {
+      errorCorrectionLevel: 'M',
+      margin: 1,
+      type: 'svg',
+      width: 160,
+    });
+
     const payload: any = {
       id,
       branchId,
@@ -229,6 +253,8 @@ const ItemInputPage: React.FC = () => {
       colorId,
       type,
       costPrice: costPrice > 0 ? costPrice : undefined,
+      qrCodeValue: id,
+      qrCodeDataUrl: createdQrDataUrl,
     };
     if (type === 'ROLL' || type === 'REMANENT') payload.meters = Number(meters);
     if (type === 'PIECE') {
@@ -240,16 +266,12 @@ const ItemInputPage: React.FC = () => {
     setErrorMessage(null);
 
     try {
-      await api.post('/inventory', payload);
-      const createdQrDataUrl =
-        qrDataUrl ||
-        (await QRCode.toDataURL(id, {
-          errorCorrectionLevel: 'M',
-          margin: 1,
-          width: 220,
-        }));
+      const createResponse = await api.post('/inventory', payload);
+      const savedQrDataUrl = createResponse.data?.item?.qrCodeDataUrl || createdQrDataUrl;
       setSuccessMessage(`Inventory item ${id} created in branch ${branchLabel}.`);
-      setCreatedQr({ id, dataUrl: createdQrDataUrl });
+      setCreatedItemId(id);
+      setCreatedItemQrDataUrl(savedQrDataUrl);
+      setCreatedItemQrSvg(createdQrSvg);
       setScanId('');
       setItemId('');
       setMeters(1);
@@ -364,8 +386,8 @@ const ItemInputPage: React.FC = () => {
               <label className="block text-sm font-medium text-gray-700">Generated ID</label>
               <input
                 value={generatedItemId}
-                onChange={(e) => setItemId(e.target.value)}
-                className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
+                readOnly
+                className="mt-1 w-full rounded-xl border border-gray-300 bg-gray-50 px-3 py-2 text-sm"
                 placeholder="Auto-generated ID"
               />
               <p className="mt-2 text-xs text-gray-500">
@@ -469,20 +491,21 @@ const ItemInputPage: React.FC = () => {
                 <p className="text-sm text-gray-500">Choose branch, color, code, and type to generate a QR code.</p>
               )}
             </div>
-            {createdQr && (
-              <div className="mt-4 rounded-2xl border border-green-200 bg-green-50 p-3 text-sm text-green-700">
-                <p>
-                  Last created QR: <span className="font-semibold">{createdQr.id}</span>
+            {createdItemId && (
+              <div className="mt-4 rounded-2xl border border-green-200 bg-green-50 p-4 text-sm text-green-700">
+                <p className="font-semibold">Inventory item saved successfully.</p>
+                <p className="mt-1">
+                  Last created QR: <span className="font-semibold">{createdItemId}</span>
                 </p>
-                <img
-                  src={createdQr.dataUrl}
-                  alt={`Last created QR code for ${createdQr.id}`}
-                  className="mt-3 h-28 w-28"
+                <div
+                  aria-label={`Last created QR code for ${createdItemId}`}
+                  className="mt-3 inline-flex rounded-xl bg-white p-2"
+                  dangerouslySetInnerHTML={{ __html: createdItemQrSvg }}
                 />
                 <a
                   className="mt-3 inline-flex rounded-xl bg-green-700 px-3 py-2 text-xs font-semibold text-white"
-                  href={createdQr.dataUrl}
-                  download={`${createdQr.id}-qr.png`}
+                  href={createdItemQrDataUrl}
+                  download={`${createdItemId}-qr.png`}
                 >
                   Download created QR
                 </a>

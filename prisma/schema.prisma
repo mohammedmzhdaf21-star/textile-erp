@@ -139,6 +139,8 @@ model InventoryItem {
   quantity    Int       @default(1)
 
   costPrice   Decimal?  @db.Decimal(12, 2)
+  qrCodeValue String?   @db.VarChar(255)
+  qrCodeDataUrl String? @db.Text
   version     Int       @default(0)
   isArchived  Boolean   @default(false)
   deletedAt   DateTime?
