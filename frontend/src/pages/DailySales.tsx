@@ -256,6 +256,9 @@ const toDate = formatDate(tomorrow);
                             <div>
                               <div className="text-sm font-semibold text-black">Sale ID: {sale.id}</div>
                               <div className="mt-1 text-xs text-gray-500">{formatTime(sale.createdAt)}</div>
+                              <div className={`mt-2 text-sm font-bold ${amount < 0 ? 'text-red-600' : 'text-magenta-600'}`}>
+                                {`Cash impact: ${amount < 0 ? '-' : ''}$${Math.abs(amount).toFixed(2)}`}
+                              </div>
                               {isExchange && (
                                 <span className="mt-2 inline-flex rounded-full bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700">
                                   Exchange
