@@ -5,6 +5,7 @@ import api from '../lib/api';
 type Sale = {
   id: string;
   total: number;
+  totalPrice?: number | string;
   createdAt: string;
   notes?: string;
   employee?: {
