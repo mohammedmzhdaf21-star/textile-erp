@@ -254,12 +254,16 @@ const toDate = formatDate(tomorrow);
                         <button
                           key={sale.id}
                           type="button"
-                          onClick={() => navigate(`/sales/${sale.id}`)}
+                          onClick={() =>
+                            navigate(`/sales/${sale.id}`, {
+                              state: { returnTo: '/sales/daily' },
+                            })
+                          }
                           className={`w-full rounded-2xl border p-4 text-left transition hover:border-magenta-300 hover:bg-white ${getSaleBorder(sale)}`}
                         >
                           <div className="flex items-center justify-between gap-3">
                             <div>
-                              <div className="text-sm font-semibold text-black">Sale ID: {sale.id}</div>
+                              <div className="break-all text-sm font-semibold text-black">Sale ID: {sale.id}</div>
                               <div className="mt-1 text-xs text-gray-500">{formatTime(sale.createdAt)}</div>
                               <div className={`mt-2 text-sm font-bold ${amount < 0 ? 'text-red-600' : 'text-magenta-600'}`}>
                                 {`Cash impact: ${amount < 0 ? '-' : ''}$${Math.abs(amount).toFixed(2)}`}

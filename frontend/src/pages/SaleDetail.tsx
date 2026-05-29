@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import api from '../lib/api';
 
 type SaleItem = {
@@ -35,6 +35,9 @@ const formatCurrency = (value: string | number) => {
 const SaleDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
+  const returnState = location.state as { returnTo?: string } | null;
+  const returnTo = returnState?.returnTo || '/sales/daily';
   const [sale, setSale] = useState<Sale | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -67,7 +70,7 @@ const SaleDetail: React.FC = () => {
   }, [id]);
 
   return (
-    <div className="p-4">
+    <div className="max-w-full overflow-x-hidden p-4">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-2xl font-bold text-black">Sale Detail</h2>
@@ -77,10 +80,13 @@ const SaleDetail: React.FC = () => {
         </div>
         <button
           type="button"
-          onClick={() => navigate('/sales/daily')}
+          onClick={() => {
+            window.scrollTo({ top: 0, left: 0 });
+            navigate(returnTo);
+          }}
           className="rounded-2xl border border-magenta-500 bg-magenta-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-magenta-600"
         >
-          Back to Daily Sales
+          Back
         </button>
       </div>
 
@@ -112,7 +118,7 @@ const SaleDetail: React.FC = () => {
                 <div className="grid gap-4 md:grid-cols-2">
                   <div>
                     <div className="text-sm text-gray-500">Sale ID</div>
-                    <div className="text-lg font-semibold text-black">{sale.id}</div>
+                    <div className="break-all text-lg font-semibold text-black">{sale.id}</div>
                   </div>
                   <div>
                     <div className="text-sm text-gray-500">Created</div>
@@ -128,7 +134,7 @@ const SaleDetail: React.FC = () => {
                   </div>
                   <div>
                     <div className="text-sm text-gray-500">Customer</div>
-                    <div className="text-lg font-semibold text-black">{sale.customerName}</div>
+                    <div className="break-words text-lg font-semibold text-black">{sale.customerName}</div>
                   </div>
                   <div>
                     <div className="text-sm text-gray-500">Phone</div>
@@ -191,7 +197,7 @@ const SaleDetail: React.FC = () => {
           {sale.notes ? (
             <div className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
               <div className="text-sm text-gray-500">Notes</div>
-              <div className="mt-2 text-sm text-gray-700">{sale.notes}</div>
+              <div className="mt-2 break-words text-sm text-gray-700">{sale.notes}</div>
             </div>
           ) : null}
 
@@ -202,7 +208,7 @@ const SaleDetail: React.FC = () => {
                 <div key={item.id} className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <div>
-                      <div className="text-sm font-semibold text-black">
+                      <div className="break-all text-sm font-semibold text-black">
                         {item.isPlainCloth
                           ? item.plainClothName || 'Plain Cloth'
                           : `Inventory Item ${item.inventoryItemId}`}

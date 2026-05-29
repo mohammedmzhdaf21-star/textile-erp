@@ -6,14 +6,15 @@ const navigation = [
   { to: '/dashboard', label: 'Dashboard', end: true },
   { to: '/inventory', label: 'Inventory', end: true },
   { to: '/sales', label: 'Sales', end: true },
+  { to: '/sales/daily', label: 'Daily Sales', end: true },
+  { to: '/sales/history', label: 'History Sales', end: true },
   { to: '/exchange', label: 'Exchange', end: true },
   { to: '/item-input', label: 'Item Input', end: true },
-  { to: '/sales/daily', label: 'Daily Sales', end: false },
 ];
 
 const Sidebar: React.FC = () => {
   return (
-    <aside className="w-64 h-full bg-white border-r border-gray-200 p-4">
+    <aside className="h-full w-64 shrink-0 bg-white border-r border-gray-200 p-4">
       <nav className="space-y-2">
         {navigation.map((nav) => (
           <NavLink
