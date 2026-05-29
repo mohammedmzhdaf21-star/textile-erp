@@ -54,6 +54,7 @@ const ItemInputPage: React.FC = () => {
   const [qrDataUrl, setQrDataUrl] = useState<string>('');
   const [createdItemId, setCreatedItemId] = useState<string | null>(null);
   const [createdItemQrDataUrl, setCreatedItemQrDataUrl] = useState<string>('');
+  const [createdItemQrSvg, setCreatedItemQrSvg] = useState<string>('');
   const nextCodeRequestId = useRef(0);
 
   useEffect(() => {
@@ -238,6 +239,12 @@ const ItemInputPage: React.FC = () => {
             margin: 1,
             width: 220,
           });
+    const createdQrSvg = await QRCode.toString(id, {
+      errorCorrectionLevel: 'M',
+      margin: 1,
+      type: 'svg',
+      width: 160,
+    });
 
     const payload: any = {
       id,
@@ -264,6 +271,7 @@ const ItemInputPage: React.FC = () => {
       setSuccessMessage(`Inventory item ${id} created in branch ${branchLabel}.`);
       setCreatedItemId(id);
       setCreatedItemQrDataUrl(savedQrDataUrl);
+      setCreatedItemQrSvg(createdQrSvg);
       setScanId('');
       setItemId('');
       setMeters(1);
@@ -489,10 +497,10 @@ const ItemInputPage: React.FC = () => {
                 <p className="mt-1">
                   Last created QR: <span className="font-semibold">{createdItemId}</span>
                 </p>
-                <img
-                  src={createdItemQrDataUrl}
-                  alt={`Last created QR code for ${createdItemId}`}
-                  className="mt-3 h-32 w-32 rounded-xl bg-white p-2"
+                <div
+                  aria-label={`Last created QR code for ${createdItemId}`}
+                  className="mt-3 inline-flex rounded-xl bg-white p-2"
+                  dangerouslySetInnerHTML={{ __html: createdItemQrSvg }}
                 />
                 <a
                   className="mt-3 inline-flex rounded-xl bg-green-700 px-3 py-2 text-xs font-semibold text-white"
