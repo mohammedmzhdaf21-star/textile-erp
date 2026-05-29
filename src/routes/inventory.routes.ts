@@ -152,8 +152,6 @@ router.post(
         costPrice,
         qrCodeValue,
         qrCodeDataUrl,
-        pictureName,
-        pictureDataUrl,
       } = req.body;
 
       if (!id || !branchId || code === undefined || !colorId || !type) {
@@ -185,10 +183,6 @@ router.post(
             qrCodeValue !== undefined ? String(qrCodeValue) : String(id),
           qrCodeDataUrl:
             qrCodeDataUrl !== undefined ? String(qrCodeDataUrl) : undefined,
-          pictureName:
-            pictureName !== undefined ? String(pictureName) : undefined,
-          pictureDataUrl:
-            pictureDataUrl !== undefined ? String(pictureDataUrl) : undefined,
         },
         req.user?.userId,
         req.user?.email
