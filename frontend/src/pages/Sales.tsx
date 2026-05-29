@@ -455,7 +455,7 @@ const SalesView: React.FC = () => {
               </div>
               <div className="flex justify-between font-semibold">
                 <span>Total</span>
-                <span>${saleTotal.toFixed(2)}</span>
+                <span>{`$${saleTotal.toFixed(2)}`}</span>
               </div>
             </div>
           </div>
@@ -501,7 +501,7 @@ const SalesView: React.FC = () => {
                     onChange={(e) => setAmountPaid(e.target.value)}
                     className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
                   />
-                  <p className="mt-2 text-sm text-gray-500">Remaining due: ${dueAmount.toFixed(2)}</p>
+                  <p className="mt-2 text-sm text-gray-500">{`Remaining due: $${dueAmount.toFixed(2)}`}</p>
                 </div>
               )}
             </div>
@@ -557,7 +557,7 @@ const SalesView: React.FC = () => {
                 </div>
                 <div className="flex items-center justify-between text-sm text-gray-700">
                   <span>Line total</span>
-                  <span>${lineTotal(line).toFixed(2)}</span>
+                  <span>{`$${lineTotal(line).toFixed(2)}`}</span>
                 </div>
               </div>
             ))}

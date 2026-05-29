@@ -45,6 +45,11 @@ const formatTime = (dateString: string) => {
   return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 };
 
+const saleCashAmount = (sale: Sale) =>
+  typeof sale.paidAmount === 'number'
+    ? sale.paidAmount
+    : Number(sale.total ?? sale.totalPrice ?? 0);
+
 const DailySales: React.FC = () => {
   const [selectedBranch, setSelectedBranch] = useState<BranchId | null>(null);
   const [sales, setSales] = useState<Sale[]>([]);
@@ -232,28 +237,38 @@ const toDate = formatDate(tomorrow);
                       </p>
                     </div>
                     <div className="rounded-full bg-magenta-500 px-4 py-2 text-sm font-semibold text-white">
-                      ${group.total.toFixed(2)}
+                      {`$${group.total.toFixed(2)}`}
                     </div>
                   </div>
                   <div className="mt-5 space-y-3">
-                    {group.sales.map((sale) => (
-                      <button
-                        key={sale.id}
-                        type="button"
-                        onClick={() => navigate(`/sales/${sale.id}`)}
-                        className={`w-full rounded-2xl border p-4 text-left transition hover:border-magenta-300 hover:bg-white ${getSaleBorder(sale)}`}
-                      >
-                        <div className="flex items-center justify-between gap-3">
-                          <div>
-                            <div className="text-sm font-semibold text-black">Sale ID: {sale.id}</div>
-                            <div className="text-xs text-gray-500">{formatTime(sale.createdAt)}</div>
+                    {group.sales.map((sale) => {
+                      const amount = saleCashAmount(sale);
+                      const isExchange = Boolean(sale.notes?.includes('EXCHANGE'));
+
+                      return (
+                        <button
+                          key={sale.id}
+                          type="button"
+                          onClick={() => navigate(`/sales/${sale.id}`)}
+                          className={`w-full rounded-2xl border p-4 text-left transition hover:border-magenta-300 hover:bg-white ${getSaleBorder(sale)}`}
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <div>
+                              <div className="text-sm font-semibold text-black">Sale ID: {sale.id}</div>
+                              <div className="mt-1 text-xs text-gray-500">{formatTime(sale.createdAt)}</div>
+                              {isExchange && (
+                                <span className="mt-2 inline-flex rounded-full bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700">
+                                  Exchange
+                                </span>
+                              )}
+                            </div>
+                            <div className={`text-lg font-bold ${amount < 0 ? 'text-red-600' : 'text-magenta-600'}`}>
+                              {`${amount < 0 ? '-' : ''}$${Math.abs(amount).toFixed(2)}`}
+                            </div>
                           </div>
-                          <div className="text-sm font-semibold text-magenta-500">
-                            ${typeof (sale as any).paidAmount === 'number' ? (sale as any).paidAmount.toFixed(2) : Number(sale.total ?? sale.totalPrice ?? 0).toFixed(2)}
-                          </div>
-                        </div>
-                      </button>
-                    ))}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
               ))}
