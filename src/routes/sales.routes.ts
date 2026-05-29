@@ -5,6 +5,7 @@ import {
   getSale,
   voidSale,
   processRefund,
+  processExchange,
   getSalesStats,
 } from '../lib/sales';
 import { authenticate, requireRole } from '../middleware/authenticate';
@@ -88,6 +89,77 @@ router.post('/', async (req: Request, res: Response) => {
       msg.includes('positive') ||
       msg.includes('negative') ||
       msg.includes('at least one item')
+    ) {
+      return res.status(400).json({ error: msg });
+    }
+    return res.status(500).json({ error: msg });
+  }
+});
+
+// ============================================================
+// POST /api/sales/exchange
+// ============================================================
+router.post('/exchange', async (req: Request, res: Response) => {
+  try {
+    const {
+      branchId,
+      employeeId,
+      customerName,
+      customerPhone,
+      returnedInventory,
+      returnedPlain,
+      replacementItems,
+      paymentStatus,
+      amountPaid,
+      notes,
+    } = req.body;
+
+    if (!branchId || !employeeId || !customerName || !customerPhone) {
+      return res.status(400).json({
+        error:
+          'Missing required fields: branchId, employeeId, customerName, customerPhone',
+      });
+    }
+
+    if (paymentStatus && paymentStatus !== 'FULL' && paymentStatus !== 'PARTIAL') {
+      return res.status(400).json({
+        error: 'paymentStatus must be FULL or PARTIAL',
+      });
+    }
+
+    const result = await processExchange(
+      {
+        branchId,
+        employeeId,
+        customerName,
+        customerPhone,
+        returnedInventory: Array.isArray(returnedInventory) ? returnedInventory : [],
+        returnedPlain: Array.isArray(returnedPlain) ? returnedPlain : [],
+        replacementItems: Array.isArray(replacementItems) ? replacementItems : [],
+        paymentStatus,
+        amountPaid: amountPaid !== undefined ? parseFloat(String(amountPaid)) : undefined,
+        notes,
+      },
+      req.user?.userId,
+      req.user?.email
+    );
+
+    return res.status(201).json({
+      message: 'Exchange processed successfully',
+      ...result,
+    });
+  } catch (error: any) {
+    const msg = error.message || 'Failed to process exchange';
+    if (msg.includes('not found')) {
+      return res.status(404).json({ error: msg });
+    }
+    if (
+      msg.includes('positive') ||
+      msg.includes('negative') ||
+      msg.includes('archived') ||
+      msg.includes('Not enough') ||
+      msg.includes('Partial exchange') ||
+      msg.includes('must include')
     ) {
       return res.status(400).json({ error: msg });
     }

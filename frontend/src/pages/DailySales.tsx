@@ -5,7 +5,9 @@ import api from '../lib/api';
 type Sale = {
   id: string;
   total: number;
+  totalPrice?: number | string;
   createdAt: string;
+  notes?: string;
   employee?: {
     id: string;
     name: string;
@@ -42,6 +44,16 @@ const formatTime = (dateString: string) => {
   const date = new Date(dateString);
   return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 };
+
+const toMoneyNumber = (value: unknown) => {
+  const parsed = Number(value ?? 0);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const saleCashAmount = (sale: Sale) =>
+  typeof sale.paidAmount === 'number' && Number.isFinite(sale.paidAmount)
+    ? sale.paidAmount
+    : toMoneyNumber(sale.total ?? sale.totalPrice ?? 0);
 
 const DailySales: React.FC = () => {
   const [selectedBranch, setSelectedBranch] = useState<BranchId | null>(null);
@@ -86,17 +98,20 @@ const toDate = formatDate(tomorrow);
           const notes = (s as any).notes || '';
           // Try to parse "Paid X" from notes (e.g. "Paid 50 now, due 150")
           let paidAmount = 0;
-          const paidMatch = /Paid\s+([0-9]+(?:\.[0-9]+)?)/i.exec(notes);
-          if (paidMatch) {
-            paidAmount = Number(paidMatch[1]);
+          const refundMatch = /Refunded\s+([0-9]+(?:\.[0-9]+)?)/i.exec(notes);
+          const paidMatch = /Paid\s+(-?[0-9]+(?:\.[0-9]+)?)/i.exec(notes);
+          if (refundMatch) {
+            paidAmount = -toMoneyNumber(refundMatch[1]);
+          } else if (paidMatch) {
+            paidAmount = toMoneyNumber(paidMatch[1]);
           } else if ((s as any).paymentStatus === 'PAID' || (s as any).paymentMethod === 'CASH') {
             // fully paid
-            paidAmount = Number((s as any).total ?? (s as any).totalPrice ?? 0);
+            paidAmount = toMoneyNumber((s as any).total ?? (s as any).totalPrice ?? 0);
           } else {
             paidAmount = 0;
           }
 
-          const totalPrice = Number((s as any).total ?? (s as any).totalPrice ?? 0);
+          const totalPrice = toMoneyNumber((s as any).total ?? (s as any).totalPrice ?? 0);
           const paymentStatus: 'PAID' | 'PARTIAL' | 'UNPAID' =
             paidAmount > 0 && paidAmount < totalPrice
               ? 'PARTIAL'
@@ -129,7 +144,7 @@ const toDate = formatDate(tomorrow);
       const employeeName =
         sale.employee?.name || sale.employeeName || 'Unknown Employee';
       // Use paidAmount when available; fallback to totalPrice for fully paid
-      const salePaid = typeof sale.paidAmount === 'number' ? sale.paidAmount : Number(sale.total ?? sale.totalPrice ?? 0);
+      const salePaid = saleCashAmount(sale);
 
       if (!groups[employeeName]) {
         groups[employeeName] = {
@@ -227,28 +242,41 @@ const toDate = formatDate(tomorrow);
                       </p>
                     </div>
                     <div className="rounded-full bg-magenta-500 px-4 py-2 text-sm font-semibold text-white">
-                      ${group.total.toFixed(2)}
+                      {`$${group.total.toFixed(2)}`}
                     </div>
                   </div>
                   <div className="mt-5 space-y-3">
-                    {group.sales.map((sale) => (
-                      <button
-                        key={sale.id}
-                        type="button"
-                        onClick={() => navigate(`/sales/${sale.id}`)}
-                        className={`w-full rounded-2xl border p-4 text-left transition hover:border-magenta-300 hover:bg-white ${getSaleBorder(sale)}`}
-                      >
-                        <div className="flex items-center justify-between gap-3">
-                          <div>
-                            <div className="text-sm font-semibold text-black">Sale ID: {sale.id}</div>
-                            <div className="text-xs text-gray-500">{formatTime(sale.createdAt)}</div>
+                    {group.sales.map((sale) => {
+                      const amount = saleCashAmount(sale);
+                      const isExchange = Boolean(sale.notes?.includes('EXCHANGE'));
+
+                      return (
+                        <button
+                          key={sale.id}
+                          type="button"
+                          onClick={() => navigate(`/sales/${sale.id}`)}
+                          className={`w-full rounded-2xl border p-4 text-left transition hover:border-magenta-300 hover:bg-white ${getSaleBorder(sale)}`}
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <div>
+                              <div className="text-sm font-semibold text-black">Sale ID: {sale.id}</div>
+                              <div className="mt-1 text-xs text-gray-500">{formatTime(sale.createdAt)}</div>
+                              <div className={`mt-2 text-sm font-bold ${amount < 0 ? 'text-red-600' : 'text-magenta-600'}`}>
+                                {`Cash impact: ${amount < 0 ? '-' : ''}$${Math.abs(amount).toFixed(2)}`}
+                              </div>
+                              {isExchange && (
+                                <span className="mt-2 inline-flex rounded-full bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700">
+                                  Exchange
+                                </span>
+                              )}
+                            </div>
+                            <div className={`text-lg font-bold ${amount < 0 ? 'text-red-600' : 'text-magenta-600'}`}>
+                              {`${amount < 0 ? '-' : ''}$${Math.abs(amount).toFixed(2)}`}
+                            </div>
                           </div>
-                          <div className="text-sm font-semibold text-magenta-500">
-                            ${typeof (sale as any).paidAmount === 'number' ? (sale as any).paidAmount.toFixed(2) : Number(sale.total ?? sale.totalPrice ?? 0).toFixed(2)}
-                          </div>
-                        </div>
-                      </button>
-                    ))}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
               ))}
