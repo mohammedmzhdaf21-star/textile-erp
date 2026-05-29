@@ -46,6 +46,33 @@ export interface RefundInput {
   reason: string;
 }
 
+export interface ExchangeReturnedInventoryInput {
+  inventoryItemId: string;
+  soldAsUnit: 'METER' | 'PIECE';
+  quantityReturned: number;
+  returnPrice: number;
+}
+
+export interface ExchangeReturnedPlainInput {
+  clothName: string;
+  meters: number;
+  returnPricePerMeter: number;
+  note?: string;
+}
+
+export interface ProcessExchangeInput {
+  branchId: string;
+  employeeId: string;
+  customerName: string;
+  customerPhone: string;
+  returnedInventory?: ExchangeReturnedInventoryInput[];
+  returnedPlain?: ExchangeReturnedPlainInput[];
+  replacementItems?: SaleItemInput[];
+  paymentStatus?: 'FULL' | 'PARTIAL';
+  amountPaid?: number;
+  notes?: string;
+}
+
 // ============================================================
 // CREATE SALE (the big one!)
 // ============================================================
@@ -225,6 +252,261 @@ export async function createSale(
   });
 
   return sale;
+}
+
+// ============================================================
+// PROCESS EXCHANGE
+// ============================================================
+export async function processExchange(
+  input: ProcessExchangeInput,
+  performedById?: string,
+  performedByEmail?: string
+) {
+  const returnedInventory = input.returnedInventory || [];
+  const returnedPlain = input.returnedPlain || [];
+  const replacementItems = input.replacementItems || [];
+
+  if (
+    returnedInventory.length === 0 &&
+    returnedPlain.length === 0 &&
+    replacementItems.length === 0
+  ) {
+    throw new Error('Exchange must include returned items or replacement items');
+  }
+
+  const returnedInventoryTotal = returnedInventory.reduce((sum, item) => {
+    if (item.quantityReturned <= 0) throw new Error('Returned quantity must be positive');
+    if (item.returnPrice < 0) throw new Error('Returned price cannot be negative');
+    return sum + item.quantityReturned * item.returnPrice;
+  }, 0);
+
+  const returnedPlainTotal = returnedPlain.reduce((sum, item) => {
+    if (item.meters <= 0) throw new Error('Returned plain cloth meters must be positive');
+    if (item.returnPricePerMeter < 0) {
+      throw new Error('Returned plain cloth price cannot be negative');
+    }
+    return sum + item.meters * item.returnPricePerMeter;
+  }, 0);
+
+  let replacementTotal = 0;
+  for (const item of replacementItems) {
+    if (item.quantitySold <= 0) throw new Error('Quantity must be positive');
+    if (item.soldPrice < 0) throw new Error('Price cannot be negative');
+    replacementTotal += item.soldPrice * item.quantitySold - (item.lineDiscount || 0);
+  }
+
+  const returnedTotal = returnedInventoryTotal + returnedPlainTotal;
+  const netDue = Number((replacementTotal - returnedTotal).toFixed(2));
+  const refundAmount = Math.max(0, Number((-netDue).toFixed(2)));
+  const saleTotal = Math.max(0, netDue);
+  const amountPaid =
+    saleTotal > 0
+      ? input.paymentStatus === 'PARTIAL'
+        ? Number((input.amountPaid || 0).toFixed(2))
+        : saleTotal
+      : refundAmount > 0
+      ? -refundAmount
+      : 0;
+
+  if (saleTotal > 0 && input.paymentStatus === 'PARTIAL') {
+    if (amountPaid <= 0 || amountPaid >= saleTotal) {
+      throw new Error('Partial exchange payments must be greater than 0 and less than the net amount due');
+    }
+  }
+
+  const sale = await prisma.$transaction(async (tx) => {
+    const branch = await tx.branch.findUnique({ where: { id: input.branchId } });
+    if (!branch) throw new Error('Branch not found');
+
+    const employee = await tx.employee.findUnique({ where: { id: input.employeeId } });
+    if (!employee) throw new Error('Employee not found');
+
+    let customerId: string | undefined;
+    if (input.customerPhone) {
+      const existingCustomer = await tx.customer.findUnique({
+        where: { phone: input.customerPhone },
+      });
+      customerId = existingCustomer?.id;
+    }
+
+    for (const returned of returnedInventory) {
+      const invItem = await tx.inventoryItem.findUnique({
+        where: { id: returned.inventoryItemId },
+      });
+
+      if (!invItem) throw new Error(`Inventory item ${returned.inventoryItemId} not found`);
+      if (invItem.isArchived) {
+        throw new Error(`Inventory item ${returned.inventoryItemId} is archived`);
+      }
+
+      if (returned.soldAsUnit === 'PIECE') {
+        await tx.inventoryItem.update({
+          where: { id: returned.inventoryItemId },
+          data: {
+            quantity: { increment: Math.floor(returned.quantityReturned) },
+            version: { increment: 1 },
+          },
+        });
+      } else {
+        const currentMeters = invItem.meters ? parseFloat(invItem.meters.toString()) : 0;
+        await tx.inventoryItem.update({
+          where: { id: returned.inventoryItemId },
+          data: {
+            meters: new Prisma.Decimal(
+              (currentMeters + returned.quantityReturned).toFixed(2)
+            ),
+            version: { increment: 1 },
+          },
+        });
+      }
+    }
+
+    const paymentNote =
+      saleTotal > 0
+        ? `Paid ${amountPaid.toFixed(2)} now, due ${(saleTotal - amountPaid).toFixed(2)}.`
+        : refundAmount > 0
+        ? `Refunded ${refundAmount.toFixed(2)} to customer.`
+        : 'Even exchange. Paid 0.00 now, due 0.00.';
+
+    const exchangeNotes = [
+      'EXCHANGE',
+      `Replacement ${replacementTotal.toFixed(2)}`,
+      `Returned ${returnedTotal.toFixed(2)}`,
+      `Net ${netDue.toFixed(2)}`,
+      paymentNote,
+      input.notes,
+    ]
+      .filter(Boolean)
+      .join(' | ');
+
+    const createdSale = await tx.sale.create({
+      data: {
+        branchId: input.branchId,
+        employeeId: input.employeeId,
+        customerId: customerId || null,
+        customerName: input.customerName,
+        customerPhone: input.customerPhone,
+        totalPrice: new Prisma.Decimal(saleTotal.toFixed(2)),
+        discount: new Prisma.Decimal(Math.min(returnedTotal, replacementTotal).toFixed(2)),
+        paymentMethod:
+          saleTotal > 0 && input.paymentStatus === 'PARTIAL' ? 'CREDIT' : 'CASH',
+        notes: exchangeNotes,
+      },
+    });
+
+    for (const item of replacementItems) {
+      if (item.inventoryItemId) {
+        const invItem = await tx.inventoryItem.findUnique({
+          where: { id: item.inventoryItemId },
+        });
+
+        if (!invItem) throw new Error(`Inventory item ${item.inventoryItemId} not found`);
+        if (invItem.isArchived) throw new Error(`Inventory item ${item.inventoryItemId} is archived`);
+
+        if (item.soldAsUnit === 'METER') {
+          const currentMeters = invItem.meters ? parseFloat(invItem.meters.toString()) : 0;
+          if (currentMeters < item.quantitySold) {
+            throw new Error(
+              `Not enough stock for ${item.inventoryItemId}. Available: ${currentMeters}m, Requested: ${item.quantitySold}m`
+            );
+          }
+          await tx.inventoryItem.update({
+            where: { id: item.inventoryItemId },
+            data: {
+              meters: new Prisma.Decimal((currentMeters - item.quantitySold).toFixed(2)),
+              version: { increment: 1 },
+            },
+          });
+        } else if (item.soldAsUnit === 'PIECE') {
+          if (invItem.quantity < item.quantitySold) {
+            throw new Error(
+              `Not enough pieces for ${item.inventoryItemId}. Available: ${invItem.quantity}, Requested: ${item.quantitySold}`
+            );
+          }
+          await tx.inventoryItem.update({
+            where: { id: item.inventoryItemId },
+            data: {
+              quantity: { decrement: Math.floor(item.quantitySold) },
+              version: { increment: 1 },
+            },
+          });
+        }
+      }
+
+      let colorId = item.colorId;
+      if (item.isPlainCloth) {
+        const plainClothColor = await tx.color.upsert({
+          where: { name: 'Plain Cloth' },
+          update: {},
+          create: {
+            id: colorId || 'PLAIN',
+            name: 'Plain Cloth',
+            hexCode: '#CCCCCC',
+          },
+        });
+        colorId = plainClothColor.id;
+      } else {
+        const color = await tx.color.findUnique({ where: { id: item.colorId } });
+        if (!color) throw new Error(`Color ${item.colorId} not found`);
+      }
+
+      await tx.saleItem.create({
+        data: {
+          saleId: createdSale.id,
+          inventoryItemId: item.inventoryItemId || null,
+          isPlainCloth: item.isPlainCloth || false,
+          plainClothName: item.plainClothName || null,
+          colorId,
+          soldAsUnit: item.soldAsUnit,
+          quantitySold: new Prisma.Decimal(item.quantitySold.toFixed(2)),
+          soldPrice: new Prisma.Decimal(item.soldPrice.toFixed(2)),
+          lineDiscount: new Prisma.Decimal((item.lineDiscount || 0).toFixed(2)),
+        },
+      });
+    }
+
+    await tx.auditLog.create({
+      data: {
+        entityType: 'Exchange',
+        entityId: createdSale.id,
+        action: 'CREATE',
+        performedById: performedById || null,
+        performedByEmail: performedByEmail || null,
+        branchId: input.branchId,
+        changes: {
+          replacementTotal,
+          returnedTotal,
+          netDue,
+          amountPaid,
+          refundAmount,
+          returnedInventoryCount: returnedInventory.length,
+          returnedPlainCount: returnedPlain.length,
+          replacementCount: replacementItems.length,
+        } as Prisma.InputJsonValue,
+      },
+    });
+
+    return await tx.sale.findUnique({
+      where: { id: createdSale.id },
+      include: {
+        items: { include: { color: true, inventoryItem: true } },
+        branch: true,
+        employee: { select: { id: true, name: true, email: true } },
+        customer: true,
+      },
+    });
+  });
+
+  return {
+    sale,
+    summary: {
+      replacementTotal,
+      returnedTotal,
+      netDue,
+      amountPaid,
+      refundAmount,
+    },
+  };
 }
 
 // ============================================================

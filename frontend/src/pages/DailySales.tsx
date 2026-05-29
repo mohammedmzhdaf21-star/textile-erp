@@ -6,6 +6,7 @@ type Sale = {
   id: string;
   total: number;
   createdAt: string;
+  notes?: string;
   employee?: {
     id: string;
     name: string;
@@ -86,8 +87,11 @@ const toDate = formatDate(tomorrow);
           const notes = (s as any).notes || '';
           // Try to parse "Paid X" from notes (e.g. "Paid 50 now, due 150")
           let paidAmount = 0;
-          const paidMatch = /Paid\s+([0-9]+(?:\.[0-9]+)?)/i.exec(notes);
-          if (paidMatch) {
+          const refundMatch = /Refunded\s+([0-9]+(?:\.[0-9]+)?)/i.exec(notes);
+          const paidMatch = /Paid\s+(-?[0-9]+(?:\.[0-9]+)?)/i.exec(notes);
+          if (refundMatch) {
+            paidAmount = -Number(refundMatch[1]);
+          } else if (paidMatch) {
             paidAmount = Number(paidMatch[1]);
           } else if ((s as any).paymentStatus === 'PAID' || (s as any).paymentMethod === 'CASH') {
             // fully paid

@@ -7,6 +7,8 @@ type InventorySaleLine = {
   inventoryItemId: string;
   sourceBranch: string;
   description: string;
+  colorId: string;
+  soldAsUnit: 'METER' | 'PIECE';
   quantity: number;
   price: number;
 };
@@ -20,6 +22,15 @@ type PlainClothSaleLine = {
 
 type SaleLine = InventorySaleLine | PlainClothSaleLine;
 
+type InventoryLookupItem = {
+  id: string;
+  branchId: string;
+  colorId: string;
+  type: 'ROLL' | 'PIECE' | 'REMANENT';
+  meters?: string | number | null;
+  quantity: number;
+};
+
 const branchOptions = ['A', 'B', 'C', 'E', 'F'];
 // Map UI branch codes to backend IDs (match seeded branches)
 const BRANCH_MAP: Record<string, string> = {
@@ -31,6 +42,12 @@ const BRANCH_MAP: Record<string, string> = {
 };
 const clothOptions = ['Silk', 'Velvet', 'Cotton', 'Linen'];
 
+const soldAsUnitForItem = (item: InventoryLookupItem): 'METER' | 'PIECE' =>
+  item.type === 'PIECE' ? 'PIECE' : 'METER';
+
+const amountLabelForUnit = (unit?: 'METER' | 'PIECE') =>
+  unit === 'PIECE' ? 'Quantity (pieces)' : 'Meters';
+
 const SalesView: React.FC = () => {
   const [branch, setBranch] = useState<string>('A');
   const [cart, setCart] = useState<SaleLine[]>([]);
@@ -39,7 +56,9 @@ const SalesView: React.FC = () => {
   const [paymentStatus, setPaymentStatus] = useState<'FULL' | 'PARTIAL'>('FULL');
   const [amountPaid, setAmountPaid] = useState('0');
   const [plainCloth, setPlainCloth] = useState({ clothName: clothOptions[0], meters: 1, pricePerMeter: 20 });
-  const [scanState, setScanState] = useState({ inventoryItemId: '', sourceBranch: branch, price: 15 });
+  const [scanState, setScanState] = useState({ inventoryItemId: '', sourceBranch: branch, amount: 1, price: 15 });
+  const [detectedScanItem, setDetectedScanItem] = useState<InventoryLookupItem | null>(null);
+  const [scanMessage, setScanMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
@@ -70,22 +89,87 @@ const SalesView: React.FC = () => {
     ]);
   };
 
-  const addInventoryLine = () => {
-    if (!scanState.inventoryItemId.trim()) {
+  const resolveInventoryItem = async (rawCode: string, sourceBranch: string) => {
+    const code = rawCode.trim();
+    if (!code) return null;
+
+    try {
+      const response = await api.get(`/inventory/${encodeURIComponent(code)}`);
+      return response.data as InventoryLookupItem;
+    } catch (error: any) {
+      if (error?.response?.status !== 404 || !/^\d+$/.test(code)) {
+        throw error;
+      }
+    }
+
+    const response = await api.get('/inventory', {
+      params: {
+        branchId: BRANCH_MAP[sourceBranch] ?? sourceBranch,
+        code,
+        pageSize: 1,
+      },
+    });
+    const item = response.data?.items?.[0];
+    if (!item) throw new Error(`Inventory code ${code} was not found for branch ${sourceBranch}`);
+    return item as InventoryLookupItem;
+  };
+
+  const detectScanItem = async () => {
+    const item = await resolveInventoryItem(scanState.inventoryItemId, scanState.sourceBranch);
+    setDetectedScanItem(item);
+    if (item) {
+      const unit = soldAsUnitForItem(item);
+      setScanMessage(
+        `${item.type} detected: enter ${unit === 'PIECE' ? 'piece quantity' : 'decimal meters'}.`
+      );
+    }
+    return item;
+  };
+
+  const addInventoryLine = async () => {
+    const inventoryItemId = scanState.inventoryItemId.trim();
+    if (!inventoryItemId) {
       return alert('Enter an item ID to simulate a scanned inventory line.');
     }
-    setCart((current) => [
-      ...current,
-      {
-        type: 'inventory',
-        inventoryItemId: scanState.inventoryItemId.trim(),
-        sourceBranch: scanState.sourceBranch,
-        description: `Item from Branch ${scanState.sourceBranch}`,
-        quantity: 1,
-        price: scanState.price,
-      },
-    ]);
-    setScanState((current) => ({ ...current, inventoryItemId: '' }));
+    if (scanState.amount <= 0 || scanState.price <= 0) {
+      return alert('Enter a valid amount and price for the scanned item.');
+    }
+
+    try {
+      const item = detectedScanItem?.id === inventoryItemId ? detectedScanItem : await detectScanItem();
+      if (!item) return;
+      const soldAsUnit = soldAsUnitForItem(item);
+      const quantity = soldAsUnit === 'PIECE' ? Math.floor(scanState.amount) : scanState.amount;
+
+      if (quantity <= 0) {
+        return alert('Enter at least one piece or more than 0 meters.');
+      }
+
+      setCart((current) => [
+        ...current,
+        {
+          type: 'inventory',
+          inventoryItemId: item.id,
+          sourceBranch: scanState.sourceBranch,
+          description: `${item.type} from Branch ${scanState.sourceBranch}`,
+          colorId: item.colorId,
+          soldAsUnit,
+          quantity,
+          price: scanState.price,
+        },
+      ]);
+      setScanState((current) => ({ ...current, inventoryItemId: '', amount: 1 }));
+      setDetectedScanItem(null);
+      setScanMessage(null);
+    } catch (error: any) {
+      const status = error?.response?.status;
+      const body = error?.response?.data;
+      alert(
+        `Unable to load scanned item${status ? ` (status ${status})` : ''}: ${
+          body?.error ?? body?.message ?? error?.message
+        }`
+      );
+    }
   };
 
   const removeLine = (index: number) => {
@@ -108,31 +192,18 @@ const SalesView: React.FC = () => {
     }
 
     try {
-      // For inventory lines, fetch details to get a valid colorId and unit
       const resolvedItems: any[] = [];
 
       for (const line of cart) {
         if (line.type === 'inventory') {
-          try {
-            const res = await api.get(`/inventory/${line.inventoryItemId}`);
-            const inv = res.data;
-            const soldAsUnit = inv.type === 'PIECE' ? 'PIECE' : 'METER';
-            resolvedItems.push({
-              inventoryItemId: line.inventoryItemId,
-              colorId: inv.colorId,
-              soldAsUnit,
-              quantitySold: line.quantity,
-              soldPrice: line.price,
-              lineDiscount: 0,
-            });
-          } catch (e: any) {
-            const status = e?.response?.status;
-            const body = e?.response?.data;
-            alert(
-              `Failed to resolve inventory item ${line.inventoryItemId}${status ? ` (status ${status})` : ''}: ${body?.error ?? body?.message ?? e?.message}`
-            );
-            throw e;
-          }
+          resolvedItems.push({
+            inventoryItemId: line.inventoryItemId,
+            colorId: line.colorId,
+            soldAsUnit: line.soldAsUnit,
+            quantitySold: line.quantity,
+            soldPrice: line.price,
+            lineDiscount: 0,
+          });
         } else {
           resolvedItems.push({
             inventoryItemId: undefined,
@@ -211,7 +282,12 @@ const SalesView: React.FC = () => {
           <button
             key={option}
             type="button"
-            onClick={() => setBranch(option)}
+            onClick={() => {
+              setBranch(option);
+              setScanState((current) => ({ ...current, sourceBranch: option }));
+              setDetectedScanItem(null);
+              setScanMessage(null);
+            }}
             className={`rounded-2xl px-4 py-3 text-sm font-semibold transition ${
               branch === option
                 ? 'bg-magenta-500 text-white border-magenta-500'
@@ -230,21 +306,43 @@ const SalesView: React.FC = () => {
             <p className="text-sm text-gray-500 mb-4">
               Simulate scanning a QR inventory item. This line will include a source branch and inventoryItemId.
             </p>
-            <div className="grid gap-3 sm:grid-cols-3">
+            <div className="grid gap-3 sm:grid-cols-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700">Item ID</label>
                 <input
                   value={scanState.inventoryItemId}
-                  onChange={(e) => setScanState((s) => ({ ...s, inventoryItemId: e.target.value }))}
+                  onBlur={() => {
+                    if (scanState.inventoryItemId.trim()) {
+                      detectScanItem().catch((error: any) => {
+                        const status = error?.response?.status;
+                        const body = error?.response?.data;
+                        setScanMessage(
+                          `Not found${status ? ` (${status})` : ''}: ${
+                            body?.error ?? body?.message ?? error?.message
+                          }`
+                        );
+                      });
+                    }
+                  }}
+                  onChange={(e) => {
+                    setDetectedScanItem(null);
+                    setScanMessage(null);
+                    setScanState((s) => ({ ...s, inventoryItemId: e.target.value }));
+                  }}
                   className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
-                  placeholder="INV-123"
+                  placeholder="Item ID or numeric code"
                 />
+                {scanMessage && <p className="mt-2 text-xs text-gray-500">{scanMessage}</p>}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">Source Branch</label>
                 <select
                   value={scanState.sourceBranch}
-                  onChange={(e) => setScanState((s) => ({ ...s, sourceBranch: e.target.value }))}
+                  onChange={(e) => {
+                    setDetectedScanItem(null);
+                    setScanMessage(null);
+                    setScanState((s) => ({ ...s, sourceBranch: e.target.value }));
+                  }}
                   className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
                 >
                   {branchOptions.map((option) => (
@@ -253,9 +351,26 @@ const SalesView: React.FC = () => {
                 </select>
               </div>
               <div>
+                <label className="block text-sm font-medium text-gray-700">
+                  {amountLabelForUnit(
+                    detectedScanItem ? soldAsUnitForItem(detectedScanItem) : undefined
+                  )}
+                </label>
+                <input
+                  type="number"
+                  min={detectedScanItem && soldAsUnitForItem(detectedScanItem) === 'PIECE' ? '1' : '0.01'}
+                  step={detectedScanItem && soldAsUnitForItem(detectedScanItem) === 'PIECE' ? '1' : '0.01'}
+                  value={scanState.amount}
+                  onChange={(e) => setScanState((s) => ({ ...s, amount: Number(e.target.value) }))}
+                  className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
+                />
+              </div>
+              <div>
                 <label className="block text-sm font-medium text-gray-700">Unit Price</label>
                 <input
                   type="number"
+                  min="0.01"
+                  step="0.01"
                   value={scanState.price}
                   onChange={(e) => setScanState((s) => ({ ...s, price: Number(e.target.value) }))}
                   className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
@@ -428,7 +543,7 @@ const SalesView: React.FC = () => {
                     </p>
                     <p className="text-sm text-gray-500">
                       {line.type === 'inventory'
-                        ? `Source branch ${line.sourceBranch}`
+                        ? `${line.description}: ${line.quantity} ${line.soldAsUnit === 'PIECE' ? 'pieces' : 'meters'} @ $${line.price}/unit`
                         : `${line.meters} meters @ $${line.pricePerMeter}/m`}
                     </p>
                   </div>
