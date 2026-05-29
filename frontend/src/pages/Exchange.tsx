@@ -87,7 +87,7 @@ const ExchangePage: React.FC = () => {
     () =>
       newSaleLines.reduce((sum, line) => {
         if (line.type === 'inventory') {
-          return sum + line.amount * line.price;
+          return sum + line.quantity * line.price;
         }
         return sum + line.meters * line.pricePerMeter;
       }, 0),
@@ -436,7 +436,7 @@ const ExchangePage: React.FC = () => {
                         </p>
                         <p className="text-sm text-gray-600">
                           {line.type === 'inventory'
-                            ? `${line.amount} ${line.soldAsUnit.toLowerCase()} @ $${line.price}/unit`
+                            ? `${line.quantity} ${line.soldAsUnit.toLowerCase()} @ $${line.price}/unit`
                             : `${line.meters} meters @ $${line.pricePerMeter}/m`}
                         </p>
                       </div>
