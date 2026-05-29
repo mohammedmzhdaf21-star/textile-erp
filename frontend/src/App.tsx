@@ -9,6 +9,7 @@ import Exchange from './pages/Exchange';
 import ItemInput from './pages/ItemInput';
 import DailySales from './pages/DailySales';
 import HistorySales from './pages/HistorySales';
+import OwedMoney from './pages/OwedMoney';
 import SaleDetail from './pages/SaleDetail';
 import { isAuthenticated } from './lib/auth';
 
@@ -90,6 +91,14 @@ function App() {
           element={
             <ProtectedLayout>
               <HistorySales />
+            </ProtectedLayout>
+          }
+        />
+        <Route
+          path="/sales/owed"
+          element={
+            <ProtectedLayout>
+              <OwedMoney />
             </ProtectedLayout>
           }
         />

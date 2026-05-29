@@ -4,6 +4,7 @@ import api from '../lib/api';
 
 type Sale = {
   id: string;
+  sourceSaleId?: string;
   total: number;
   totalPrice?: number | string;
   createdAt: string;
@@ -15,6 +16,15 @@ type Sale = {
   employeeName?: string;
   paymentStatus?: 'PAID' | 'PARTIAL' | 'UNPAID';
   paidAmount?: number;
+};
+
+type OwedPayment = {
+  saleId: string;
+  branchId: string;
+  amount: number;
+  paidAt: string;
+  customerName?: string;
+  employeeName?: string;
 };
 
 type EmployeeGroup = {
@@ -32,6 +42,7 @@ const BRANCH_MAP: Record<string, string> = {
   F: 'B002',
 };
 type BranchId = typeof branches[number];
+const OWED_PAYMENTS_KEY = 'textile-erp-owed-payments';
 
 const formatDate = (date: Date) => {
   const year = date.getFullYear();
@@ -54,6 +65,33 @@ const saleCashAmount = (sale: Sale) =>
   typeof sale.paidAmount === 'number' && Number.isFinite(sale.paidAmount)
     ? sale.paidAmount
     : toMoneyNumber(sale.total ?? sale.totalPrice ?? 0);
+
+const readOwedPayments = (): OwedPayment[] => {
+  try {
+    const raw = localStorage.getItem(OWED_PAYMENTS_KEY);
+    return raw ? (JSON.parse(raw) as OwedPayment[]) : [];
+  } catch {
+    return [];
+  }
+};
+
+const paymentDateKey = (dateString: string) => formatDate(new Date(dateString));
+
+const owedPaymentRowsForDate = (branchId: string, dateKey: string) =>
+  readOwedPayments()
+    .filter((payment) => payment.branchId === branchId && paymentDateKey(payment.paidAt) === dateKey)
+    .map((payment) => ({
+      id: `owed-payment-${payment.saleId}-${payment.paidAt}`,
+      sourceSaleId: payment.saleId,
+      total: payment.amount,
+      totalPrice: payment.amount,
+      createdAt: payment.paidAt,
+      employeeName: payment.employeeName || 'Owed Payment',
+      customerName: payment.customerName,
+      notes: `OWED PAYMENT | Paid ${payment.amount.toFixed(2)} now, due 0.00.`,
+      paymentStatus: 'PAID' as const,
+      paidAmount: payment.amount,
+    }));
 
 const DailySales: React.FC = () => {
   const [selectedBranch, setSelectedBranch] = useState<BranchId | null>(null);
@@ -93,8 +131,14 @@ const toDate = formatDate(tomorrow);
         else if (data && Array.isArray(data.items)) raw = data.items as Sale[];
         else raw = [];
 
+        const branchId = BRANCH_MAP[selectedBranch as string] ?? selectedBranch;
+        const salesWithLocalOwedPayments = [
+          ...raw,
+          ...owedPaymentRowsForDate(branchId, fromDate),
+        ];
+
         // Enrich each sale with computed paidAmount and paymentStatus based on notes/paymentMethod
-        const enriched = raw.map((s) => {
+        const enriched = salesWithLocalOwedPayments.map((s) => {
           const notes = (s as any).notes || '';
           // Try to parse "Paid X" from notes (e.g. "Paid 50 now, due 150")
           let paidAmount = 0;
@@ -121,6 +165,10 @@ const toDate = formatDate(tomorrow);
 
           return { ...s, paidAmount, paymentStatus } as Sale & { paidAmount: number; paymentStatus: string };
         });
+
+        enriched.sort(
+          (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        );
 
         setSales(enriched as any);
       })
@@ -249,13 +297,14 @@ const toDate = formatDate(tomorrow);
                     {group.sales.map((sale) => {
                       const amount = saleCashAmount(sale);
                       const isExchange = Boolean(sale.notes?.includes('EXCHANGE'));
+                      const isOwedPayment = Boolean(sale.notes?.includes('OWED PAYMENT'));
 
                       return (
                         <button
                           key={sale.id}
                           type="button"
                           onClick={() =>
-                            navigate(`/sales/${sale.id}`, {
+                            navigate(`/sales/${sale.sourceSaleId || sale.id}`, {
                               state: { returnTo: '/sales/daily' },
                             })
                           }
@@ -263,7 +312,9 @@ const toDate = formatDate(tomorrow);
                         >
                           <div className="flex items-center justify-between gap-3">
                             <div>
-                              <div className="break-all text-sm font-semibold text-black">Sale ID: {sale.id}</div>
+                              <div className="break-all text-sm font-semibold text-black">
+                                {isOwedPayment ? 'Owed payment for Sale ID' : 'Sale ID'}: {sale.sourceSaleId || sale.id}
+                              </div>
                               <div className="mt-1 text-xs text-gray-500">{formatTime(sale.createdAt)}</div>
                               <div className={`mt-2 text-sm font-bold ${amount < 0 ? 'text-red-600' : 'text-magenta-600'}`}>
                                 {`Cash impact: ${amount < 0 ? '-' : ''}$${Math.abs(amount).toFixed(2)}`}
@@ -271,6 +322,11 @@ const toDate = formatDate(tomorrow);
                               {isExchange && (
                                 <span className="mt-2 inline-flex rounded-full bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700">
                                   Exchange
+                                </span>
+                              )}
+                              {isOwedPayment && (
+                                <span className="mt-2 inline-flex rounded-full bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700">
+                                  Owed payment
                                 </span>
                               )}
                             </div>

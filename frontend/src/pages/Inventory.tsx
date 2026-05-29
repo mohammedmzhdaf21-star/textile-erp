@@ -1,13 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import api from '../lib/api';
 
-const branches = ['A', 'B', 'C', 'D', 'E', 'F'];
+const branches = ['A', 'B', 'C', 'E', 'F'];
 // Map UI branch codes to real backend branch IDs (seeded DB uses B001/B002/B003)
 const BRANCH_MAP: Record<string, string> = {
   A: 'B001',
   B: 'B002',
   C: 'B003',
-  D: 'B001',
   E: 'B001',
   F: 'B002',
 };
