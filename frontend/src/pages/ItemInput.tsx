@@ -52,7 +52,8 @@ const ItemInputPage: React.FC = () => {
   const [sameGroupItems, setSameGroupItems] = useState<InventoryItemView[]>([]);
   const [scanId, setScanId] = useState<string>('');
   const [qrDataUrl, setQrDataUrl] = useState<string>('');
-  const [createdQr, setCreatedQr] = useState<{ id: string; dataUrl: string } | null>(null);
+  const [createdItemId, setCreatedItemId] = useState<string | null>(null);
+  const [createdItemQrDataUrl, setCreatedItemQrDataUrl] = useState<string>('');
 
   useEffect(() => {
     setLoadingDefaults(true);
@@ -249,7 +250,8 @@ const ItemInputPage: React.FC = () => {
           width: 220,
         }));
       setSuccessMessage(`Inventory item ${id} created in branch ${branchLabel}.`);
-      setCreatedQr({ id, dataUrl: createdQrDataUrl });
+      setCreatedItemId(id);
+      setCreatedItemQrDataUrl(createdQrDataUrl);
       setScanId('');
       setItemId('');
       setMeters(1);
@@ -469,20 +471,21 @@ const ItemInputPage: React.FC = () => {
                 <p className="text-sm text-gray-500">Choose branch, color, code, and type to generate a QR code.</p>
               )}
             </div>
-            {createdQr && (
-              <div className="mt-4 rounded-2xl border border-green-200 bg-green-50 p-3 text-sm text-green-700">
-                <p>
-                  Last created QR: <span className="font-semibold">{createdQr.id}</span>
+            {createdItemId && (
+              <div className="mt-4 rounded-2xl border border-green-200 bg-green-50 p-4 text-sm text-green-700">
+                <p className="font-semibold">Inventory item saved successfully.</p>
+                <p className="mt-1">
+                  Last created QR: <span className="font-semibold">{createdItemId}</span>
                 </p>
                 <img
-                  src={createdQr.dataUrl}
-                  alt={`Last created QR code for ${createdQr.id}`}
-                  className="mt-3 h-28 w-28"
+                  src={createdItemQrDataUrl}
+                  alt={`Last created QR code for ${createdItemId}`}
+                  className="mt-3 h-32 w-32 rounded-xl bg-white p-2"
                 />
                 <a
                   className="mt-3 inline-flex rounded-xl bg-green-700 px-3 py-2 text-xs font-semibold text-white"
-                  href={createdQr.dataUrl}
-                  download={`${createdQr.id}-qr.png`}
+                  href={createdItemQrDataUrl}
+                  download={`${createdItemId}-qr.png`}
                 >
                   Download created QR
                 </a>
