@@ -45,10 +45,15 @@ const formatTime = (dateString: string) => {
   return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 };
 
+const toMoneyNumber = (value: unknown) => {
+  const parsed = Number(value ?? 0);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
 const saleCashAmount = (sale: Sale) =>
-  typeof sale.paidAmount === 'number'
+  typeof sale.paidAmount === 'number' && Number.isFinite(sale.paidAmount)
     ? sale.paidAmount
-    : Number(sale.total ?? sale.totalPrice ?? 0);
+    : toMoneyNumber(sale.total ?? sale.totalPrice ?? 0);
 
 const DailySales: React.FC = () => {
   const [selectedBranch, setSelectedBranch] = useState<BranchId | null>(null);
@@ -96,17 +101,17 @@ const toDate = formatDate(tomorrow);
           const refundMatch = /Refunded\s+([0-9]+(?:\.[0-9]+)?)/i.exec(notes);
           const paidMatch = /Paid\s+(-?[0-9]+(?:\.[0-9]+)?)/i.exec(notes);
           if (refundMatch) {
-            paidAmount = -Number(refundMatch[1]);
+            paidAmount = -toMoneyNumber(refundMatch[1]);
           } else if (paidMatch) {
-            paidAmount = Number(paidMatch[1]);
+            paidAmount = toMoneyNumber(paidMatch[1]);
           } else if ((s as any).paymentStatus === 'PAID' || (s as any).paymentMethod === 'CASH') {
             // fully paid
-            paidAmount = Number((s as any).total ?? (s as any).totalPrice ?? 0);
+            paidAmount = toMoneyNumber((s as any).total ?? (s as any).totalPrice ?? 0);
           } else {
             paidAmount = 0;
           }
 
-          const totalPrice = Number((s as any).total ?? (s as any).totalPrice ?? 0);
+          const totalPrice = toMoneyNumber((s as any).total ?? (s as any).totalPrice ?? 0);
           const paymentStatus: 'PAID' | 'PARTIAL' | 'UNPAID' =
             paidAmount > 0 && paidAmount < totalPrice
               ? 'PARTIAL'
@@ -139,7 +144,7 @@ const toDate = formatDate(tomorrow);
       const employeeName =
         sale.employee?.name || sale.employeeName || 'Unknown Employee';
       // Use paidAmount when available; fallback to totalPrice for fully paid
-      const salePaid = typeof sale.paidAmount === 'number' ? sale.paidAmount : Number(sale.total ?? sale.totalPrice ?? 0);
+      const salePaid = saleCashAmount(sale);
 
       if (!groups[employeeName]) {
         groups[employeeName] = {
