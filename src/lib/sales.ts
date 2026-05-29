@@ -164,16 +164,16 @@ export async function createSale(
       // Verify or create a plain cloth color placeholder when needed
       let colorId = item.colorId;
       if (item.isPlainCloth) {
-        colorId = colorId || 'PLAIN';
-        await tx.color.upsert({
-          where: { id: colorId },
+        const plainClothColor = await tx.color.upsert({
+          where: { name: 'Plain Cloth' },
           update: {},
           create: {
-            id: colorId,
+            id: colorId || 'PLAIN',
             name: 'Plain Cloth',
             hexCode: '#CCCCCC',
           },
         });
+        colorId = plainClothColor.id;
       } else {
         const color = await tx.color.findUnique({ where: { id: item.colorId } });
         if (!color) throw new Error(`Color ${item.colorId} not found`);
