@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import QRCode from 'qrcode';
 import api from '../lib/api';
 import { getCurrentUser } from '../lib/auth';
@@ -54,6 +54,7 @@ const ItemInputPage: React.FC = () => {
   const [qrDataUrl, setQrDataUrl] = useState<string>('');
   const [createdItemId, setCreatedItemId] = useState<string | null>(null);
   const [createdItemQrDataUrl, setCreatedItemQrDataUrl] = useState<string>('');
+  const nextCodeRequestId = useRef(0);
 
   useEffect(() => {
     setLoadingDefaults(true);
@@ -168,6 +169,8 @@ const ItemInputPage: React.FC = () => {
 
   const loadNextAvailableCode = async () => {
     if (!branchId || !colorId) return;
+    const requestId = nextCodeRequestId.current + 1;
+    nextCodeRequestId.current = requestId;
     setLoadingNextCode(true);
     try {
       const response = await api.get('/inventory', {
@@ -183,14 +186,18 @@ const ItemInputPage: React.FC = () => {
         (max: number, item: InventoryItemView) => Math.max(max, Number(item.code || 0)),
         0
       );
+      if (requestId !== nextCodeRequestId.current) return;
       setCode(maxCode + 1);
       setItemId('');
       setScanId('');
     } catch (error) {
+      if (requestId !== nextCodeRequestId.current) return;
       console.error('Failed to load next available code', error);
       setErrorMessage('Failed to find the next available code. You can still enter one manually.');
     } finally {
-      setLoadingNextCode(false);
+      if (requestId === nextCodeRequestId.current) {
+        setLoadingNextCode(false);
+      }
     }
   };
 
@@ -252,10 +259,11 @@ const ItemInputPage: React.FC = () => {
     setErrorMessage(null);
 
     try {
-      await api.post('/inventory', payload);
+      const createResponse = await api.post('/inventory', payload);
+      const savedQrDataUrl = createResponse.data?.item?.qrCodeDataUrl || createdQrDataUrl;
       setSuccessMessage(`Inventory item ${id} created in branch ${branchLabel}.`);
       setCreatedItemId(id);
-      setCreatedItemQrDataUrl(createdQrDataUrl);
+      setCreatedItemQrDataUrl(savedQrDataUrl);
       setScanId('');
       setItemId('');
       setMeters(1);
@@ -370,8 +378,8 @@ const ItemInputPage: React.FC = () => {
               <label className="block text-sm font-medium text-gray-700">Generated ID</label>
               <input
                 value={generatedItemId}
-                onChange={(e) => setItemId(e.target.value)}
-                className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
+                readOnly
+                className="mt-1 w-full rounded-xl border border-gray-300 bg-gray-50 px-3 py-2 text-sm"
                 placeholder="Auto-generated ID"
               />
               <p className="mt-2 text-xs text-gray-500">
