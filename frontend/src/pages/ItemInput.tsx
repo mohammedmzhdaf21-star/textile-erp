@@ -223,6 +223,15 @@ const ItemInputPage: React.FC = () => {
       return alert('Enter or scan an item ID.');
     }
 
+    const createdQrDataUrl =
+      qrValue === id && qrDataUrl
+        ? qrDataUrl
+        : await QRCode.toDataURL(id, {
+            errorCorrectionLevel: 'M',
+            margin: 1,
+            width: 220,
+          });
+
     const payload: any = {
       id,
       branchId,
@@ -230,6 +239,8 @@ const ItemInputPage: React.FC = () => {
       colorId,
       type,
       costPrice: costPrice > 0 ? costPrice : undefined,
+      qrCodeValue: id,
+      qrCodeDataUrl: createdQrDataUrl,
     };
     if (type === 'ROLL' || type === 'REMANENT') payload.meters = Number(meters);
     if (type === 'PIECE') {
@@ -242,13 +253,6 @@ const ItemInputPage: React.FC = () => {
 
     try {
       await api.post('/inventory', payload);
-      const createdQrDataUrl =
-        qrDataUrl ||
-        (await QRCode.toDataURL(id, {
-          errorCorrectionLevel: 'M',
-          margin: 1,
-          width: 220,
-        }));
       setSuccessMessage(`Inventory item ${id} created in branch ${branchLabel}.`);
       setCreatedItemId(id);
       setCreatedItemQrDataUrl(createdQrDataUrl);
