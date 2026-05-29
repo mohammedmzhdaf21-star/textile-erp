@@ -1,0 +1,15 @@
+{
+  "snapshot": "default",
+  "install": "npm install && cd frontend && npm install",
+  "start": "echo Ready",
+  "terminals": [
+    {
+      "name": "Backend",
+      "command": "npm run dev"
+    },
+    {
+      "name": "Frontend",
+      "command": "cd frontend && npm run dev"
+    }
+  ]
+}
