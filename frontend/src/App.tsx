@@ -8,6 +8,7 @@ import Sales from './pages/Sales';
 import Exchange from './pages/Exchange';
 import ItemInput from './pages/ItemInput';
 import DailySales from './pages/DailySales';
+import HistorySales from './pages/HistorySales';
 import SaleDetail from './pages/SaleDetail';
 import { isAuthenticated } from './lib/auth';
 
@@ -16,9 +17,9 @@ function ProtectedLayout({ children }: { children: React.ReactNode }) {
     return <Navigate to="/login" replace />;
   }
   return (
-    <div className="flex min-h-screen bg-white">
+    <div className="flex min-h-screen max-w-full overflow-x-hidden bg-white">
       <Sidebar />
-      <main className="flex-1 p-4 overflow-auto">{children}</main>
+      <main className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto p-4">{children}</main>
     </div>
   );
 }
@@ -81,6 +82,14 @@ function App() {
           element={
             <ProtectedLayout>
               <DailySales />
+            </ProtectedLayout>
+          }
+        />
+        <Route
+          path="/sales/history"
+          element={
+            <ProtectedLayout>
+              <HistorySales />
             </ProtectedLayout>
           }
         />
