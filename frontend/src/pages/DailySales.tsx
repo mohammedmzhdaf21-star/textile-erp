@@ -4,7 +4,8 @@ import api from '../lib/api';
 
 type Sale = {
   id: string;
-  total: number;
+  total?: number;
+  totalPrice?: number | string;
   createdAt: string;
   employee?: {
     id: string;
@@ -13,6 +14,8 @@ type Sale = {
   employeeName?: string;
   paymentStatus?: 'PAID' | 'PARTIAL' | 'UNPAID';
   paidAmount?: number;
+  paymentMethod?: string;
+  notes?: string;
 };
 
 type EmployeeGroup = {

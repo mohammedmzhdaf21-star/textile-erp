@@ -14,6 +14,9 @@ import { authenticate, requireRole } from '../middleware/authenticate';
 
 const router = Router();
 
+const getRouteParam = (value: string | string[] | undefined): string | undefined =>
+  Array.isArray(value) ? value[0] : value;
+
 // All inventory routes require authentication
 router.use(authenticate);
 
@@ -114,7 +117,10 @@ router.get('/colors', async (_req: Request, res: Response) => {
 // ============================================================
 router.get('/:id', async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
+    const id = getRouteParam(req.params.id);
+    if (!id) {
+      return res.status(400).json({ error: 'Inventory item id is required' });
+    }
     const item = await getInventoryItem(id);
     return res.status(200).json(item);
   } catch (error: any) {
@@ -206,8 +212,12 @@ router.patch(
   requireRole('ADMIN', 'MANAGER'),
   async (req: Request, res: Response) => {
     try {
-      const { id } = req.params;
+      const id = getRouteParam(req.params.id);
       const { meters, pieceLength, quantity, costPrice, version } = req.body;
+
+      if (!id) {
+        return res.status(400).json({ error: 'Inventory item id is required' });
+      }
 
       if (version === undefined || version === null) {
         return res.status(400).json({
@@ -258,7 +268,10 @@ router.post(
   requireRole('ADMIN', 'MANAGER'),
   async (req: Request, res: Response) => {
     try {
-      const { id } = req.params;
+      const id = getRouteParam(req.params.id);
+      if (!id) {
+        return res.status(400).json({ error: 'Inventory item id is required' });
+      }
       const item = await archiveInventoryItem(id, req.user?.userId, req.user?.email);
       return res.status(200).json({
         message: 'Inventory item archived',
@@ -285,7 +298,10 @@ router.post(
   requireRole('ADMIN', 'MANAGER'),
   async (req: Request, res: Response) => {
     try {
-      const { id } = req.params;
+      const id = getRouteParam(req.params.id);
+      if (!id) {
+        return res.status(400).json({ error: 'Inventory item id is required' });
+      }
       const item = await restoreInventoryItem(id, req.user?.userId, req.user?.email);
       return res.status(200).json({
         message: 'Inventory item restored',
@@ -312,7 +328,10 @@ router.delete(
   requireRole('ADMIN'),
   async (req: Request, res: Response) => {
     try {
-      const { id } = req.params;
+      const id = getRouteParam(req.params.id);
+      if (!id) {
+        return res.status(400).json({ error: 'Inventory item id is required' });
+      }
       const result = await deleteInventoryItem(id, req.user?.userId, req.user?.email);
       return res.status(200).json({
         message: 'Inventory item permanently deleted',
