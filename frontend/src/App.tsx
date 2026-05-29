@@ -10,6 +10,8 @@ import ItemInput from './pages/ItemInput';
 import DailySales from './pages/DailySales';
 import HistorySales from './pages/HistorySales';
 import OwedMoney from './pages/OwedMoney';
+import Tasks from './pages/Tasks';
+import DataAnalysis from './pages/DataAnalysis';
 import SaleDetail from './pages/SaleDetail';
 import { isAuthenticated } from './lib/auth';
 
@@ -99,6 +101,22 @@ function App() {
           element={
             <ProtectedLayout>
               <OwedMoney />
+            </ProtectedLayout>
+          }
+        />
+        <Route
+          path="/tasks"
+          element={
+            <ProtectedLayout>
+              <Tasks />
+            </ProtectedLayout>
+          }
+        />
+        <Route
+          path="/analytics"
+          element={
+            <ProtectedLayout>
+              <DataAnalysis />
             </ProtectedLayout>
           }
         />

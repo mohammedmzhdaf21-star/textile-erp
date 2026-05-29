@@ -5,6 +5,8 @@ export type DashboardSectionKey =
   | 'dailySales'
   | 'historySales'
   | 'owedMoney'
+  | 'tasks'
+  | 'dataAnalysis'
   | 'exchange'
   | 'itemInput';
 
@@ -37,6 +39,8 @@ export const dashboardSections: Array<{ key: DashboardSectionKey; label: string;
   { key: 'dailySales', label: 'Daily Sales', route: '/sales/daily' },
   { key: 'historySales', label: 'History Sales', route: '/sales/history' },
   { key: 'owedMoney', label: 'Owed Money', route: '/sales/owed' },
+  { key: 'tasks', label: 'Tasks', route: '/tasks' },
+  { key: 'dataAnalysis', label: 'Data Analysis', route: '/analytics' },
   { key: 'exchange', label: 'Exchange', route: '/exchange' },
   { key: 'itemInput', label: 'Item Input', route: '/item-input' },
 ];

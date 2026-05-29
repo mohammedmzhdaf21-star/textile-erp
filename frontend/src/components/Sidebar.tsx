@@ -11,6 +11,8 @@ const navigation = [
   { to: '/sales/daily', label: 'Daily Sales', end: true },
   { to: '/sales/history', label: 'History Sales', end: true },
   { to: '/sales/owed', label: 'Owed Money', end: true },
+  { to: '/tasks', label: 'Tasks', end: true },
+  { to: '/analytics', label: 'Data Analysis', end: true },
   { to: '/exchange', label: 'Exchange', end: true },
   { to: '/item-input', label: 'Item Input', end: true },
 ];
