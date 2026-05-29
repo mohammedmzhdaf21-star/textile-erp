@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import api from '../lib/api';
 import { getCurrentUser } from '../lib/auth';
+import { getItemMinimumPrice } from '../lib/dashboardSettings';
 
 type InventorySaleLine = {
   type: 'inventory';
@@ -59,6 +60,7 @@ const SalesView: React.FC = () => {
   const [scanState, setScanState] = useState({ inventoryItemId: '', sourceBranch: branch, amount: 1, price: 15 });
   const [detectedScanItem, setDetectedScanItem] = useState<InventoryLookupItem | null>(null);
   const [scanMessage, setScanMessage] = useState<string | null>(null);
+  const [minimumPriceMessage, setMinimumPriceMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
@@ -119,6 +121,20 @@ const SalesView: React.FC = () => {
     setDetectedScanItem(item);
     if (item) {
       const unit = soldAsUnitForItem(item);
+      const savedPrice = getItemMinimumPrice(item.id);
+      if (savedPrice) {
+        setScanState((current) => ({
+          ...current,
+          price: Math.max(current.price, savedPrice.minimumPrice),
+        }));
+        setMinimumPriceMessage(
+          `Minimum price for ${item.id}: $${savedPrice.minimumPrice.toFixed(2)} per ${
+            savedPrice.unit === 'PIECE' ? 'piece' : 'meter'
+          }.`
+        );
+      } else {
+        setMinimumPriceMessage(null);
+      }
       setScanMessage(
         `${item.type} detected: enter ${unit === 'PIECE' ? 'piece quantity' : 'decimal meters'}.`
       );
@@ -140,9 +156,13 @@ const SalesView: React.FC = () => {
       if (!item) return;
       const soldAsUnit = soldAsUnitForItem(item);
       const quantity = soldAsUnit === 'PIECE' ? Math.floor(scanState.amount) : scanState.amount;
+      const savedPrice = getItemMinimumPrice(item.id);
 
       if (quantity <= 0) {
         return alert('Enter at least one piece or more than 0 meters.');
+      }
+      if (savedPrice && scanState.price < savedPrice.minimumPrice) {
+        return alert(`Minimum price for this item is $${savedPrice.minimumPrice.toFixed(2)}.`);
       }
 
       setCart((current) => [
@@ -161,6 +181,7 @@ const SalesView: React.FC = () => {
       setScanState((current) => ({ ...current, inventoryItemId: '', amount: 1 }));
       setDetectedScanItem(null);
       setScanMessage(null);
+      setMinimumPriceMessage(null);
     } catch (error: any) {
       const status = error?.response?.status;
       const body = error?.response?.data;
@@ -287,6 +308,7 @@ const SalesView: React.FC = () => {
               setScanState((current) => ({ ...current, sourceBranch: option }));
               setDetectedScanItem(null);
               setScanMessage(null);
+              setMinimumPriceMessage(null);
             }}
             className={`rounded-2xl px-4 py-3 text-sm font-semibold transition ${
               branch === option
@@ -327,12 +349,16 @@ const SalesView: React.FC = () => {
                   onChange={(e) => {
                     setDetectedScanItem(null);
                     setScanMessage(null);
+                    setMinimumPriceMessage(null);
                     setScanState((s) => ({ ...s, inventoryItemId: e.target.value }));
                   }}
                   className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
                   placeholder="Item ID or numeric code"
                 />
                 {scanMessage && <p className="mt-2 text-xs text-gray-500">{scanMessage}</p>}
+                {minimumPriceMessage && (
+                  <p className="mt-1 text-xs font-semibold text-magenta-600">{minimumPriceMessage}</p>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">Source Branch</label>
@@ -341,6 +367,7 @@ const SalesView: React.FC = () => {
                   onChange={(e) => {
                     setDetectedScanItem(null);
                     setScanMessage(null);
+                    setMinimumPriceMessage(null);
                     setScanState((s) => ({ ...s, sourceBranch: e.target.value }));
                   }}
                   className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"

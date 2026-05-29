@@ -1,6 +1,8 @@
 
 import React from 'react';
 import { NavLink } from 'react-router-dom';
+import { canAccessRoute } from '../lib/dashboardSettings';
+import { getCurrentUser } from '../lib/auth';
 
 const navigation = [
   { to: '/dashboard', label: 'Dashboard', end: true },
@@ -14,10 +16,13 @@ const navigation = [
 ];
 
 const Sidebar: React.FC = () => {
+  const user = getCurrentUser();
+  const visibleNavigation = navigation.filter((nav) => canAccessRoute(user?.email, nav.to));
+
   return (
     <aside className="h-full w-64 shrink-0 bg-white border-r border-gray-200 p-4">
       <nav className="space-y-2">
-        {navigation.map((nav) => (
+        {visibleNavigation.map((nav) => (
           <NavLink
             key={nav.to}
             to={nav.to}
