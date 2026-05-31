@@ -7,6 +7,7 @@ export type DashboardSectionKey =
   | 'owedMoney'
   | 'tasks'
   | 'dataAnalysis'
+  | 'trusteeCommission'
   | 'exchange'
   | 'itemInput';
 
@@ -41,6 +42,7 @@ export const dashboardSections: Array<{ key: DashboardSectionKey; label: string;
   { key: 'owedMoney', label: 'Owed Money', route: '/sales/owed' },
   { key: 'tasks', label: 'Tasks', route: '/tasks' },
   { key: 'dataAnalysis', label: 'Data Analysis', route: '/analytics' },
+  { key: 'trusteeCommission', label: 'Trustee Commission', route: '/trustee-commission' },
   { key: 'exchange', label: 'Exchange', route: '/exchange' },
   { key: 'itemInput', label: 'Item Input', route: '/item-input' },
 ];
