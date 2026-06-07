@@ -143,6 +143,8 @@ model InventoryItem {
   qrCodeDataUrl String? @db.Text
   pictureName String?   @db.VarChar(255)
   pictureDataUrl String? @db.Text
+  sourceItemId String?   @db.VarChar(100)
+  conversionType String? @db.VarChar(50)
   version     Int       @default(0)
   isArchived  Boolean   @default(false)
   deletedAt   DateTime?
@@ -151,11 +153,12 @@ model InventoryItem {
 
   saleItems   SaleItem[]
 
-  @@unique([branchId, code, colorId, type])
   @@index([branchId, code])
+  @@index([branchId, code, colorId])
   @@index([branchId, type])
   @@index([colorId])
   @@index([isArchived])
+  @@index([sourceItemId])
   @@map("inventory_items")
 }
 

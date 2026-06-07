@@ -7,6 +7,7 @@ import { getCurrentUser } from '../lib/auth';
 const navigation = [
   { to: '/dashboard', label: 'Dashboard', end: true },
   { to: '/inventory', label: 'Inventory', end: true },
+  { to: '/inventory/convert', label: 'Item Conversion', end: true },
   { to: '/sales', label: 'Sales', end: true },
   { to: '/sales/daily', label: 'Daily Sales', end: true },
   { to: '/sales/history', label: 'History Sales', end: true },

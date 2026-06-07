@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Sidebar from './components/Sidebar';
 import Inventory from './pages/Inventory';
+import ItemConversion from './pages/ItemConversion';
 import Dashboard from './pages/Dashboard';
 import Login from './pages/Login';
 import Sales from './pages/Sales';
@@ -46,6 +47,14 @@ function App() {
           element={
             <ProtectedLayout>
               <Inventory />
+            </ProtectedLayout>
+          }
+        />
+        <Route
+          path="/inventory/convert"
+          element={
+            <ProtectedLayout>
+              <ItemConversion />
             </ProtectedLayout>
           }
         />

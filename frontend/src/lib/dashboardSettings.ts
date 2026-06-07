@@ -1,6 +1,7 @@
 export type DashboardSectionKey =
   | 'dashboard'
   | 'inventory'
+  | 'itemConversion'
   | 'sales'
   | 'dailySales'
   | 'historySales'
@@ -36,6 +37,7 @@ const COMMISSION_SETTINGS_KEY = 'textile-erp-commission-settings';
 export const dashboardSections: Array<{ key: DashboardSectionKey; label: string; route: string }> = [
   { key: 'dashboard', label: 'Dashboard', route: '/dashboard' },
   { key: 'inventory', label: 'Inventory', route: '/inventory' },
+  { key: 'itemConversion', label: 'Item Conversion', route: '/inventory/convert' },
   { key: 'sales', label: 'Sales', route: '/sales' },
   { key: 'dailySales', label: 'Daily Sales', route: '/sales/daily' },
   { key: 'historySales', label: 'History Sales', route: '/sales/history' },
