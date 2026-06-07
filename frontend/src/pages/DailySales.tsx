@@ -308,7 +308,7 @@ const toDate = formatDate(tomorrow);
                               state: { returnTo: '/sales/daily' },
                             })
                           }
-                          className={`w-full rounded-2xl border p-4 text-left transition hover:border-magenta-300 hover:bg-white ${getSaleBorder(sale)}`}
+                          className={`w-full rounded-2xl border p-4 text-left transition hover:border-black hover:bg-white ${getSaleBorder(sale)}`}
                         >
                           <div className="flex items-center justify-between gap-3">
                             <div>

@@ -30,13 +30,19 @@ const Sidebar: React.FC = () => {
             key={nav.to}
             to={nav.to}
             end={nav.end}
-            className={({ isActive }) =>
-              isActive
-                ? 'block px-3 py-2 rounded-md bg-magenta-500 text-white font-semibold'
-                : 'block px-3 py-2 rounded-md text-gray-700 hover:bg-gray-100 transition-colors'
-            }
+            className={({ isActive }) => {
+              if (nav.to === '/sales') {
+                return isActive
+                  ? 'nav-liquid-sales scale-[1.02]'
+                  : 'nav-liquid-sales opacity-95 hover:opacity-100';
+              }
+
+              return isActive
+                ? 'block px-3 py-2 rounded-md bg-black text-white font-semibold'
+                : 'block px-3 py-2 rounded-md text-gray-700 hover:bg-gray-100 transition-colors';
+            }}
           >
-            {nav.label}
+            <span className={nav.to === '/sales' ? 'relative z-10' : undefined}>{nav.label}</span>
           </NavLink>
         ))}
       </nav>

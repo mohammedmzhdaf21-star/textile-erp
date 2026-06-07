@@ -310,7 +310,7 @@ export default function Dashboard() {
               <button
                 type="button"
                 onClick={calculateCommissions}
-                className="mt-4 flex w-full items-center justify-between rounded-lg bg-magenta-500 px-6 py-3 text-left font-semibold text-white shadow-md transition-all duration-200 hover:bg-magenta-600"
+                className="mt-4 flex w-full items-center justify-between rounded-lg bg-black px-6 py-3 text-left font-semibold text-white shadow-md transition-all duration-200 hover:bg-gray-800"
               >
                 <span>Run commission</span>
                 <span aria-hidden="true">→</span>

@@ -84,7 +84,7 @@ const SaleDetail: React.FC = () => {
             window.scrollTo({ top: 0, left: 0 });
             navigate(returnTo);
           }}
-          className="rounded-2xl border border-magenta-500 bg-magenta-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-magenta-600"
+          className="rounded-2xl border border-black bg-black px-4 py-2 text-sm font-semibold text-white transition hover:bg-gray-800"
         >
           Back
         </button>

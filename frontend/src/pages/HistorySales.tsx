@@ -288,8 +288,8 @@ const HistorySales: React.FC = () => {
                     onClick={() => setSelectedDateKey(bucket.key)}
                     className={`rounded-2xl border px-4 py-3 text-left text-sm transition ${
                       selectedDateKey === bucket.key
-                        ? 'border-magenta-500 bg-magenta-50 text-magenta-700'
-                        : 'border-gray-200 bg-white text-gray-700 hover:border-magenta-300'
+                        ? 'border-black bg-black text-white'
+                        : 'border-gray-200 bg-white text-gray-700 hover:border-black'
                     }`}
                   >
                     <span className="block font-semibold">{bucket.label}</span>
@@ -352,7 +352,7 @@ const HistorySales: React.FC = () => {
                                 state: { returnTo: '/sales/history' },
                               })
                             }
-                            className={`w-full rounded-2xl border p-4 text-left transition hover:border-magenta-300 hover:bg-white ${saleBorderClass(sale)}`}
+                            className={`w-full rounded-2xl border p-4 text-left transition hover:border-black hover:bg-white ${saleBorderClass(sale)}`}
                           >
                             <div className="flex items-center justify-between gap-3">
                               <div>
