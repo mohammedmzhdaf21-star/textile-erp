@@ -1,42 +1,43 @@
 import React, { useMemo, useState } from 'react';
 import { getCurrentUser } from '../lib/auth';
+import {
+  branches,
+  createTask,
+  nextDueAt,
+  readTaskAssignments,
+  readTasks,
+  recurringTaskTemplates,
+  scheduleOptions,
+  upsertTaskAssignment,
+  writeTasks,
+  type BranchCode,
+  type BranchTask,
+  type TaskAssignment,
+  type TaskStatus,
+} from '../lib/taskSettings';
 
-type BranchCode = 'A' | 'B' | 'C' | 'E' | 'F';
-type TaskStatus = 'TODO' | 'DONE';
+const formatDateTime = (dateString?: string) =>
+  dateString ? new Date(dateString).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : 'Not scheduled';
 
-type BranchTask = {
-  id: string;
-  branch: BranchCode;
-  title: string;
-  assignedTo: string;
-  note: string;
-  status: TaskStatus;
-  createdAt: string;
-};
-
-const TASKS_KEY = 'textile-erp-branch-tasks';
-const branches: BranchCode[] = ['A', 'B', 'C', 'E', 'F'];
-
-const readTasks = (): BranchTask[] => {
-  try {
-    const raw = localStorage.getItem(TASKS_KEY);
-    return raw ? (JSON.parse(raw) as BranchTask[]) : [];
-  } catch {
-    return [];
-  }
-};
-
-const writeTasks = (tasks: BranchTask[]) => {
-  localStorage.setItem(TASKS_KEY, JSON.stringify(tasks));
-};
+const scheduleLabel = (value: string) =>
+  scheduleOptions.find((option) => option.value === value)?.label || 'On demand';
 
 const Tasks: React.FC = () => {
   const user = getCurrentUser();
   const [selectedBranch, setSelectedBranch] = useState<BranchCode>('A');
+  const [assignments, setAssignments] = useState<TaskAssignment[]>(() => readTaskAssignments());
   const [tasks, setTasks] = useState<BranchTask[]>(() => readTasks());
-  const [title, setTitle] = useState('');
+  const [templateKey, setTemplateKey] = useState<TaskAssignment['templateKey']>('MOPPING');
+  const selectedTemplate = recurringTaskTemplates.find((template) => template.key === templateKey) || recurringTaskTemplates[0];
   const [assignedTo, setAssignedTo] = useState(user?.email || '');
   const [note, setNote] = useState('');
+  const [schedule, setSchedule] = useState<TaskAssignment['schedule']>('DAILY');
+  const [message, setMessage] = useState<string | null>(null);
+
+  const branchAssignments = useMemo(
+    () => assignments.filter((assignment) => assignment.branch === selectedBranch),
+    [assignments, selectedBranch]
+  );
 
   const branchTasks = useMemo(
     () => tasks.filter((task) => task.branch === selectedBranch),
@@ -45,42 +46,72 @@ const Tasks: React.FC = () => {
 
   const openTasks = branchTasks.filter((task) => task.status === 'TODO');
   const doneTasks = branchTasks.filter((task) => task.status === 'DONE');
+  const cuttingTasks = openTasks.filter((task) => task.templateKey === 'CUTTING_FABRIC_ROLL');
 
-  const saveTasks = (nextTasks: BranchTask[]) => {
+  const refresh = () => {
+    setAssignments(readTaskAssignments());
+    setTasks(readTasks());
+  };
+
+  const assignRecurringTask = () => {
+    const assignment = upsertTaskAssignment({
+      branch: selectedBranch,
+      templateKey,
+      title: selectedTemplate.title,
+      assignedTo: assignedTo.trim() || 'Unassigned',
+      note,
+      schedule,
+    });
+    refresh();
+    setMessage(`Assigned "${assignment.title}" to Branch ${selectedBranch} (${scheduleLabel(assignment.schedule)}).`);
+  };
+
+  const addManualCuttingTask = () => {
+    const code = window.prompt('Enter fabric roll code to cut');
+    if (!code) return;
+    const task = createTask({
+      branch: selectedBranch,
+      templateKey: 'CUTTING_FABRIC_ROLL',
+      title: `Cutting the fabric roll for code ${code}`,
+      assignedTo: assignedTo.trim() || 'Inventory team',
+      note: 'Manual cutting task created by admin/owner.',
+      schedule: 'ON_DEMAND',
+      code: Number(code),
+    });
+    refresh();
+    setMessage(`Created ${task.title} for Branch ${selectedBranch}.`);
+  };
+
+  const toggleTask = (taskId: string) => {
+    const nextTasks = tasks.map((task) =>
+      task.id === taskId
+        ? {
+            ...task,
+            status: (task.status === 'TODO' ? 'DONE' : 'TODO') as TaskStatus,
+          }
+        : task
+    );
     setTasks(nextTasks);
     writeTasks(nextTasks);
   };
 
-  const addTask = () => {
-    if (!title.trim()) return alert('Enter a task title.');
-
-    const task: BranchTask = {
-      id: `${selectedBranch}-${Date.now()}`,
-      branch: selectedBranch,
-      title: title.trim(),
-      assignedTo: assignedTo.trim() || 'Unassigned',
-      note: note.trim(),
-      status: 'TODO',
-      createdAt: new Date().toISOString(),
-    };
-
-    saveTasks([task, ...tasks]);
-    setTitle('');
-    setNote('');
-  };
-
-  const toggleTask = (taskId: string) => {
-    saveTasks(
-      tasks.map((task) =>
-        task.id === taskId
-          ? { ...task, status: task.status === 'TODO' ? 'DONE' : 'TODO' }
-          : task
-      )
-    );
-  };
-
   const deleteTask = (taskId: string) => {
-    saveTasks(tasks.filter((task) => task.id !== taskId));
+    const nextTasks = tasks.filter((task) => task.id !== taskId);
+    setTasks(nextTasks);
+    writeTasks(nextTasks);
+  };
+
+  const createNextTask = (assignment: TaskAssignment) => {
+    createTask({
+      branch: assignment.branch,
+      templateKey: assignment.templateKey,
+      title: assignment.title,
+      assignedTo: assignment.assignedTo,
+      note: assignment.note,
+      schedule: assignment.schedule,
+      dueAt: nextDueAt(assignment.schedule),
+    });
+    refresh();
   };
 
   return (
@@ -88,8 +119,8 @@ const Tasks: React.FC = () => {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h2 className="text-2xl font-bold text-black">Tasks</h2>
-          <p className="mt-1 max-w-xl text-sm text-gray-600">
-            Branch work board for employee tasks. You can decide the exact task types later.
+          <p className="mt-1 max-w-2xl text-sm text-gray-600">
+            Admin/owner task schedule by branch. Cutting tasks are also created automatically when a linked cut piece is sold.
           </p>
         </div>
         <div className="text-sm text-gray-500">Branch {selectedBranch}</div>
@@ -112,16 +143,32 @@ const Tasks: React.FC = () => {
         ))}
       </section>
 
-      <div className="mt-8 grid gap-6 lg:grid-cols-[1fr_1.2fr]">
+      {message && <div className="mt-4 rounded-2xl border border-green-200 bg-green-50 p-4 text-sm text-green-700">{message}</div>}
+
+      <div className="mt-8 grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
         <section className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
-          <h3 className="text-xl font-semibold text-black">Add task</h3>
-          <label className="mt-4 block text-sm font-medium text-gray-700">Task title</label>
-          <input
-            value={title}
-            onChange={(event) => setTitle(event.target.value)}
+          <h3 className="text-xl font-semibold text-black">Assign recurring task</h3>
+          <label className="mt-4 block text-sm font-medium text-gray-700">Task</label>
+          <select
+            value={templateKey}
+            onChange={(event) => setTemplateKey(event.target.value as TaskAssignment['templateKey'])}
             className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
-            placeholder="Example: Count rolls, prepare exchange desk..."
-          />
+          >
+            {recurringTaskTemplates.map((template) => (
+              <option key={template.key} value={template.key}>{template.title}</option>
+            ))}
+          </select>
+
+          <label className="mt-4 block text-sm font-medium text-gray-700">Schedule</label>
+          <select
+            value={schedule}
+            onChange={(event) => setSchedule(event.target.value as TaskAssignment['schedule'])}
+            className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
+          >
+            {scheduleOptions.map((option) => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
+          </select>
 
           <label className="mt-4 block text-sm font-medium text-gray-700">Employee email</label>
           <input
@@ -136,24 +183,60 @@ const Tasks: React.FC = () => {
             value={note}
             onChange={(event) => setNote(event.target.value)}
             className="mt-1 min-h-24 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
-            placeholder="Add task details here..."
+            placeholder="Optional task details..."
           />
 
-          <button type="button" onClick={addTask} className="btn-primary mt-4 w-full">
-            Save task for Branch {selectedBranch}
+          <button type="button" onClick={assignRecurringTask} className="btn-primary mt-4 w-full">
+            Assign task to Branch {selectedBranch}
+          </button>
+
+          <button type="button" onClick={addManualCuttingTask} className="btn-secondary mt-3 w-full">
+            Add cutting task manually
           </button>
         </section>
 
         <section className="space-y-5">
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-3">
             <div className="rounded-3xl border border-red-200 bg-red-50 p-5">
               <div className="text-sm text-red-700">Open tasks</div>
               <div className="mt-1 text-3xl font-bold text-black">{openTasks.length}</div>
+            </div>
+            <div className="rounded-3xl border border-amber-200 bg-amber-50 p-5">
+              <div className="text-sm text-amber-700">Cutting alerts</div>
+              <div className="mt-1 text-3xl font-bold text-black">{cuttingTasks.length}</div>
             </div>
             <div className="rounded-3xl border border-green-200 bg-green-50 p-5">
               <div className="text-sm text-green-700">Done tasks</div>
               <div className="mt-1 text-3xl font-bold text-black">{doneTasks.length}</div>
             </div>
+          </div>
+
+          <div className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
+            <h3 className="text-xl font-semibold text-black">Assigned schedule for Branch {selectedBranch}</h3>
+            {branchAssignments.length === 0 ? (
+              <div className="mt-4 rounded-2xl bg-gray-50 p-4 text-sm text-gray-600">
+                No recurring task assignments yet.
+              </div>
+            ) : (
+              <div className="mt-4 space-y-3">
+                {branchAssignments.map((assignment) => (
+                  <div key={assignment.id} className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div>
+                        <div className="font-semibold text-black">{assignment.title}</div>
+                        <div className="mt-1 text-sm text-gray-600">
+                          {scheduleLabel(assignment.schedule)} · Assigned to {assignment.assignedTo}
+                        </div>
+                        {assignment.note && <div className="mt-2 text-sm text-gray-700">{assignment.note}</div>}
+                      </div>
+                      <button type="button" onClick={() => createNextTask(assignment)} className="rounded-xl bg-black px-3 py-2 text-xs font-semibold text-white">
+                        Create next
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
@@ -170,14 +253,24 @@ const Tasks: React.FC = () => {
                     className={`rounded-2xl border p-4 ${
                       task.status === 'DONE'
                         ? 'border-green-300 bg-green-50'
+                        : task.templateKey === 'CUTTING_FABRIC_ROLL'
+                        ? 'border-amber-300 bg-amber-50'
                         : 'border-red-300 bg-red-50'
                     }`}
                   >
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                       <div>
                         <div className="font-semibold text-black">{task.title}</div>
-                        <div className="mt-1 text-sm text-gray-600">Assigned to {task.assignedTo}</div>
+                        <div className="mt-1 text-sm text-gray-600">
+                          {scheduleLabel(task.schedule)} · Assigned to {task.assignedTo}
+                          {task.dueAt ? ` · Due ${formatDateTime(task.dueAt)}` : ''}
+                        </div>
                         {task.note && <div className="mt-2 text-sm text-gray-700">{task.note}</div>}
+                        {task.sourceItemId && (
+                          <div className="mt-2 break-all text-xs text-gray-500">
+                            Source roll: {task.sourceItemId}
+                          </div>
+                        )}
                       </div>
                       <div className="flex gap-2">
                         <button

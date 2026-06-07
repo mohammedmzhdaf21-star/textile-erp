@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import api from '../lib/api';
 import { getCurrentUser } from '../lib/auth';
 import { getItemMinimumPrice } from '../lib/dashboardSettings';
+import { createCuttingTaskFromSale, type BranchCode } from '../lib/taskSettings';
 
 type InventorySaleLine = {
   type: 'inventory';
@@ -12,6 +13,9 @@ type InventorySaleLine = {
   soldAsUnit: 'METER' | 'PIECE';
   quantity: number;
   price: number;
+  sourceItemId?: string | null;
+  code?: number;
+  colorName?: string;
 };
 
 type PlainClothSaleLine = {
@@ -30,6 +34,9 @@ type InventoryLookupItem = {
   type: 'ROLL' | 'PIECE' | 'REMANENT';
   meters?: string | number | null;
   quantity: number;
+  code?: number;
+  color?: { name?: string };
+  sourceItemId?: string | null;
 };
 
 const branchOptions = ['A', 'B', 'C', 'E', 'F'];
@@ -176,6 +183,9 @@ const SalesView: React.FC = () => {
           soldAsUnit,
           quantity,
           price: scanState.price,
+          sourceItemId: item.sourceItemId,
+          code: item.code,
+          colorName: item.color?.name,
         },
       ]);
       setScanState((current) => ({ ...current, inventoryItemId: '', amount: 1 }));
@@ -255,9 +265,11 @@ const SalesView: React.FC = () => {
       // Retry once on server/network errors
       let attempt = 0;
       const maxAttempts = 2;
+      let saleId: string | undefined;
       while (attempt < maxAttempts) {
         try {
-          await api.post('/sales', payload);
+          const saleResponse = await api.post('/sales', payload);
+          saleId = saleResponse.data?.sale?.id;
           break;
         } catch (postErr: any) {
           attempt += 1;
@@ -271,6 +283,18 @@ const SalesView: React.FC = () => {
           throw postErr;
         }
       }
+      cart.forEach((line) => {
+        if (line.type !== 'inventory' || line.soldAsUnit !== 'PIECE' || !line.sourceItemId) return;
+        createCuttingTaskFromSale({
+          branch: (line.sourceBranch as BranchCode) || (branch as BranchCode),
+          code: line.code,
+          colorName: line.colorName,
+          sourceItemId: line.sourceItemId,
+          soldItemId: line.inventoryItemId,
+          saleId,
+          assignedTo: 'Inventory team',
+        });
+      });
       setSuccessMessage(`Sale created for branch ${branch}. Total ${saleTotal.toFixed(2)}`);
       setCart([]);
       setAmountPaid('0');
@@ -478,7 +502,7 @@ const SalesView: React.FC = () => {
               </div>
               <div className="flex justify-between">
                 <span>Lines</span>
-                <span>{cart.length}</span>
+                <span className="font-semibold text-black">{String(cart.length)}</span>
               </div>
               <div className="flex justify-between font-semibold">
                 <span>Total</span>
