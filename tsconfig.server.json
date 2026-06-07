@@ -1,0 +1,19 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "outDir": "./dist"
+  },
+  "include": [
+    "src/lib/**/*.ts",
+    "src/middleware/**/*.ts",
+    "src/routes/**/*.ts",
+    "src/server.ts",
+    "src/types/**/*.d.ts",
+    "prisma/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "src/App.tsx"
+  ]
+}

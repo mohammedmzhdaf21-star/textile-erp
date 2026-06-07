@@ -8,7 +8,9 @@
     "seed": "tsx prisma/seed.ts",
     "dev": "tsx watch src/server.ts",
     "start": "tsx src/server.ts",
-    "build": "tsc",
+    "build": "tsc -p tsconfig.server.json",
+    "postinstall": "prisma generate",
+    "migrate:deploy": "prisma migrate deploy",
     "studio": "prisma studio"
   },
   "prisma": {
