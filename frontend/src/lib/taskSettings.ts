@@ -31,6 +31,8 @@ export type BranchTask = {
   schedule: TaskSchedule;
   status: TaskStatus;
   createdAt: string;
+  checkedBy?: string;
+  checkedAt?: string;
   dueAt?: string;
   sourceSaleId?: string;
   sourceItemId?: string;
@@ -110,6 +112,9 @@ export const nextDueAt = (schedule: TaskAssignment['schedule'], from = new Date(
   return due.toISOString();
 };
 
+export const isTaskComplete = (task: BranchTask) =>
+  task.status === 'DONE' || Boolean(task.checkedAt);
+
 export const createTask = (task: Omit<BranchTask, 'id' | 'createdAt' | 'status'>) => {
   const nextTask: BranchTask = {
     ...task,
@@ -120,6 +125,39 @@ export const createTask = (task: Omit<BranchTask, 'id' | 'createdAt' | 'status'>
   writeTasks([nextTask, ...readTasks()]);
   window.dispatchEvent(new Event('branch-tasks-updated'));
   return nextTask;
+};
+
+export const completeTask = (taskId: string, checkedBy: string) => {
+  const completedAt = new Date().toISOString();
+  const nextTasks = readTasks().map((task) =>
+    task.id === taskId
+      ? {
+          ...task,
+          status: 'DONE' as const,
+          checkedBy,
+          checkedAt: completedAt,
+        }
+      : task
+  );
+  writeTasks(nextTasks);
+  window.dispatchEvent(new Event('branch-tasks-updated'));
+  return nextTasks.find((task) => task.id === taskId);
+};
+
+export const reopenTask = (taskId: string) => {
+  const nextTasks = readTasks().map((task) =>
+    task.id === taskId
+      ? {
+          ...task,
+          status: 'TODO' as const,
+          checkedBy: undefined,
+          checkedAt: undefined,
+        }
+      : task
+  );
+  writeTasks(nextTasks);
+  window.dispatchEvent(new Event('branch-tasks-updated'));
+  return nextTasks.find((task) => task.id === taskId);
 };
 
 export const upsertTaskAssignment = (assignment: Omit<TaskAssignment, 'id' | 'updatedAt'>) => {

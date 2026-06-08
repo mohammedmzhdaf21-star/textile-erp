@@ -12,6 +12,7 @@ import DailySales from './pages/DailySales';
 import HistorySales from './pages/HistorySales';
 import OwedMoney from './pages/OwedMoney';
 import Tasks from './pages/Tasks';
+import TaskEmployee from './pages/TaskEmployee';
 import DataAnalysis from './pages/DataAnalysis';
 import TrusteeCommission from './pages/TrusteeCommission';
 import SaleDetail from './pages/SaleDetail';
@@ -119,6 +120,14 @@ function App() {
           element={
             <ProtectedLayout>
               <Tasks />
+            </ProtectedLayout>
+          }
+        />
+        <Route
+          path="/task-employee"
+          element={
+            <ProtectedLayout>
+              <TaskEmployee />
             </ProtectedLayout>
           }
         />

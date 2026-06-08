@@ -13,6 +13,7 @@ const navigation = [
   { to: '/sales/history', label: 'History Sales', end: true },
   { to: '/sales/owed', label: 'Owed Money', end: true },
   { to: '/tasks', label: 'Tasks', end: true },
+  { to: '/task-employee', label: 'Task Employee', end: true },
   { to: '/analytics', label: 'Data Analysis', end: true },
   { to: '/trustee-commission', label: 'Trustee Commission', end: true },
   { to: '/exchange', label: 'Exchange', end: true },

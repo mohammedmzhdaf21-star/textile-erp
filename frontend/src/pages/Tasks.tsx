@@ -2,18 +2,20 @@ import React, { useMemo, useState } from 'react';
 import { getCurrentUser } from '../lib/auth';
 import {
   branches,
+  completeTask,
   createTask,
+  isTaskComplete,
   nextDueAt,
   readTaskAssignments,
   readTasks,
   recurringTaskTemplates,
   scheduleOptions,
   upsertTaskAssignment,
+  reopenTask,
   writeTasks,
   type BranchCode,
   type BranchTask,
   type TaskAssignment,
-  type TaskStatus,
 } from '../lib/taskSettings';
 
 const formatDateTime = (dateString?: string) =>
@@ -44,8 +46,8 @@ const Tasks: React.FC = () => {
     [selectedBranch, tasks]
   );
 
-  const openTasks = branchTasks.filter((task) => task.status === 'TODO');
-  const doneTasks = branchTasks.filter((task) => task.status === 'DONE');
+  const openTasks = branchTasks.filter((task) => !isTaskComplete(task));
+  const doneTasks = branchTasks.filter(isTaskComplete);
   const cuttingTasks = openTasks.filter((task) => task.templateKey === 'CUTTING_FABRIC_ROLL');
 
   const refresh = () => {
@@ -83,16 +85,14 @@ const Tasks: React.FC = () => {
   };
 
   const toggleTask = (taskId: string) => {
-    const nextTasks = tasks.map((task) =>
-      task.id === taskId
-        ? {
-            ...task,
-            status: (task.status === 'TODO' ? 'DONE' : 'TODO') as TaskStatus,
-          }
-        : task
-    );
-    setTasks(nextTasks);
-    writeTasks(nextTasks);
+    const task = tasks.find((item) => item.id === taskId);
+    if (!task) return;
+    if (!isTaskComplete(task)) {
+      completeTask(taskId, `${user?.name || 'Admin'} (${user?.email || 'admin'})`);
+    } else {
+      reopenTask(taskId);
+    }
+    refresh();
   };
 
   const deleteTask = (taskId: string) => {
@@ -251,8 +251,8 @@ const Tasks: React.FC = () => {
                   <div
                     key={task.id}
                     className={`rounded-2xl border p-4 ${
-                      task.status === 'DONE'
-                        ? 'border-green-300 bg-green-50'
+                      isTaskComplete(task)
+                        ? 'border-green-500 border-l-8 bg-green-100 shadow-sm'
                         : task.templateKey === 'CUTTING_FABRIC_ROLL'
                         ? 'border-amber-300 bg-amber-50'
                         : 'border-red-300 bg-red-50'
@@ -260,12 +260,24 @@ const Tasks: React.FC = () => {
                   >
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                       <div>
-                        <div className="font-semibold text-black">{task.title}</div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-semibold text-black">{task.title}</span>
+                          {isTaskComplete(task) && (
+                            <span className="rounded-full bg-green-600 px-2 py-1 text-xs font-semibold text-white">
+                              Done
+                            </span>
+                          )}
+                        </div>
                         <div className="mt-1 text-sm text-gray-600">
                           {scheduleLabel(task.schedule)} · Assigned to {task.assignedTo}
                           {task.dueAt ? ` · Due ${formatDateTime(task.dueAt)}` : ''}
                         </div>
                         {task.note && <div className="mt-2 text-sm text-gray-700">{task.note}</div>}
+                        {isTaskComplete(task) && (
+                          <div className="mt-2 rounded-xl bg-white px-3 py-2 text-sm text-green-700">
+                            Checked by {task.checkedBy || 'Unknown employee'} at {formatDateTime(task.checkedAt)}
+                          </div>
+                        )}
                         {task.sourceItemId && (
                           <div className="mt-2 break-all text-xs text-gray-500">
                             Source roll: {task.sourceItemId}
@@ -278,7 +290,7 @@ const Tasks: React.FC = () => {
                           onClick={() => toggleTask(task.id)}
                           className="rounded-xl bg-black px-3 py-2 text-xs font-semibold text-white"
                         >
-                          {task.status === 'DONE' ? 'Reopen' : 'Done'}
+                          {isTaskComplete(task) ? 'Reopen' : 'Done'}
                         </button>
                         <button
                           type="button"
