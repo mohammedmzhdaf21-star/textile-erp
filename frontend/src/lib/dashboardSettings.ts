@@ -34,6 +34,7 @@ export type CommissionSettings = {
 const ITEM_PRICES_KEY = 'textile-erp-item-minimum-prices';
 const EMPLOYEE_ACCESS_KEY = 'textile-erp-employee-access-rules';
 const COMMISSION_SETTINGS_KEY = 'textile-erp-commission-settings';
+const ALWAYS_VISIBLE_ROUTES = new Set(['/task-employee']);
 
 export const dashboardSections: Array<{ key: DashboardSectionKey; label: string; route: string }> = [
   { key: 'dashboard', label: 'Dashboard', route: '/dashboard' },
@@ -93,6 +94,7 @@ export const getEmployeeAccessRule = (email?: string | null) => {
 };
 
 export const canAccessRoute = (email: string | undefined, route: string) => {
+  if (ALWAYS_VISIBLE_ROUTES.has(route)) return true;
   const rule = getEmployeeAccessRule(email);
   if (!rule) return true;
   return dashboardSections.some(
