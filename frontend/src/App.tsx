@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Sidebar from './components/Sidebar';
 import Inventory from './pages/Inventory';
+import ItemConversion from './pages/ItemConversion';
 import Dashboard from './pages/Dashboard';
 import Login from './pages/Login';
 import Sales from './pages/Sales';
@@ -9,6 +10,11 @@ import Exchange from './pages/Exchange';
 import ItemInput from './pages/ItemInput';
 import DailySales from './pages/DailySales';
 import HistorySales from './pages/HistorySales';
+import OwedMoney from './pages/OwedMoney';
+import Tasks from './pages/Tasks';
+import TaskEmployee from './pages/TaskEmployee';
+import DataAnalysis from './pages/DataAnalysis';
+import TrusteeCommission from './pages/TrusteeCommission';
 import SaleDetail from './pages/SaleDetail';
 import { isAuthenticated } from './lib/auth';
 
@@ -42,6 +48,14 @@ function App() {
           element={
             <ProtectedLayout>
               <Inventory />
+            </ProtectedLayout>
+          }
+        />
+        <Route
+          path="/inventory/convert"
+          element={
+            <ProtectedLayout>
+              <ItemConversion />
             </ProtectedLayout>
           }
         />
@@ -90,6 +104,46 @@ function App() {
           element={
             <ProtectedLayout>
               <HistorySales />
+            </ProtectedLayout>
+          }
+        />
+        <Route
+          path="/sales/owed"
+          element={
+            <ProtectedLayout>
+              <OwedMoney />
+            </ProtectedLayout>
+          }
+        />
+        <Route
+          path="/tasks"
+          element={
+            <ProtectedLayout>
+              <Tasks />
+            </ProtectedLayout>
+          }
+        />
+        <Route
+          path="/task-employee"
+          element={
+            <ProtectedLayout>
+              <TaskEmployee />
+            </ProtectedLayout>
+          }
+        />
+        <Route
+          path="/analytics"
+          element={
+            <ProtectedLayout>
+              <DataAnalysis />
+            </ProtectedLayout>
+          }
+        />
+        <Route
+          path="/trustee-commission"
+          element={
+            <ProtectedLayout>
+              <TrusteeCommission />
             </ProtectedLayout>
           }
         />
