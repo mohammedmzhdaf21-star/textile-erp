@@ -20,6 +20,7 @@ export interface CreateInventoryInput {
   id: string;
   branchId: string;
   code: number;
+  subCode: number;
   colorId: string;
   type: 'ROLL' | 'PIECE' | 'REMANENT';
   meters?: number;
@@ -140,12 +141,13 @@ export async function createInventoryItem(
         id: input.id,
         branchId: input.branchId,
         code: input.code,
+        subCode: input.subCode,
         colorId: input.colorId,
         type: input.type,
         meters: input.meters,
         pieceLength: input.pieceLength,
         quantity: input.quantity ?? 1,
-        costPrice: input.costPrice,
+        costPrice: input.costPrice ?? input.subCode,
         qrCodeValue: input.qrCodeValue || input.id,
         qrCodeDataUrl: input.qrCodeDataUrl,
         pictureName: input.pictureName,

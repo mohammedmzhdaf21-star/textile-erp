@@ -17,7 +17,7 @@ const navigation = [
   { to: '/analytics', label: 'Data Analysis', end: true },
   { to: '/trustee-commission', label: 'Trustee Commission', end: true },
   { to: '/exchange', label: 'Exchange', end: true },
-  { to: '/item-input', label: 'Item Input', end: true },
+  { to: '/item-input', label: 'New Item', end: true },
 ];
 
 const Sidebar: React.FC = () => {

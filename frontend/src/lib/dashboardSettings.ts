@@ -49,7 +49,7 @@ export const dashboardSections: Array<{ key: DashboardSectionKey; label: string;
   { key: 'dataAnalysis', label: 'Data Analysis', route: '/analytics' },
   { key: 'trusteeCommission', label: 'Trustee Commission', route: '/trustee-commission' },
   { key: 'exchange', label: 'Exchange', route: '/exchange' },
-  { key: 'itemInput', label: 'Item Input', route: '/item-input' },
+  { key: 'itemInput', label: 'New Item', route: '/item-input' },
 ];
 
 const readJson = <T,>(key: string, fallback: T): T => {

@@ -1,50 +1,46 @@
 import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import api from '../lib/api';
-
-const branches = ['A', 'B', 'C', 'D', 'E', 'F'];
-// Map UI branch codes to real backend branch IDs (seeded DB uses B001/B002/B003)
-const BRANCH_MAP: Record<string, string> = {
-  A: 'B001',
-  B: 'B002',
-  C: 'B003',
-  D: 'B001',
-  E: 'B001',
-  F: 'B002',
-};
+import {
+  BRANCH_CODE_BY_ID,
+  BRANCH_DESTINATIONS,
+  BRANCH_ID_BY_CODE,
+  formatSubCode,
+  ITEM_TYPE_LABELS,
+  type BranchDestinationCode,
+} from '../lib/inventoryCodes';
 
 type Color = { id: string; name: string; hexCode?: string };
 type InventoryItemView = {
   id: string;
   code: number;
+  subCode?: number | string;
+  costPrice?: number | string;
   branchId: string;
   color?: Color;
   type: 'ROLL' | 'PIECE' | 'REMANENT' | string;
-  meters?: string;
-  pieceLength?: string;
+  meters?: string | number;
+  pieceLength?: string | number;
   quantity?: number;
   branch?: { id: string; name: string };
 };
 
 const InventoryView: React.FC = () => {
-  const [branch, setBranch] = useState<string | null>(null);
+  const [branch, setBranch] = useState<BranchDestinationCode | null>(null);
   const [items, setItems] = useState<InventoryItemView[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // fetch all when no branch selected, otherwise fetch by branch
     setLoading(true);
     setError(null);
     api
       .get('/inventory', {
-        // translate UI branch code to backend ID
-        params: branch ? { branchId: BRANCH_MAP[branch] ?? branch } : {},
+        params: branch ? { branchId: BRANCH_ID_BY_CODE[branch] } : {},
       })
       .then((res) => {
         const data = res.data;
-        const list = Array.isArray(data)
-          ? data
-          : data?.items ?? data?.inventory ?? [];
+        const list = Array.isArray(data) ? data : data?.items ?? data?.inventory ?? [];
         setItems(list as InventoryItemView[]);
       })
       .catch((err) => {
@@ -62,73 +58,85 @@ const InventoryView: React.FC = () => {
 
   return (
     <div className="p-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold mb-4 text-black">Inventory</h2>
-        <div className="text-sm text-gray-500">Branch: {branch ?? 'All'}</div>
+      <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="text-2xl font-bold text-black">Inventory</h2>
+          <p className="text-sm text-gray-500">
+            Items are grouped by family code, with sub codes as price tiers.
+          </p>
+        </div>
+        <Link to="/item-input" className="btn-primary text-center">
+          New Item
+        </Link>
       </div>
 
       <section className="mb-6">
-        <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
-          {branches.map((b) => (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
+          {BRANCH_DESTINATIONS.map((destination) => (
             <button
-              key={b}
+              key={destination.code}
               className={`rounded-2xl px-4 py-2 text-sm font-semibold transition ${
-                branch === b
-                  ? 'bg-magenta-500 text-white'
-                  : 'bg-white border border-gray-200 text-gray-800 hover:bg-magenta-50'
+                branch === destination.code
+                  ? 'bg-black text-white'
+                  : 'border border-gray-200 bg-white text-gray-800 hover:border-black'
               }`}
-              onClick={() => setBranch(branch === b ? null : b)}
+              onClick={() => setBranch(branch === destination.code ? null : destination.code)}
             >
-              Branch {b}
+              {destination.code === 'S' ? 'Storage' : `Branch ${destination.code}`}
             </button>
           ))}
         </div>
+        <p className="mt-2 text-sm text-gray-500">Filter: {branch ? `Branch ${branch}` : 'All branches'}</p>
       </section>
 
-      <div className="mb-4 flex gap-3">
-        <button
-          className="btn-primary"
-          onClick={() => alert('Scan QR (scaffold) - implement scanner later')}
-        >
-          Scan QR to add to sale
-        </button>
-        <div className="text-sm text-gray-500 self-center">(scaffold)</div>
-      </div>
-
       {loading && <div className="text-gray-600">Loading inventory...</div>}
-      {error && <div className="text-red-600 mb-4">Error: {error}</div>}
+      {error && <div className="mb-4 text-red-600">Error: {error}</div>}
 
       <div className="overflow-x-auto">
-        <table className="w-full bg-white border border-gray-200 rounded-lg">
+        <table className="w-full rounded-lg border border-gray-200 bg-white">
           <thead>
             <tr className="bg-gray-50">
               <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">ID</th>
               <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">Branch</th>
-              <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">Code</th>
+              <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">Family</th>
+              <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">Sub code</th>
               <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">Type</th>
               <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">Color</th>
-              <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">Meters</th>
-              <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">Quantity</th>
+              <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">Amount</th>
             </tr>
           </thead>
           <tbody>
-            {items.map((item) => (
-              <tr key={item.id} className="border-t hover:bg-gray-50 transition-colors">
-                <td className="px-4 py-2 text-sm text-gray-800">{item.id}</td>
-                <td className="px-4 py-2 text-sm text-gray-800">{item.branch?.name ?? item.branchId}</td>
-                <td className="px-4 py-2 text-sm text-gray-800">{item.code}</td>
-                <td className="px-4 py-2 text-sm text-gray-800">{item.type}</td>
-                <td className="px-4 py-2 text-sm text-gray-800">{item.color?.name ?? '-'}</td>
-                <td className="px-4 py-2 text-sm text-gray-800">{item.meters ?? '-'}</td>
-                <td className="px-4 py-2 text-sm text-gray-800">{item.quantity ?? 0}</td>
-              </tr>
-            ))}
+            {items.map((item) => {
+              const price = Number(item.subCode ?? item.costPrice ?? 0);
+              const amount =
+                item.type === 'PIECE'
+                  ? `${item.quantity ?? 0} pc × ${item.pieceLength ?? 0} m`
+                  : `${item.meters ?? 0} m`;
+
+              return (
+                <tr key={item.id} className="border-t transition-colors hover:bg-gray-50">
+                  <td className="px-4 py-2 text-sm text-gray-800">{item.id}</td>
+                  <td className="px-4 py-2 text-sm text-gray-800">
+                    {BRANCH_CODE_BY_ID[item.branchId] ?? item.branch?.name ?? item.branchId}
+                  </td>
+                  <td className="px-4 py-2 text-sm text-gray-800">{item.code}</td>
+                  <td className="px-4 py-2 text-sm text-gray-800">${formatSubCode(price)}</td>
+                  <td className="px-4 py-2 text-sm text-gray-800">
+                    {ITEM_TYPE_LABELS[item.type as keyof typeof ITEM_TYPE_LABELS] ?? item.type}
+                  </td>
+                  <td className="px-4 py-2 text-sm text-gray-800">{item.color?.name ?? '-'}</td>
+                  <td className="px-4 py-2 text-sm text-gray-800">{amount}</td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
 
       {items.length === 0 && !loading && (
-        <div className="mt-4 text-center text-gray-500">No inventory items found for this branch.</div>
+        <div className="mt-4 text-center text-gray-500">
+          No inventory items found. Use <Link to="/item-input" className="font-semibold text-magenta-600">New Item</Link> to add stock.
+        </div>
       )}
     </div>
   );

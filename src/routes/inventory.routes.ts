@@ -144,6 +144,7 @@ router.post(
         id,
         branchId,
         code,
+        subCode,
         colorId,
         type,
         meters,
@@ -156,9 +157,16 @@ router.post(
         pictureDataUrl,
       } = req.body;
 
-      if (!id || !branchId || code === undefined || !colorId || !type) {
+      if (!id || !branchId || code === undefined || subCode === undefined || !colorId || !type) {
         return res.status(400).json({
-          error: 'Missing required fields: id, branchId, code, colorId, type',
+          error: 'Missing required fields: id, branchId, code, subCode, colorId, type',
+        });
+      }
+
+      const parsedSubCode = parseFloat(String(subCode));
+      if (!Number.isFinite(parsedSubCode) || parsedSubCode < 0) {
+        return res.status(400).json({
+          error: 'subCode must be a non-negative price value',
         });
       }
 
@@ -173,6 +181,7 @@ router.post(
           id,
           branchId,
           code: parseInt(String(code), 10),
+          subCode: parsedSubCode,
           colorId,
           type,
           meters: meters !== undefined ? parseFloat(String(meters)) : undefined,

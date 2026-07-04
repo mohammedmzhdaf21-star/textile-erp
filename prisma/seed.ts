@@ -12,13 +12,16 @@ async function main() {
   console.log('🏢 Creating branches...');
   await prisma.branch.createMany({
     data: [
-      { id: 'B001', name: 'Main Store', address: '123 Market Street', phone: '+1234567890' },
-      { id: 'B002', name: 'Downtown Branch', address: '456 City Center', phone: '+1234567891' },
-      { id: 'B003', name: 'Mall Outlet', address: '789 Shopping Mall', phone: '+1234567892' },
+      { id: 'B000', name: 'Storage', address: 'Warehouse', phone: '+1234567899' },
+      { id: 'B001', name: 'Branch A', address: '123 Market Street', phone: '+1234567890' },
+      { id: 'B002', name: 'Branch B', address: '456 City Center', phone: '+1234567891' },
+      { id: 'B003', name: 'Branch C', address: '789 Shopping Mall', phone: '+1234567892' },
+      { id: 'B004', name: 'Branch E', address: '901 East Plaza', phone: '+1234567893' },
+      { id: 'B005', name: 'Branch F', address: '1002 Fashion Row', phone: '+1234567894' },
     ],
     skipDuplicates: true,
   });
-  console.log('✅ 3 branches created\n');
+  console.log('✅ Branches created\n');
 
   // ============================================================
   // 2. COLORS
@@ -145,12 +148,12 @@ async function main() {
   if (redColor && blueColor && blackColor) {
     await prisma.inventoryItem.createMany({
       data: [
-        { id: 'B001-001-R', branchId: 'B001', code: 1, colorId: redColor.id,   type: 'ROLL',  meters: 50.00, costPrice: 3.50 },
-        { id: 'B001-001-B', branchId: 'B001', code: 1, colorId: blueColor.id,  type: 'ROLL',  meters: 45.00, costPrice: 3.50 },
-        { id: 'B001-002-K', branchId: 'B001', code: 2, colorId: blackColor.id, type: 'ROLL',  meters: 60.00, costPrice: 4.00 },
-        { id: 'B001-003-R', branchId: 'B001', code: 3, colorId: redColor.id,   type: 'PIECE', pieceLength: 2.50, quantity: 10, costPrice: 8.00 },
-        { id: 'B002-001-R', branchId: 'B002', code: 1, colorId: redColor.id,   type: 'ROLL',  meters: 40.00, costPrice: 3.50 },
-        { id: 'B002-002-B', branchId: 'B002', code: 2, colorId: blueColor.id,  type: 'ROLL',  meters: 55.00, costPrice: 3.50 },
+        { id: 'B001-001-R', branchId: 'B001', code: 1, subCode: 3.50, colorId: redColor.id,   type: 'ROLL',  meters: 50.00, costPrice: 3.50 },
+        { id: 'B001-001-B', branchId: 'B001', code: 1, subCode: 3.50, colorId: blueColor.id,  type: 'ROLL',  meters: 45.00, costPrice: 3.50 },
+        { id: 'B001-002-K', branchId: 'B001', code: 2, subCode: 4.00, colorId: blackColor.id, type: 'ROLL',  meters: 60.00, costPrice: 4.00 },
+        { id: 'B001-003-R', branchId: 'B001', code: 3, subCode: 8.00, colorId: redColor.id,   type: 'PIECE', pieceLength: 2.50, quantity: 10, costPrice: 8.00 },
+        { id: 'B002-001-R', branchId: 'B002', code: 1, subCode: 3.50, colorId: redColor.id,   type: 'ROLL',  meters: 40.00, costPrice: 3.50 },
+        { id: 'B002-002-B', branchId: 'B002', code: 2, subCode: 3.50, colorId: blueColor.id,  type: 'ROLL',  meters: 55.00, costPrice: 3.50 },
       ],
       skipDuplicates: true,
     });
