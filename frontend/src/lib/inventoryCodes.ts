@@ -59,6 +59,136 @@ export const buildInventoryItemId = (input: {
   return `${input.branchId}-${padFamilyCode(input.familyCode)}-${padSubCode(input.subCode)}-${colorCode}${typeCode(input.type)}`;
 };
 
+export type ParsedInventoryItemId = {
+  branchId?: string;
+  familyCode?: number;
+  subCode?: number;
+  colorCode?: string;
+  type?: InventoryItemType;
+  raw: string;
+};
+
+const TYPE_FROM_SUFFIX: Record<string, InventoryItemType> = {
+  R: 'ROLL',
+  P: 'PIECE',
+  M: 'REMANENT',
+};
+
+export const parseInventoryItemId = (raw: string): ParsedInventoryItemId => {
+  const value = raw.trim();
+  const result: ParsedInventoryItemId = { raw: value };
+
+  const modern = value.match(/^([A-Z]\d{3})-(\d{3})-(\d+)-([A-Z]{3})([RPM])$/i);
+  if (modern) {
+    result.branchId = modern[1].toUpperCase();
+    result.familyCode = Number(modern[2]);
+    result.subCode = Number(modern[3]);
+    result.colorCode = modern[4].toUpperCase();
+    result.type = TYPE_FROM_SUFFIX[modern[5].toUpperCase()];
+    return result;
+  }
+
+  const legacy = value.match(/^([A-Z]\d{3})-(\d+)-([A-Z])([RPM])?$/i);
+  if (legacy) {
+    result.branchId = legacy[1].toUpperCase();
+    result.familyCode = Number(legacy[2]);
+    result.colorCode = legacy[3].toUpperCase();
+    if (legacy[4]) {
+      result.type = TYPE_FROM_SUFFIX[legacy[4].toUpperCase()];
+    }
+  }
+
+  return result;
+};
+
+export type InventoryStockItem = {
+  id: string;
+  branchId: string;
+  code: number;
+  subCode?: number | string;
+  costPrice?: number | string;
+  colorId: string;
+  color?: { id: string; name: string };
+  type: InventoryItemType;
+  meters?: number | string;
+  pieceLength?: number | string;
+  quantity?: number;
+};
+
+export type BranchStockRow = {
+  branchId: string;
+  branchCode: string;
+  branchLabel: string;
+  rollMeters: number;
+  pieceCount: number;
+  pieceMeters: number;
+  remnantMeters: number;
+  items: InventoryStockItem[];
+};
+
+export const aggregateFamilyStock = (
+  items: InventoryStockItem[],
+  familyCode: number,
+  colorId: string
+): BranchStockRow[] => {
+  const matching = items.filter((item) => item.code === familyCode && item.colorId === colorId);
+
+  const byBranch = new Map<string, BranchStockRow>();
+
+  for (const destination of BRANCH_DESTINATIONS) {
+    byBranch.set(destination.id, {
+      branchId: destination.id,
+      branchCode: destination.code,
+      branchLabel: destination.label,
+      rollMeters: 0,
+      pieceCount: 0,
+      pieceMeters: 0,
+      remnantMeters: 0,
+      items: [],
+    });
+  }
+
+  matching.forEach((item) => {
+    const row = byBranch.get(item.branchId);
+    if (!row) return;
+    row.items.push(item);
+
+    if (item.type === 'ROLL') {
+      row.rollMeters += Number(item.meters ?? 0);
+    } else if (item.type === 'PIECE') {
+      row.pieceCount += Number(item.quantity ?? 0);
+      row.pieceMeters += Number(item.quantity ?? 0) * Number(item.pieceLength ?? 0);
+    } else if (item.type === 'REMANENT') {
+      row.remnantMeters += Number(item.meters ?? 0);
+    }
+  });
+
+  return Array.from(byBranch.values());
+};
+
+export const stockAmountForType = (row: BranchStockRow, type: InventoryItemType) => {
+  if (type === 'ROLL') {
+    return row.rollMeters > 0 ? `${row.rollMeters.toFixed(2)} m` : '0';
+  }
+  if (type === 'PIECE') {
+    return row.pieceCount > 0 ? `${row.pieceCount} piece(s)` : '0';
+  }
+  return row.remnantMeters > 0 ? `${row.remnantMeters.toFixed(2)} m` : '0';
+};
+
+export const totalStockForType = (rows: BranchStockRow[], type: InventoryItemType) => {
+  if (type === 'ROLL') {
+    const total = rows.reduce((sum, row) => sum + row.rollMeters, 0);
+    return `${total.toFixed(2)} m`;
+  }
+  if (type === 'PIECE') {
+    const total = rows.reduce((sum, row) => sum + row.pieceCount, 0);
+    return `${total} piece(s)`;
+  }
+  const total = rows.reduce((sum, row) => sum + row.remnantMeters, 0);
+  return `${total.toFixed(2)} m`;
+};
+
 export const printInventoryLabel = (input: {
   itemId: string;
   qrDataUrl: string;
