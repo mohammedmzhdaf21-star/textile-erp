@@ -36,6 +36,7 @@ type InventoryItemView = {
 };
 
 const ITEM_TYPES: InventoryItemType[] = ['ROLL', 'PIECE', 'REMANENT'];
+const MAX_PICTURE_BYTES = 2 * 1024 * 1024;
 
 const ItemInputPage: React.FC = () => {
   const [colors, setColors] = useState<Color[]>([]);
@@ -55,6 +56,11 @@ const ItemInputPage: React.FC = () => {
   const [qrDataUrl, setQrDataUrl] = useState<string>('');
   const [createdItemId, setCreatedItemId] = useState<string | null>(null);
   const [createdItemQrDataUrl, setCreatedItemQrDataUrl] = useState<string>('');
+  const [description, setDescription] = useState('');
+  const [pictureName, setPictureName] = useState('');
+  const [pictureDataUrl, setPictureDataUrl] = useState('');
+  const [createdPictureDataUrl, setCreatedPictureDataUrl] = useState('');
+  const [createdDescription, setCreatedDescription] = useState('');
   const familyCodeRequestId = useRef(0);
 
   const branchId = BRANCH_ID_BY_CODE[destination];
@@ -196,6 +202,39 @@ const ItemInputPage: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadingDefaults]);
 
+  const handlePictureChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      setErrorMessage('Please choose an image file for the item picture.');
+      event.target.value = '';
+      return;
+    }
+
+    if (file.size > MAX_PICTURE_BYTES) {
+      setErrorMessage('Item picture must be 2 MB or smaller.');
+      event.target.value = '';
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      setPictureName(file.name);
+      setPictureDataUrl(String(reader.result || ''));
+      setErrorMessage(null);
+    };
+    reader.onerror = () => {
+      setErrorMessage('Failed to read the selected picture.');
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const clearPicture = () => {
+    setPictureName('');
+    setPictureDataUrl('');
+  };
+
   const handleCreateItem = async () => {
     const currentUser = getCurrentUser();
     if (!currentUser) {
@@ -237,6 +276,9 @@ const ItemInputPage: React.FC = () => {
       costPrice: subCode,
       qrCodeValue: id,
       qrCodeDataUrl: createdQrDataUrl,
+      description: description.trim() || undefined,
+      pictureName: pictureName || undefined,
+      pictureDataUrl: pictureDataUrl || undefined,
     };
     if (type === 'ROLL' || type === 'REMANENT') payload.meters = Number(meters);
     if (type === 'PIECE') {
@@ -253,9 +295,13 @@ const ItemInputPage: React.FC = () => {
       setSuccessMessage(`Item ${id} created for ${branchLabel}.`);
       setCreatedItemId(id);
       setCreatedItemQrDataUrl(savedQrDataUrl);
+      setCreatedPictureDataUrl(pictureDataUrl);
+      setCreatedDescription(description.trim());
       setMeters(1);
       setQuantity(1);
       setPieceLength(1);
+      setDescription('');
+      clearPicture();
     } catch (error: any) {
       const status = error?.response?.status;
       const body = error?.response?.data;
@@ -457,6 +503,48 @@ const ItemInputPage: React.FC = () => {
             </div>
           </div>
 
+          <section className="mt-6 rounded-2xl border border-gray-200 bg-gray-50 p-5">
+            <h4 className="text-base font-semibold text-black">Item description</h4>
+            <p className="mt-1 text-sm text-gray-500">
+              Add notes about fabric quality, pattern, supplier, or anything staff should know.
+            </p>
+            <textarea
+              value={description}
+              onChange={(event) => setDescription(event.target.value)}
+              rows={4}
+              className="mt-4 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
+              placeholder="Example: Premium velvet, 150cm wide, suitable for evening wear."
+            />
+          </section>
+
+          <section className="mt-6 rounded-2xl border border-gray-200 bg-gray-50 p-5">
+            <h4 className="text-base font-semibold text-black">Item image</h4>
+            <p className="mt-1 text-sm text-gray-500">
+              Upload a product photo. It is saved with this inventory item.
+            </p>
+            <input
+              type="file"
+              accept="image/*"
+              onChange={handlePictureChange}
+              className="mt-4 w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm"
+            />
+            {pictureDataUrl && (
+              <div className="mt-4 rounded-2xl border border-gray-200 bg-white p-3">
+                <img
+                  src={pictureDataUrl}
+                  alt={pictureName || 'Selected item picture'}
+                  className="h-40 w-full rounded-xl border border-gray-200 object-contain p-2"
+                />
+                <div className="mt-3 flex items-center justify-between gap-3 text-sm">
+                  <span className="truncate text-gray-700">{pictureName}</span>
+                  <button type="button" className="font-semibold text-red-600" onClick={clearPicture}>
+                    Remove
+                  </button>
+                </div>
+              </div>
+            )}
+          </section>
+
           <div className="mt-6 flex flex-col gap-3 sm:flex-row">
             <button
               type="button"
@@ -549,6 +637,18 @@ const ItemInputPage: React.FC = () => {
               <div className="mt-4 rounded-2xl border border-green-200 bg-green-50 p-4 text-sm text-green-700">
                 <p className="font-semibold">Item saved successfully.</p>
                 <p className="mt-1 break-all">ID: {createdItemId}</p>
+                {createdDescription && (
+                  <p className="mt-2 text-green-800">
+                    <span className="font-semibold">Description:</span> {createdDescription}
+                  </p>
+                )}
+                {createdPictureDataUrl && (
+                  <img
+                    src={createdPictureDataUrl}
+                    alt={`Saved picture for ${createdItemId}`}
+                    className="mt-3 h-32 w-full rounded-xl border border-green-200 bg-white object-contain p-2"
+                  />
+                )}
                 <button
                   type="button"
                   className="mt-3 rounded-xl bg-green-700 px-3 py-2 text-xs font-semibold text-white"

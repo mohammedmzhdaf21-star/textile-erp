@@ -144,6 +144,7 @@ model InventoryItem {
   qrCodeDataUrl String? @db.Text
   pictureName String?   @db.VarChar(255)
   pictureDataUrl String? @db.Text
+  description String?   @db.Text
   version     Int       @default(0)
   isArchived  Boolean   @default(false)
   deletedAt   DateTime?

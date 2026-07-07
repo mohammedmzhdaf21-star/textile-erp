@@ -155,6 +155,7 @@ router.post(
         qrCodeDataUrl,
         pictureName,
         pictureDataUrl,
+        description,
       } = req.body;
 
       if (!id || !branchId || code === undefined || subCode === undefined || !colorId || !type) {
@@ -198,6 +199,8 @@ router.post(
             pictureName !== undefined ? String(pictureName) : undefined,
           pictureDataUrl:
             pictureDataUrl !== undefined ? String(pictureDataUrl) : undefined,
+          description:
+            description !== undefined ? String(description).trim() || undefined : undefined,
         },
         req.user?.userId,
         req.user?.email
