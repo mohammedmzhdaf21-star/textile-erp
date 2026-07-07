@@ -3,13 +3,16 @@ import { Link } from 'react-router-dom';
 import api from '../lib/api';
 import {
   aggregateFamilyStock,
+  aggregatePieceBreakdown,
   BRANCH_CODE_BY_ID,
   BRANCH_DESTINATIONS,
   BRANCH_ID_BY_CODE,
+  formatPieceLength,
   formatSubCode,
   ITEM_TYPE_LABELS,
   parseInventoryItemId,
   stockAmountForType,
+  totalPieceCount,
   totalStockForType,
   type BranchDestinationCode,
   type BranchStockRow,
@@ -40,6 +43,7 @@ const InventoryView: React.FC = () => {
   const [searchScannedId, setSearchScannedId] = useState<string | null>(null);
   const [selectedType, setSelectedType] = useState<InventoryItemType>('ROLL');
   const [familyStock, setFamilyStock] = useState<BranchStockRow[]>([]);
+  const [pieceBreakdownTarget, setPieceBreakdownTarget] = useState<'total' | string | null>(null);
 
   useEffect(() => {
     setLoading(true);
@@ -141,6 +145,7 @@ const InventoryView: React.FC = () => {
       setSearchSubCode(subCode);
       setSelectedType(scannedType);
       setFamilyStock(aggregateFamilyStock(stockItems as InventoryStockItem[], familyCode, colorId));
+      setPieceBreakdownTarget(null);
       setScanQuery(query);
     } catch (err: any) {
       const body = err?.response?.data;
@@ -150,6 +155,7 @@ const InventoryView: React.FC = () => {
       setSearchSubCode(null);
       setSearchScannedId(null);
       setFamilyStock([]);
+      setPieceBreakdownTarget(null);
     } finally {
       setSearchLoading(false);
     }
@@ -168,6 +174,33 @@ const InventoryView: React.FC = () => {
     setSearchSubCode(null);
     setSearchScannedId(null);
     setFamilyStock([]);
+    setPieceBreakdownTarget(null);
+  };
+
+  const overallPieceCount = useMemo(() => totalPieceCount(familyStock), [familyStock]);
+
+  const activePieceBreakdown = useMemo(() => {
+    if (!pieceBreakdownTarget) return [];
+    if (pieceBreakdownTarget === 'total') {
+      return aggregatePieceBreakdown(familyStock);
+    }
+    return aggregatePieceBreakdown(familyStock, pieceBreakdownTarget);
+  }, [familyStock, pieceBreakdownTarget]);
+
+  const pieceBreakdownTitle = useMemo(() => {
+    if (pieceBreakdownTarget === 'total') {
+      return `All branches · ${overallPieceCount} piece(s) total`;
+    }
+    if (pieceBreakdownTarget) {
+      const branch = BRANCH_DESTINATIONS.find((entry) => entry.id === pieceBreakdownTarget);
+      const row = familyStock.find((entry) => entry.branchId === pieceBreakdownTarget);
+      return `${branch?.label ?? 'Branch'} · ${row?.pieceCount ?? 0} piece(s)`;
+    }
+    return '';
+  }, [familyStock, overallPieceCount, pieceBreakdownTarget]);
+
+  const togglePieceBreakdown = (target: 'total' | string) => {
+    setPieceBreakdownTarget((current) => (current === target ? null : target));
   };
 
   return (
@@ -237,7 +270,17 @@ const InventoryView: React.FC = () => {
               </div>
               <p className="text-sm text-gray-600">
                 Total {ITEM_TYPE_LABELS[selectedType].toLowerCase()}:{' '}
-                <strong>{totalStockForType(familyStock, selectedType)}</strong>
+                {selectedType === 'PIECE' && overallPieceCount > 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => togglePieceBreakdown('total')}
+                    className="font-bold text-black underline decoration-dotted underline-offset-4 hover:text-magenta-600"
+                  >
+                    {totalStockForType(familyStock, selectedType)}
+                  </button>
+                ) : (
+                  <strong>{totalStockForType(familyStock, selectedType)}</strong>
+                )}
               </p>
             </div>
 
@@ -246,7 +289,10 @@ const InventoryView: React.FC = () => {
                 <button
                   key={type}
                   type="button"
-                  onClick={() => setSelectedType(type)}
+                  onClick={() => {
+                    setSelectedType(type);
+                    setPieceBreakdownTarget(null);
+                  }}
                   className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
                     selectedType === type
                       ? 'bg-black text-white'
@@ -258,11 +304,50 @@ const InventoryView: React.FC = () => {
               ))}
             </div>
 
+            {selectedType === 'PIECE' && pieceBreakdownTarget && activePieceBreakdown.length > 0 && (
+              <div className="mt-4 rounded-2xl border border-black bg-white p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm font-semibold text-black">Piece breakdown by length</p>
+                  <button
+                    type="button"
+                    className="text-xs font-semibold text-gray-500 hover:text-black"
+                    onClick={() => setPieceBreakdownTarget(null)}
+                  >
+                    Close
+                  </button>
+                </div>
+                <p className="mt-1 text-xs text-gray-500">{pieceBreakdownTitle}</p>
+                <div className="mt-4 space-y-2">
+                  {activePieceBreakdown.map((entry) => (
+                    <div
+                      key={entry.pieceLength}
+                      className="flex items-center justify-between rounded-xl border border-gray-200 px-4 py-3 text-sm"
+                    >
+                      <span className="font-medium text-gray-800">
+                        {entry.quantity} piece(s) at {formatPieceLength(entry.pieceLength)} m each
+                      </span>
+                      {pieceBreakdownTarget === 'total' && entry.branches.length > 0 && (
+                        <span className="text-xs text-gray-500">
+                          {entry.branches
+                            .map(
+                              (branch) =>
+                                `${branch.branchCode === 'S' ? 'Storage' : `Branch ${branch.branchCode}`}: ${branch.quantity}`
+                            )
+                            .join(' · ')}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {BRANCH_DESTINATIONS.map((destination) => {
                 const row = familyStock.find((entry) => entry.branchId === destination.id);
                 const amount = row ? stockAmountForType(row, selectedType) : '0';
                 const hasStock = amount !== '0';
+                const isPieceWithStock = selectedType === 'PIECE' && hasStock && row;
 
                 return (
                   <div
@@ -279,7 +364,21 @@ const InventoryView: React.FC = () => {
                         </p>
                       </div>
                       <div className="text-right">
-                        <p className="text-lg font-bold text-black">{amount}</p>
+                        {isPieceWithStock ? (
+                          <button
+                            type="button"
+                            onClick={() => togglePieceBreakdown(destination.id)}
+                            className={`text-lg font-bold underline decoration-dotted underline-offset-4 ${
+                              pieceBreakdownTarget === destination.id
+                                ? 'text-magenta-600'
+                                : 'text-black hover:text-magenta-600'
+                            }`}
+                          >
+                            {amount}
+                          </button>
+                        ) : (
+                          <p className="text-lg font-bold text-black">{amount}</p>
+                        )}
                         <p className="text-xs text-gray-500">{ITEM_TYPE_LABELS[selectedType]}</p>
                       </div>
                     </div>

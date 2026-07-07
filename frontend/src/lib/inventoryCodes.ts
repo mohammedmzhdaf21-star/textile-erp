@@ -211,6 +211,67 @@ export const totalStockForType = (rows: BranchStockRow[], type: InventoryItemTyp
   return `${total.toFixed(2)} m`;
 };
 
+export const totalPieceCount = (rows: BranchStockRow[]) =>
+  rows.reduce((sum, row) => sum + row.pieceCount, 0);
+
+export type PieceLengthBreakdown = {
+  pieceLength: number;
+  quantity: number;
+  branches: Array<{
+    branchId: string;
+    branchLabel: string;
+    branchCode: string;
+    quantity: number;
+  }>;
+};
+
+export const aggregatePieceBreakdown = (
+  rows: BranchStockRow[],
+  branchId?: string
+): PieceLengthBreakdown[] => {
+  const byLength = new Map<number, PieceLengthBreakdown>();
+  const rowsToProcess = branchId ? rows.filter((row) => row.branchId === branchId) : rows;
+
+  for (const row of rowsToProcess) {
+    for (const item of row.items) {
+      if (item.type !== 'PIECE') continue;
+
+      const length = Number(item.pieceLength ?? 0);
+      const qty = Number(item.quantity ?? 0);
+      if (qty <= 0 || length <= 0) continue;
+
+      const existing = byLength.get(length) ?? {
+        pieceLength: length,
+        quantity: 0,
+        branches: [],
+      };
+
+      existing.quantity += qty;
+
+      const branchEntry = existing.branches.find((entry) => entry.branchId === row.branchId);
+      if (branchEntry) {
+        branchEntry.quantity += qty;
+      } else {
+        existing.branches.push({
+          branchId: row.branchId,
+          branchLabel: row.branchLabel,
+          branchCode: row.branchCode,
+          quantity: qty,
+        });
+      }
+
+      byLength.set(length, existing);
+    }
+  }
+
+  return Array.from(byLength.values()).sort((a, b) => a.pieceLength - b.pieceLength);
+};
+
+export const formatPieceLength = (meters: number) => {
+  const rounded = Math.round(meters * 100) / 100;
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(2);
+};
+
 export const printInventoryLabel = (input: {
   itemId: string;
   qrDataUrl: string;
