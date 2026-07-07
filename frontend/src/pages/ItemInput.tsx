@@ -77,8 +77,9 @@ const ItemInputPage: React.FC = () => {
       colorName: selectedColor.name,
       colorId: selectedColor.id,
       type,
+      pieceLength: type === 'PIECE' ? pieceLength : undefined,
     });
-  }, [branchId, colorId, familyCode, selectedColor, subCode, type]);
+  }, [branchId, colorId, familyCode, pieceLength, selectedColor, subCode, type]);
 
   const amountLabel = useMemo(() => {
     if (type === 'PIECE') {
@@ -91,7 +92,7 @@ const ItemInputPage: React.FC = () => {
     const unique = new Map<string, InventoryItemView>();
     familyItems.forEach((item) => {
       const price = Number(item.subCode ?? item.costPrice ?? 0);
-      const key = `${item.code}-${price}-${item.colorId}-${item.type}`;
+      const key = `${item.code}-${price}-${item.colorId}-${item.type}-${item.pieceLength ?? 0}`;
       if (!unique.has(key)) unique.set(key, item);
     });
     return Array.from(unique.values()).sort(
@@ -101,13 +102,18 @@ const ItemInputPage: React.FC = () => {
 
   const duplicateExists = familyItems.some((item) => {
     const itemPrice = Number(item.subCode ?? item.costPrice ?? 0);
-    return (
+    const sameBase =
       item.branchId === branchId &&
       item.code === familyCode &&
       Math.abs(itemPrice - subCode) < 0.001 &&
       item.colorId === colorId &&
-      item.type === type
-    );
+      item.type === type;
+
+    if (type === 'PIECE') {
+      return sameBase && Math.abs(Number(item.pieceLength ?? 0) - pieceLength) < 0.001;
+    }
+
+    return sameBase;
   });
 
   useEffect(() => {
@@ -251,7 +257,9 @@ const ItemInputPage: React.FC = () => {
     }
     if (duplicateExists) {
       return alert(
-        'This family already has an item with the same sub code (price), color, type, and branch.'
+        type === 'PIECE'
+          ? 'This family already has a piece item with the same price, color, branch, and piece length.'
+          : 'This family already has an item with the same sub code (price), color, type, and branch.'
       );
     }
 
@@ -390,11 +398,15 @@ const ItemInputPage: React.FC = () => {
                         setColorId(item.colorId);
                         setType(item.type);
                         setDestination(BRANCH_CODE_BY_ID[item.branchId] ?? 'A');
+                        if (item.type === 'PIECE') {
+                          setPieceLength(Number(item.pieceLength ?? 1));
+                        }
                       }}
                       className="rounded-full border border-gray-300 bg-white px-3 py-1 text-xs font-semibold text-gray-700 hover:border-black"
                     >
                       ${formatSubCode(Number(item.subCode ?? item.costPrice ?? 0))} ·{' '}
-                      {item.color?.name ?? 'Color'} · {ITEM_TYPE_LABELS[item.type]} ·{' '}
+                      {item.color?.name ?? 'Color'} · {ITEM_TYPE_LABELS[item.type]}
+                      {item.type === 'PIECE' ? ` · ${item.pieceLength ?? 0} m/pc` : ''} ·{' '}
                       {BRANCH_CODE_BY_ID[item.branchId] ?? item.branchId}
                     </button>
                   ))}
@@ -567,7 +579,9 @@ const ItemInputPage: React.FC = () => {
 
           {duplicateExists && (
             <p className="mt-4 text-sm font-semibold text-red-600">
-              This family already has this sub code / color / type combination for {branchLabel}.
+              {type === 'PIECE'
+                ? `This family already has a ${pieceLength} m piece with this price and color in ${branchLabel}. Use a different piece length to create a new QR.`
+                : `This family already has this sub code / color / type combination for ${branchLabel}.`}
             </p>
           )}
         </section>

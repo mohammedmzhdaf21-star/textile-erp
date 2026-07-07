@@ -47,6 +47,12 @@ export const padSubCode = (subCode: number) => {
   return rounded.toFixed(2).replace('.', '');
 };
 
+export const padLengthCode = (meters: number) => {
+  const rounded = Math.round(meters * 100) / 100;
+  const encoded = Math.round(rounded * 100);
+  return String(encoded).padStart(4, '0');
+};
+
 export const buildInventoryItemId = (input: {
   branchId: string;
   familyCode: number;
@@ -54,9 +60,15 @@ export const buildInventoryItemId = (input: {
   colorName: string;
   colorId?: string;
   type: InventoryItemType;
+  pieceLength?: number;
 }) => {
   const colorCode = colorCodeFromName(input.colorName, input.colorId);
-  return `${input.branchId}-${padFamilyCode(input.familyCode)}-${padSubCode(input.subCode)}-${colorCode}${typeCode(input.type)}`;
+  const typeLetter = typeCode(input.type);
+  const lengthSuffix =
+    input.type === 'PIECE' && input.pieceLength && input.pieceLength > 0
+      ? padLengthCode(input.pieceLength)
+      : '';
+  return `${input.branchId}-${padFamilyCode(input.familyCode)}-${padSubCode(input.subCode)}-${colorCode}${typeLetter}${lengthSuffix}`;
 };
 
 export type ParsedInventoryItemId = {
@@ -78,13 +90,23 @@ export const parseInventoryItemId = (raw: string): ParsedInventoryItemId => {
   const value = raw.trim();
   const result: ParsedInventoryItemId = { raw: value };
 
-  const modern = value.match(/^([A-Z]\d{3})-(\d{3})-(\d+)-([A-Z]{3})([RPM])$/i);
+  const modern = value.match(/^([A-Z]\d{3})-(\d{3})-(\d+)-([A-Z]{3})([RPM])(\d{4})?$/i);
   if (modern) {
     result.branchId = modern[1].toUpperCase();
     result.familyCode = Number(modern[2]);
     result.subCode = Number(modern[3]);
     result.colorCode = modern[4].toUpperCase();
     result.type = TYPE_FROM_SUFFIX[modern[5].toUpperCase()];
+    return result;
+  }
+
+  const modernShort = value.match(/^([A-Z]\d{3})-(\d{3})-(\d+)-([A-Z]{3})([RPM])$/i);
+  if (modernShort) {
+    result.branchId = modernShort[1].toUpperCase();
+    result.familyCode = Number(modernShort[2]);
+    result.subCode = Number(modernShort[3]);
+    result.colorCode = modernShort[4].toUpperCase();
+    result.type = TYPE_FROM_SUFFIX[modernShort[5].toUpperCase()];
     return result;
   }
 

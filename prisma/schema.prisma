@@ -136,7 +136,7 @@ model InventoryItem {
   color       Color     @relation(fields: [colorId], references: [id], onDelete: Restrict)
   type        ItemType
   meters      Decimal?  @db.Decimal(10, 2)
-  pieceLength Decimal?  @db.Decimal(10, 2)
+  pieceLength Decimal   @default(0) @db.Decimal(10, 2)
   quantity    Int       @default(1)
 
   costPrice   Decimal?  @db.Decimal(12, 2)
@@ -153,7 +153,7 @@ model InventoryItem {
 
   saleItems   SaleItem[]
 
-  @@unique([branchId, code, subCode, colorId, type])
+  @@unique([branchId, code, subCode, colorId, type, pieceLength])
   @@index([branchId, code])
   @@index([branchId, type])
   @@index([colorId])

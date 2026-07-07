@@ -127,6 +127,13 @@ export async function createInventoryItem(
     throw new Error('PIECE items require positive pieceLength value');
   }
 
+  if (input.type === 'REMANENT' && (!input.meters || input.meters <= 0)) {
+    throw new Error('REMANENT items require positive meters value');
+  }
+
+  const pieceLength =
+    input.type === 'PIECE' ? input.pieceLength : 0;
+
   // Verify branch exists
   const branch = await prisma.branch.findUnique({ where: { id: input.branchId } });
   if (!branch) throw new Error('Branch not found');
@@ -146,7 +153,7 @@ export async function createInventoryItem(
         colorId: input.colorId,
         type: input.type,
         meters: input.meters,
-        pieceLength: input.pieceLength,
+        pieceLength,
         quantity: input.quantity ?? 1,
         costPrice: input.costPrice ?? input.subCode,
         qrCodeValue: input.qrCodeValue || input.id,
