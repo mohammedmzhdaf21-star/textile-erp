@@ -3,16 +3,16 @@ import { Link } from 'react-router-dom';
 import api from '../lib/api';
 import {
   aggregateFamilyStock,
-  aggregatePieceBreakdown,
+  aggregateStockBreakdown,
   BRANCH_CODE_BY_ID,
   BRANCH_DESTINATIONS,
   BRANCH_ID_BY_CODE,
-  formatPieceLength,
+  formatStockBreakdownLine,
   formatSubCode,
+  hasStockForType,
   ITEM_TYPE_LABELS,
   parseInventoryItemId,
   stockAmountForType,
-  totalPieceCount,
   totalStockForType,
   type BranchDestinationCode,
   type BranchStockRow,
@@ -43,7 +43,7 @@ const InventoryView: React.FC = () => {
   const [searchScannedId, setSearchScannedId] = useState<string | null>(null);
   const [selectedType, setSelectedType] = useState<InventoryItemType>('ROLL');
   const [familyStock, setFamilyStock] = useState<BranchStockRow[]>([]);
-  const [pieceBreakdownTarget, setPieceBreakdownTarget] = useState<'total' | string | null>(null);
+  const [stockBreakdownTarget, setStockBreakdownTarget] = useState<'total' | string | null>(null);
 
   useEffect(() => {
     setLoading(true);
@@ -145,7 +145,7 @@ const InventoryView: React.FC = () => {
       setSearchSubCode(subCode);
       setSelectedType(scannedType);
       setFamilyStock(aggregateFamilyStock(stockItems as InventoryStockItem[], familyCode, colorId));
-      setPieceBreakdownTarget(null);
+      setStockBreakdownTarget(null);
       setScanQuery(query);
     } catch (err: any) {
       const body = err?.response?.data;
@@ -155,7 +155,7 @@ const InventoryView: React.FC = () => {
       setSearchSubCode(null);
       setSearchScannedId(null);
       setFamilyStock([]);
-      setPieceBreakdownTarget(null);
+      setStockBreakdownTarget(null);
     } finally {
       setSearchLoading(false);
     }
@@ -174,33 +174,43 @@ const InventoryView: React.FC = () => {
     setSearchSubCode(null);
     setSearchScannedId(null);
     setFamilyStock([]);
-    setPieceBreakdownTarget(null);
+                    setStockBreakdownTarget(null);
   };
 
-  const overallPieceCount = useMemo(() => totalPieceCount(familyStock), [familyStock]);
+  const overallHasStock = useMemo(
+    () => hasStockForType(familyStock, selectedType),
+    [familyStock, selectedType]
+  );
 
-  const activePieceBreakdown = useMemo(() => {
-    if (!pieceBreakdownTarget) return [];
-    if (pieceBreakdownTarget === 'total') {
-      return aggregatePieceBreakdown(familyStock);
+  const activeStockBreakdown = useMemo(() => {
+    if (!stockBreakdownTarget) return [];
+    if (stockBreakdownTarget === 'total') {
+      return aggregateStockBreakdown(familyStock, selectedType);
     }
-    return aggregatePieceBreakdown(familyStock, pieceBreakdownTarget);
-  }, [familyStock, pieceBreakdownTarget]);
+    return aggregateStockBreakdown(familyStock, selectedType, stockBreakdownTarget);
+  }, [familyStock, selectedType, stockBreakdownTarget]);
 
-  const pieceBreakdownTitle = useMemo(() => {
-    if (pieceBreakdownTarget === 'total') {
-      return `All branches · ${overallPieceCount} piece(s) total`;
+  const stockBreakdownTitle = useMemo(() => {
+    if (stockBreakdownTarget === 'total') {
+      return `All branches · ${totalStockForType(familyStock, selectedType)}`;
     }
-    if (pieceBreakdownTarget) {
-      const branch = BRANCH_DESTINATIONS.find((entry) => entry.id === pieceBreakdownTarget);
-      const row = familyStock.find((entry) => entry.branchId === pieceBreakdownTarget);
-      return `${branch?.label ?? 'Branch'} · ${row?.pieceCount ?? 0} piece(s)`;
+    if (stockBreakdownTarget) {
+      const branch = BRANCH_DESTINATIONS.find((entry) => entry.id === stockBreakdownTarget);
+      const row = familyStock.find((entry) => entry.branchId === stockBreakdownTarget);
+      const amount = row ? stockAmountForType(row, selectedType) : '0';
+      return `${branch?.label ?? 'Branch'} · ${amount}`;
     }
     return '';
-  }, [familyStock, overallPieceCount, pieceBreakdownTarget]);
+  }, [familyStock, selectedType, stockBreakdownTarget]);
 
-  const togglePieceBreakdown = (target: 'total' | string) => {
-    setPieceBreakdownTarget((current) => (current === target ? null : target));
+  const stockBreakdownHeading = useMemo(() => {
+    if (selectedType === 'PIECE') return 'Piece breakdown by length';
+    if (selectedType === 'ROLL') return 'Roll breakdown by size';
+    return 'Remnant breakdown by size';
+  }, [selectedType]);
+
+  const toggleStockBreakdown = (target: 'total' | string) => {
+    setStockBreakdownTarget((current) => (current === target ? null : target));
   };
 
   return (
@@ -270,10 +280,10 @@ const InventoryView: React.FC = () => {
               </div>
               <p className="text-sm text-gray-600">
                 Total {ITEM_TYPE_LABELS[selectedType].toLowerCase()}:{' '}
-                {selectedType === 'PIECE' && overallPieceCount > 0 ? (
+                {overallHasStock ? (
                   <button
                     type="button"
-                    onClick={() => togglePieceBreakdown('total')}
+                    onClick={() => toggleStockBreakdown('total')}
                     className="font-bold text-black underline decoration-dotted underline-offset-4 hover:text-magenta-600"
                   >
                     {totalStockForType(familyStock, selectedType)}
@@ -291,7 +301,7 @@ const InventoryView: React.FC = () => {
                   type="button"
                   onClick={() => {
                     setSelectedType(type);
-                    setPieceBreakdownTarget(null);
+                    setStockBreakdownTarget(null);
                   }}
                   className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
                     selectedType === type
@@ -304,34 +314,34 @@ const InventoryView: React.FC = () => {
               ))}
             </div>
 
-            {selectedType === 'PIECE' && pieceBreakdownTarget && activePieceBreakdown.length > 0 && (
+            {stockBreakdownTarget && activeStockBreakdown.length > 0 && (
               <div className="mt-4 rounded-2xl border border-black bg-white p-4">
                 <div className="flex items-center justify-between gap-3">
-                  <p className="text-sm font-semibold text-black">Piece breakdown by length</p>
+                  <p className="text-sm font-semibold text-black">{stockBreakdownHeading}</p>
                   <button
                     type="button"
                     className="text-xs font-semibold text-gray-500 hover:text-black"
-                    onClick={() => setPieceBreakdownTarget(null)}
+                    onClick={() => setStockBreakdownTarget(null)}
                   >
                     Close
                   </button>
                 </div>
-                <p className="mt-1 text-xs text-gray-500">{pieceBreakdownTitle}</p>
+                <p className="mt-1 text-xs text-gray-500">{stockBreakdownTitle}</p>
                 <div className="mt-4 space-y-2">
-                  {activePieceBreakdown.map((entry) => (
+                  {activeStockBreakdown.map((entry) => (
                     <div
-                      key={entry.pieceLength}
-                      className="flex items-center justify-between rounded-xl border border-gray-200 px-4 py-3 text-sm"
+                      key={entry.sizeMeters}
+                      className="flex flex-col gap-1 rounded-xl border border-gray-200 px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between"
                     >
                       <span className="font-medium text-gray-800">
-                        {entry.quantity} piece(s) at {formatPieceLength(entry.pieceLength)} m each
+                        {formatStockBreakdownLine(selectedType, entry)}
                       </span>
-                      {pieceBreakdownTarget === 'total' && entry.branches.length > 0 && (
+                      {stockBreakdownTarget === 'total' && entry.branches.length > 0 && (
                         <span className="text-xs text-gray-500">
                           {entry.branches
                             .map(
                               (branch) =>
-                                `${branch.branchCode === 'S' ? 'Storage' : `Branch ${branch.branchCode}`}: ${branch.quantity}`
+                                `${branch.branchCode === 'S' ? 'Storage' : `Branch ${branch.branchCode}`}: ${branch.count}`
                             )
                             .join(' · ')}
                         </span>
@@ -347,7 +357,7 @@ const InventoryView: React.FC = () => {
                 const row = familyStock.find((entry) => entry.branchId === destination.id);
                 const amount = row ? stockAmountForType(row, selectedType) : '0';
                 const hasStock = amount !== '0';
-                const isPieceWithStock = selectedType === 'PIECE' && hasStock && row;
+                const isClickableStock = hasStock && row;
 
                 return (
                   <div
@@ -364,12 +374,12 @@ const InventoryView: React.FC = () => {
                         </p>
                       </div>
                       <div className="text-right">
-                        {isPieceWithStock ? (
+                        {isClickableStock ? (
                           <button
                             type="button"
-                            onClick={() => togglePieceBreakdown(destination.id)}
+                            onClick={() => toggleStockBreakdown(destination.id)}
                             className={`text-lg font-bold underline decoration-dotted underline-offset-4 ${
-                              pieceBreakdownTarget === destination.id
+                              stockBreakdownTarget === destination.id
                                 ? 'text-magenta-600'
                                 : 'text-black hover:text-magenta-600'
                             }`}

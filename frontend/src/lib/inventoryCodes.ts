@@ -214,63 +214,94 @@ export const totalStockForType = (rows: BranchStockRow[], type: InventoryItemTyp
 export const totalPieceCount = (rows: BranchStockRow[]) =>
   rows.reduce((sum, row) => sum + row.pieceCount, 0);
 
-export type PieceLengthBreakdown = {
-  pieceLength: number;
-  quantity: number;
+export const hasStockForType = (rows: BranchStockRow[], type: InventoryItemType) => {
+  if (type === 'ROLL') {
+    return rows.some((row) => row.rollMeters > 0);
+  }
+  if (type === 'PIECE') {
+    return totalPieceCount(rows) > 0;
+  }
+  return rows.some((row) => row.remnantMeters > 0);
+};
+
+export type StockSizeBreakdown = {
+  sizeMeters: number;
+  count: number;
   branches: Array<{
     branchId: string;
     branchLabel: string;
     branchCode: string;
-    quantity: number;
+    count: number;
   }>;
 };
 
-export const aggregatePieceBreakdown = (
+const breakdownUnitLabel = (type: InventoryItemType, count: number) => {
+  if (type === 'PIECE') return count === 1 ? 'piece' : 'pieces';
+  if (type === 'ROLL') return count === 1 ? 'roll' : 'rolls';
+  return count === 1 ? 'remnant' : 'remnants';
+};
+
+export const formatMetersAmount = (meters: number) => {
+  const rounded = Math.round(meters * 100) / 100;
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(2);
+};
+
+export const formatStockBreakdownLine = (type: InventoryItemType, entry: StockSizeBreakdown) => {
+  const unit = breakdownUnitLabel(type, entry.count);
+  return `${entry.count} ${unit} at ${formatMetersAmount(entry.sizeMeters)} m each`;
+};
+
+export const aggregateStockBreakdown = (
   rows: BranchStockRow[],
+  type: InventoryItemType,
   branchId?: string
-): PieceLengthBreakdown[] => {
-  const byLength = new Map<number, PieceLengthBreakdown>();
+): StockSizeBreakdown[] => {
+  const bySize = new Map<number, StockSizeBreakdown>();
   const rowsToProcess = branchId ? rows.filter((row) => row.branchId === branchId) : rows;
 
   for (const row of rowsToProcess) {
     for (const item of row.items) {
-      if (item.type !== 'PIECE') continue;
+      if (item.type !== type) continue;
 
-      const length = Number(item.pieceLength ?? 0);
-      const qty = Number(item.quantity ?? 0);
-      if (qty <= 0 || length <= 0) continue;
+      const sizeMeters =
+        type === 'PIECE' ? Number(item.pieceLength ?? 0) : Number(item.meters ?? 0);
+      const count = type === 'PIECE' ? Number(item.quantity ?? 0) : 1;
 
-      const existing = byLength.get(length) ?? {
-        pieceLength: length,
-        quantity: 0,
+      if (sizeMeters <= 0 || count <= 0) continue;
+
+      const existing = bySize.get(sizeMeters) ?? {
+        sizeMeters,
+        count: 0,
         branches: [],
       };
 
-      existing.quantity += qty;
+      existing.count += count;
 
       const branchEntry = existing.branches.find((entry) => entry.branchId === row.branchId);
       if (branchEntry) {
-        branchEntry.quantity += qty;
+        branchEntry.count += count;
       } else {
         existing.branches.push({
           branchId: row.branchId,
           branchLabel: row.branchLabel,
           branchCode: row.branchCode,
-          quantity: qty,
+          count,
         });
       }
 
-      byLength.set(length, existing);
+      bySize.set(sizeMeters, existing);
     }
   }
 
-  return Array.from(byLength.values()).sort((a, b) => a.pieceLength - b.pieceLength);
+  return Array.from(bySize.values()).sort((a, b) => a.sizeMeters - b.sizeMeters);
 };
 
-export const formatPieceLength = (meters: number) => {
-  const rounded = Math.round(meters * 100) / 100;
-  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(2);
-};
+/** @deprecated Use aggregateStockBreakdown with type PIECE */
+export const aggregatePieceBreakdown = (rows: BranchStockRow[], branchId?: string) =>
+  aggregateStockBreakdown(rows, 'PIECE', branchId);
+
+/** @deprecated Use formatMetersAmount */
+export const formatPieceLength = formatMetersAmount;
 
 export const printInventoryLabel = (input: {
   itemId: string;
