@@ -14,6 +14,16 @@ import {
   type BranchDestinationCode,
   type InventoryItemType,
 } from '../lib/inventoryCodes';
+import {
+  buildPackageKey,
+  emptyPackageComponent,
+  formatPackageSummary,
+  normalizePackageComponents,
+  parsePackageComponents,
+  totalPiecesPerPackage,
+  validatePackageComponents,
+  type PackageComponent,
+} from '../lib/piecePackages';
 
 type Color = {
   id: string;
@@ -33,6 +43,9 @@ type InventoryItemView = {
   quantity?: number;
   costPrice?: number | string;
   color?: Color;
+  isPiecePackage?: boolean;
+  packageKey?: string;
+  packageComponents?: PackageComponent[];
 };
 
 const ITEM_TYPES: InventoryItemType[] = ['ROLL', 'PIECE', 'REMANENT'];
@@ -61,6 +74,11 @@ const ItemInputPage: React.FC = () => {
   const [pictureDataUrl, setPictureDataUrl] = useState('');
   const [createdPictureDataUrl, setCreatedPictureDataUrl] = useState('');
   const [createdDescription, setCreatedDescription] = useState('');
+  const [isPiecePackage, setIsPiecePackage] = useState(false);
+  const [packageComponents, setPackageComponents] = useState<PackageComponent[]>([
+    emptyPackageComponent(),
+    emptyPackageComponent(),
+  ]);
   const familyCodeRequestId = useRef(0);
 
   const branchId = BRANCH_ID_BY_CODE[destination];
@@ -68,8 +86,19 @@ const ItemInputPage: React.FC = () => {
   const branchLabel =
     BRANCH_DESTINATIONS.find((branch) => branch.code === destination)?.label ?? destination;
 
+  const normalizedPackageComponents = useMemo(
+    () => normalizePackageComponents(packageComponents),
+    [packageComponents]
+  );
+
+  const packageKey = useMemo(
+    () => (isPiecePackage ? buildPackageKey(normalizedPackageComponents) : ''),
+    [isPiecePackage, normalizedPackageComponents]
+  );
+
   const generatedItemId = useMemo(() => {
     if (!branchId || !familyCode || !selectedColor || subCode < 0) return '';
+    if (isPiecePackage && normalizedPackageComponents.length === 0) return '';
     return buildInventoryItemId({
       branchId,
       familyCode,
@@ -77,22 +106,38 @@ const ItemInputPage: React.FC = () => {
       colorName: selectedColor.name,
       colorId: selectedColor.id,
       type,
-      pieceLength: type === 'PIECE' ? pieceLength : undefined,
+      pieceLength: type === 'PIECE' && !isPiecePackage ? pieceLength : undefined,
+      isPiecePackage,
+      packageComponents: normalizedPackageComponents,
     });
-  }, [branchId, colorId, familyCode, pieceLength, selectedColor, subCode, type]);
+  }, [
+    branchId,
+    colorId,
+    familyCode,
+    isPiecePackage,
+    normalizedPackageComponents,
+    pieceLength,
+    selectedColor,
+    subCode,
+    type,
+  ]);
 
   const amountLabel = useMemo(() => {
+    if (type === 'PIECE' && isPiecePackage) {
+      const perPackage = totalPiecesPerPackage(normalizedPackageComponents);
+      return `${quantity} package(s) · ${perPackage} piece(s) each (${formatPackageSummary(normalizedPackageComponents)})`;
+    }
     if (type === 'PIECE') {
       return `${quantity} piece(s) × ${pieceLength} m`;
     }
     return `${meters} m`;
-  }, [meters, pieceLength, quantity, type]);
+  }, [isPiecePackage, meters, normalizedPackageComponents, pieceLength, quantity, type]);
 
   const familySubCodes = useMemo(() => {
     const unique = new Map<string, InventoryItemView>();
     familyItems.forEach((item) => {
       const price = Number(item.subCode ?? item.costPrice ?? 0);
-      const key = `${item.code}-${price}-${item.colorId}-${item.type}-${item.pieceLength ?? 0}`;
+      const key = `${item.code}-${price}-${item.colorId}-${item.type}-${item.pieceLength ?? 0}-${item.packageKey ?? ''}`;
       if (!unique.has(key)) unique.set(key, item);
     });
     return Array.from(unique.values()).sort(
@@ -109,8 +154,20 @@ const ItemInputPage: React.FC = () => {
       item.colorId === colorId &&
       item.type === type;
 
+    if (type === 'PIECE' && isPiecePackage) {
+      return (
+        sameBase &&
+        Boolean(item.isPiecePackage) &&
+        (item.packageKey ?? '') === packageKey
+      );
+    }
+
     if (type === 'PIECE') {
-      return sameBase && Math.abs(Number(item.pieceLength ?? 0) - pieceLength) < 0.001;
+      return (
+        sameBase &&
+        !item.isPiecePackage &&
+        Math.abs(Number(item.pieceLength ?? 0) - pieceLength) < 0.001
+      );
     }
 
     return sameBase;
@@ -241,6 +298,26 @@ const ItemInputPage: React.FC = () => {
     setPictureDataUrl('');
   };
 
+  const updatePackageComponent = (
+    index: number,
+    field: keyof PackageComponent,
+    value: string | number
+  ) => {
+    setPackageComponents((prev) =>
+      prev.map((row, i) => (i === index ? { ...row, [field]: value } : row))
+    );
+  };
+
+  const addPackageComponent = () => {
+    setPackageComponents((prev) => [...prev, emptyPackageComponent()]);
+  };
+
+  const removePackageComponent = (index: number) => {
+    setPackageComponents((prev) =>
+      prev.length <= 2 ? prev : prev.filter((_, i) => i !== index)
+    );
+  };
+
   const handleCreateItem = async () => {
     const currentUser = getCurrentUser();
     if (!currentUser) {
@@ -252,14 +329,20 @@ const ItemInputPage: React.FC = () => {
     if ((type === 'ROLL' || type === 'REMANENT') && meters <= 0) {
       return alert('Enter a positive meters value.');
     }
-    if (type === 'PIECE' && (quantity <= 0 || pieceLength <= 0)) {
+    if (type === 'PIECE' && isPiecePackage) {
+      const packageError = validatePackageComponents(packageComponents);
+      if (packageError) return alert(packageError);
+      if (quantity <= 0) return alert('Enter a valid number of packages.');
+    } else if (type === 'PIECE' && (quantity <= 0 || pieceLength <= 0)) {
       return alert('Enter valid quantity and piece length for pieces.');
     }
     if (duplicateExists) {
       return alert(
-        type === 'PIECE'
-          ? 'This family already has a piece item with the same price, color, branch, and piece length.'
-          : 'This family already has an item with the same sub code (price), color, type, and branch.'
+        type === 'PIECE' && isPiecePackage
+          ? 'This family already has a piece package with the same pieces, price, color, and branch.'
+          : type === 'PIECE'
+            ? 'This family already has a piece item with the same price, color, branch, and piece length.'
+            : 'This family already has an item with the same sub code (price), color, type, and branch.'
       );
     }
 
@@ -289,7 +372,12 @@ const ItemInputPage: React.FC = () => {
       pictureDataUrl: pictureDataUrl || undefined,
     };
     if (type === 'ROLL' || type === 'REMANENT') payload.meters = Number(meters);
-    if (type === 'PIECE') {
+    if (type === 'PIECE' && isPiecePackage) {
+      payload.isPiecePackage = true;
+      payload.packageKey = packageKey;
+      payload.packageComponents = normalizedPackageComponents;
+      payload.quantity = Number(quantity);
+    } else if (type === 'PIECE') {
       payload.pieceLength = Number(pieceLength);
       payload.quantity = Number(quantity);
     }
@@ -309,6 +397,8 @@ const ItemInputPage: React.FC = () => {
       setQuantity(1);
       setPieceLength(1);
       setDescription('');
+      setIsPiecePackage(false);
+      setPackageComponents([emptyPackageComponent(), emptyPackageComponent()]);
       clearPicture();
     } catch (error: any) {
       const status = error?.response?.status;
@@ -399,15 +489,32 @@ const ItemInputPage: React.FC = () => {
                         setType(item.type);
                         setDestination(BRANCH_CODE_BY_ID[item.branchId] ?? 'A');
                         if (item.type === 'PIECE') {
-                          setPieceLength(Number(item.pieceLength ?? 1));
+                          if (item.isPiecePackage) {
+                            setIsPiecePackage(true);
+                            const components = parsePackageComponents(item.packageComponents);
+                            setPackageComponents(
+                              components.length >= 2
+                                ? components
+                                : [emptyPackageComponent(), emptyPackageComponent()]
+                            );
+                          } else {
+                            setIsPiecePackage(false);
+                            setPieceLength(Number(item.pieceLength ?? 1));
+                          }
+                        } else {
+                          setIsPiecePackage(false);
                         }
                       }}
                       className="rounded-full border border-gray-300 bg-white px-3 py-1 text-xs font-semibold text-gray-700 hover:border-black"
                     >
                       ${formatSubCode(Number(item.subCode ?? item.costPrice ?? 0))} ·{' '}
                       {item.color?.name ?? 'Color'} · {ITEM_TYPE_LABELS[item.type]}
-                      {item.type === 'PIECE' ? ` · ${item.pieceLength ?? 0} m/pc` : ''} ·{' '}
-                      {BRANCH_CODE_BY_ID[item.branchId] ?? item.branchId}
+                      {item.isPiecePackage
+                        ? ` · pkg: ${formatPackageSummary(parsePackageComponents(item.packageComponents))}`
+                        : item.type === 'PIECE'
+                          ? ` · ${item.pieceLength ?? 0} m/pc`
+                          : ''}{' '}
+                      · {BRANCH_CODE_BY_ID[item.branchId] ?? item.branchId}
                     </button>
                   ))}
                 </div>
@@ -448,7 +555,11 @@ const ItemInputPage: React.FC = () => {
               <label className="block text-sm font-medium text-gray-700">Type</label>
               <select
                 value={type}
-                onChange={(e) => setType(e.target.value as InventoryItemType)}
+                onChange={(e) => {
+                  const nextType = e.target.value as InventoryItemType;
+                  setType(nextType);
+                  if (nextType !== 'PIECE') setIsPiecePackage(false);
+                }}
                 className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
               >
                 {ITEM_TYPES.map((itemType) => (
@@ -461,7 +572,16 @@ const ItemInputPage: React.FC = () => {
 
             <div>
               <label className="block text-sm font-medium text-gray-700">How many</label>
-              {type === 'PIECE' ? (
+              {type === 'PIECE' && isPiecePackage ? (
+                <input
+                  type="number"
+                  min="1"
+                  value={quantity}
+                  onChange={(e) => setQuantity(Number(e.target.value))}
+                  className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
+                  placeholder="Number of packages"
+                />
+              ) : type === 'PIECE' ? (
                 <div className="mt-1 grid grid-cols-2 gap-2">
                   <input
                     type="number"
@@ -494,6 +614,80 @@ const ItemInputPage: React.FC = () => {
               )}
             </div>
           </div>
+
+          {type === 'PIECE' && (
+            <section className="mt-6 rounded-2xl border border-gray-200 bg-gray-50 p-5">
+              <label className="flex items-start gap-3">
+                <input
+                  type="checkbox"
+                  checked={isPiecePackage}
+                  onChange={(event) => setIsPiecePackage(event.target.checked)}
+                  className="mt-1 h-4 w-4 rounded border-gray-300"
+                />
+                <span>
+                  <span className="block text-sm font-semibold text-black">Piece package</span>
+                  <span className="mt-1 block text-sm text-gray-600">
+                    A family set sold as one package (e.g. dress, coat, underwear, hijab). Customers
+                    may buy only some pieces later; leftovers stay as package pieces, not fabric
+                    remnants.
+                  </span>
+                </span>
+              </label>
+
+              {isPiecePackage && (
+                <div className="mt-5 space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-sm font-semibold text-gray-800">Pieces in each package</p>
+                    <button
+                      type="button"
+                      onClick={addPackageComponent}
+                      className="rounded-lg border border-gray-300 bg-white px-3 py-1 text-xs font-semibold text-gray-700 hover:border-black"
+                    >
+                      Add piece
+                    </button>
+                  </div>
+
+                  {packageComponents.map((component, index) => (
+                    <div key={index} className="grid grid-cols-[1fr_120px_auto] gap-2">
+                      <input
+                        type="text"
+                        value={component.name}
+                        onChange={(event) =>
+                          updatePackageComponent(index, 'name', event.target.value)
+                        }
+                        className="rounded-xl border border-gray-300 px-3 py-2 text-sm"
+                        placeholder="Piece name (e.g. Dress)"
+                      />
+                      <input
+                        type="number"
+                        min="1"
+                        value={component.countPerPackage}
+                        onChange={(event) =>
+                          updatePackageComponent(index, 'countPerPackage', Number(event.target.value))
+                        }
+                        className="rounded-xl border border-gray-300 px-3 py-2 text-sm"
+                        placeholder="Count"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removePackageComponent(index)}
+                        disabled={packageComponents.length <= 2}
+                        className="rounded-xl border border-gray-300 px-3 py-2 text-xs font-semibold text-red-600 disabled:cursor-not-allowed disabled:text-gray-400"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ))}
+
+                  <p className="text-sm text-gray-600">
+                    Each package contains{' '}
+                    <strong>{totalPiecesPerPackage(normalizedPackageComponents)} piece(s)</strong>:{' '}
+                    {formatPackageSummary(normalizedPackageComponents)}
+                  </p>
+                </div>
+              )}
+            </section>
+          )}
 
           <div className="mt-6">
             <label className="block text-sm font-medium text-gray-700">Send to branch</label>
@@ -579,9 +773,11 @@ const ItemInputPage: React.FC = () => {
 
           {duplicateExists && (
             <p className="mt-4 text-sm font-semibold text-red-600">
-              {type === 'PIECE'
-                ? `This family already has a ${pieceLength} m piece with this price and color in ${branchLabel}. Use a different piece length to create a new QR.`
-                : `This family already has this sub code / color / type combination for ${branchLabel}.`}
+              {type === 'PIECE' && isPiecePackage
+                ? `This family already has this piece package (${formatPackageSummary(normalizedPackageComponents)}) with this price and color in ${branchLabel}.`
+                : type === 'PIECE'
+                  ? `This family already has a ${pieceLength} m piece with this price and color in ${branchLabel}. Use a different piece length to create a new QR.`
+                  : `This family already has this sub code / color / type combination for ${branchLabel}.`}
             </p>
           )}
         </section>
@@ -616,6 +812,14 @@ const ItemInputPage: React.FC = () => {
                       <span>Amount</span>
                       <strong>{amountLabel}</strong>
                     </div>
+                    {type === 'PIECE' && isPiecePackage && (
+                      <div className="flex justify-between">
+                        <span>Package</span>
+                        <strong className="text-right">
+                          {formatPackageSummary(normalizedPackageComponents)}
+                        </strong>
+                      </div>
+                    )}
                     <div className="flex justify-between">
                       <span>Color</span>
                       <strong>{selectedColor?.name ?? '—'}</strong>

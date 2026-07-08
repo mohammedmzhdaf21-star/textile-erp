@@ -32,6 +32,9 @@ export interface CreateInventoryInput {
   pictureName?: string;
   pictureDataUrl?: string;
   description?: string;
+  isPiecePackage?: boolean;
+  packageKey?: string;
+  packageComponents?: Array<{ name: string; countPerPackage: number }>;
 }
 
 export interface UpdateInventoryInput {
@@ -123,7 +126,11 @@ export async function createInventoryItem(
   if (input.type === 'ROLL' && (!input.meters || input.meters <= 0)) {
     throw new Error('ROLL items require positive meters value');
   }
-  if (input.type === 'PIECE' && (!input.pieceLength || input.pieceLength <= 0)) {
+  if (input.type === 'PIECE' && input.isPiecePackage) {
+    if (!input.packageComponents?.length) {
+      throw new Error('Piece packages require at least one package component');
+    }
+  } else if (input.type === 'PIECE' && (!input.pieceLength || input.pieceLength <= 0)) {
     throw new Error('PIECE items require positive pieceLength value');
   }
 
@@ -132,7 +139,9 @@ export async function createInventoryItem(
   }
 
   const pieceLength =
-    input.type === 'PIECE' ? input.pieceLength : 0;
+    input.type === 'PIECE' && !input.isPiecePackage ? input.pieceLength : 0;
+
+  const packageKey = input.isPiecePackage ? input.packageKey ?? '' : '';
 
   // Verify branch exists
   const branch = await prisma.branch.findUnique({ where: { id: input.branchId } });
@@ -161,6 +170,11 @@ export async function createInventoryItem(
         pictureName: input.pictureName,
         pictureDataUrl: input.pictureDataUrl,
         description: input.description,
+        isPiecePackage: input.isPiecePackage ?? false,
+        packageKey,
+        packageComponents: input.packageComponents
+          ? (input.packageComponents as Prisma.InputJsonValue)
+          : undefined,
       },
       include: { color: true, branch: true },
     });

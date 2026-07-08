@@ -156,6 +156,9 @@ router.post(
         pictureName,
         pictureDataUrl,
         description,
+        isPiecePackage,
+        packageKey,
+        packageComponents,
       } = req.body;
 
       if (!id || !branchId || code === undefined || subCode === undefined || !colorId || !type) {
@@ -201,6 +204,9 @@ router.post(
             pictureDataUrl !== undefined ? String(pictureDataUrl) : undefined,
           description:
             description !== undefined ? String(description).trim() || undefined : undefined,
+          isPiecePackage: Boolean(isPiecePackage),
+          packageKey: packageKey !== undefined ? String(packageKey) : '',
+          packageComponents: Array.isArray(packageComponents) ? packageComponents : undefined,
         },
         req.user?.userId,
         req.user?.email

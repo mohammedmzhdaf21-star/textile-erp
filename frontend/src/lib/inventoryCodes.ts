@@ -1,3 +1,5 @@
+import { buildPackageIdSuffix, type PackageComponent } from './piecePackages';
+
 export type InventoryItemType = 'ROLL' | 'PIECE' | 'REMANENT';
 
 export const BRANCH_DESTINATIONS = [
@@ -61,9 +63,17 @@ export const buildInventoryItemId = (input: {
   colorId?: string;
   type: InventoryItemType;
   pieceLength?: number;
+  packageComponents?: PackageComponent[];
+  isPiecePackage?: boolean;
 }) => {
   const colorCode = colorCodeFromName(input.colorName, input.colorId);
   const typeLetter = typeCode(input.type);
+
+  if (input.isPiecePackage && input.packageComponents?.length) {
+    const packageSuffix = buildPackageIdSuffix(input.packageComponents);
+    return `${input.branchId}-${padFamilyCode(input.familyCode)}-${padSubCode(input.subCode)}-${colorCode}${typeLetter}-${packageSuffix}`;
+  }
+
   const lengthSuffix =
     input.type === 'PIECE' && input.pieceLength && input.pieceLength > 0
       ? padLengthCode(input.pieceLength)

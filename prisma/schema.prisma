@@ -145,6 +145,9 @@ model InventoryItem {
   pictureName String?   @db.VarChar(255)
   pictureDataUrl String? @db.Text
   description String?   @db.Text
+  isPiecePackage Boolean @default(false)
+  packageKey     String  @default("") @db.VarChar(255)
+  packageComponents Json?
   version     Int       @default(0)
   isArchived  Boolean   @default(false)
   deletedAt   DateTime?
@@ -153,7 +156,7 @@ model InventoryItem {
 
   saleItems   SaleItem[]
 
-  @@unique([branchId, code, subCode, colorId, type, pieceLength])
+  @@unique([branchId, code, subCode, colorId, type, pieceLength, packageKey])
   @@index([branchId, code])
   @@index([branchId, type])
   @@index([colorId])
