@@ -145,6 +145,9 @@ export type InventoryStockItem = {
   meters?: number | string;
   pieceLength?: number | string;
   quantity?: number;
+  isPiecePackage?: boolean;
+  packageComponents?: unknown;
+  packageComponentStock?: unknown;
 };
 
 export type BranchStockRow = {

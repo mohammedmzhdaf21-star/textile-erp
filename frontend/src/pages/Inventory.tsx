@@ -19,11 +19,21 @@ import {
   type InventoryItemType,
   type InventoryStockItem,
 } from '../lib/inventoryCodes';
+import {
+  formatInventoryPackageAmount,
+  formatPackageStockSummary,
+  formatPackageSummary,
+  parsePackageComponents,
+  resolvePackageComponentStock,
+} from '../lib/piecePackages';
 
 type Color = { id: string; name: string; hexCode?: string };
 type InventoryItemView = InventoryStockItem & {
   costPrice?: number | string;
   branch?: { id: string; name: string };
+  isPiecePackage?: boolean;
+  packageComponents?: unknown;
+  packageComponentStock?: unknown;
 };
 
 const ITEM_TYPES: InventoryItemType[] = ['ROLL', 'PIECE', 'REMANENT'];
@@ -204,10 +214,32 @@ const InventoryView: React.FC = () => {
   }, [familyStock, selectedType, stockBreakdownTarget]);
 
   const stockBreakdownHeading = useMemo(() => {
-    if (selectedType === 'PIECE') return 'Piece breakdown by length';
+    if (selectedType === 'PIECE') return 'Piece breakdown by length or package';
     if (selectedType === 'ROLL') return 'Roll breakdown by size';
     return 'Remnant breakdown by size';
   }, [selectedType]);
+
+  const packageStockRows = useMemo(() => {
+    if (selectedType !== 'PIECE' || searchFamilyCode === null || !searchColor) return [];
+    return familyStock.flatMap((row) =>
+      row.items
+        .filter((item) => item.isPiecePackage)
+        .map((item) => ({
+          branchId: row.branchId,
+          branchLabel: row.branchLabel,
+          branchCode: row.branchCode,
+          item,
+          packageSummary: formatPackageSummary(parsePackageComponents(item.packageComponents)),
+          stockSummary: formatPackageStockSummary(
+            resolvePackageComponentStock({
+              packageComponents: item.packageComponents,
+              packageComponentStock: item.packageComponentStock,
+              quantity: Number(item.quantity ?? 0),
+            })
+          ),
+        }))
+    );
+  }, [familyStock, searchColor, searchFamilyCode, selectedType]);
 
   const toggleStockBreakdown = (target: 'total' | string) => {
     setStockBreakdownTarget((current) => (current === target ? null : target));
@@ -313,6 +345,31 @@ const InventoryView: React.FC = () => {
                 </button>
               ))}
             </div>
+
+            {packageStockRows.length > 0 && selectedType === 'PIECE' && (
+              <div className="mt-4 rounded-2xl border border-magenta-200 bg-magenta-50 p-4">
+                <p className="text-sm font-semibold text-black">Piece package stock</p>
+                <p className="mt-1 text-xs text-gray-600">
+                  Each row shows the package set and how many of each piece are in stock.
+                </p>
+                <div className="mt-3 space-y-2">
+                  {packageStockRows.map((entry) => (
+                    <div
+                      key={`${entry.branchId}-${entry.item.id}`}
+                      className="rounded-xl border border-white bg-white px-4 py-3 text-sm"
+                    >
+                      <p className="font-semibold text-black">
+                        {entry.branchLabel} · ${formatSubCode(Number(entry.item.subCode ?? entry.item.costPrice ?? 0))}
+                      </p>
+                      <p className="mt-1 text-gray-700">Set: {entry.packageSummary}</p>
+                      <p className="mt-1 text-gray-700">
+                        {Number(entry.item.quantity ?? 0)} sealed package(s) · pieces in stock: {entry.stockSummary}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {stockBreakdownTarget && activeStockBreakdown.length > 0 && (
               <div className="mt-4 rounded-2xl border border-black bg-white p-4">
@@ -440,15 +497,21 @@ const InventoryView: React.FC = () => {
               <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">Type</th>
               <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">Color</th>
               <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">Amount</th>
+              <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">Package pieces</th>
             </tr>
           </thead>
           <tbody>
             {items.map((item) => {
               const price = Number(item.subCode ?? item.costPrice ?? 0);
-              const amount =
-                item.type === 'PIECE'
+              const packageAmount = formatInventoryPackageAmount(item);
+              const amount = packageAmount
+                ? packageAmount
+                : item.type === 'PIECE'
                   ? `${item.quantity ?? 0} pc × ${item.pieceLength ?? 0} m`
                   : `${item.meters ?? 0} m`;
+              const packagePieces = item.isPiecePackage
+                ? formatPackageSummary(parsePackageComponents(item.packageComponents))
+                : '—';
 
               return (
                 <tr key={item.id} className="border-t transition-colors hover:bg-gray-50">
@@ -460,9 +523,11 @@ const InventoryView: React.FC = () => {
                   <td className="px-4 py-2 text-sm text-gray-800">${formatSubCode(price)}</td>
                   <td className="px-4 py-2 text-sm text-gray-800">
                     {ITEM_TYPE_LABELS[item.type as InventoryItemType] ?? item.type}
+                    {item.isPiecePackage ? ' (package)' : ''}
                   </td>
                   <td className="px-4 py-2 text-sm text-gray-800">{item.color?.name ?? '-'}</td>
                   <td className="px-4 py-2 text-sm text-gray-800">{amount}</td>
+                  <td className="px-4 py-2 text-sm text-gray-800">{packagePieces}</td>
                 </tr>
               );
             })}

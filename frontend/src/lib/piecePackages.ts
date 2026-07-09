@@ -111,3 +111,53 @@ export const formatPackageComponentsSold = (components: PackageComponentSold[]) 
     .filter((component) => component.quantity > 0)
     .map((component) => `${component.quantity}× ${component.name}`)
     .join(', ');
+
+export const packagePricePerPiece = (packagePrice: number, components: PackageComponent[]) => {
+  const totalPieces = totalPiecesPerPackage(components);
+  if (totalPieces <= 0) return packagePrice;
+  return packagePrice / totalPieces;
+};
+
+export const buildPackageSalePricing = (
+  packagePrice: number,
+  components: PackageComponent[],
+  mode: 'FULL' | 'PARTIAL',
+  packagesSold: number,
+  componentsSold: PackageComponentSold[]
+) => {
+  if (mode === 'FULL') {
+    const count = Math.max(1, Math.floor(packagesSold));
+    return {
+      quantity: count,
+      price: packagePrice,
+      lineTotal: packagePrice * count,
+    };
+  }
+
+  const selected = componentsSold.filter((component) => component.quantity > 0);
+  const perPiece = packagePricePerPiece(packagePrice, components);
+  const selectedCount = selected.reduce((sum, component) => sum + component.quantity, 0);
+  return {
+    quantity: selectedCount,
+    price: perPiece,
+    lineTotal: perPiece * selectedCount,
+  };
+};
+
+export const formatInventoryPackageAmount = (input: {
+  quantity?: number;
+  packageComponents?: unknown;
+  packageComponentStock?: unknown;
+  isPiecePackage?: boolean;
+}) => {
+  if (!input.isPiecePackage) return null;
+  const components = parsePackageComponents(input.packageComponents);
+  if (components.length === 0) return null;
+  const stock = resolvePackageComponentStock({
+    packageComponents: input.packageComponents,
+    packageComponentStock: input.packageComponentStock,
+    quantity: input.quantity ?? 0,
+  });
+  const packages = input.quantity ?? 0;
+  return `${packages} package(s) · set: ${formatPackageSummary(components)} · in stock: ${formatPackageStockSummary(stock)}`;
+};
