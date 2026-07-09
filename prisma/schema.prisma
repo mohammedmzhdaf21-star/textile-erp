@@ -148,6 +148,7 @@ model InventoryItem {
   isPiecePackage Boolean @default(false)
   packageKey     String  @default("") @db.VarChar(255)
   packageComponents Json?
+  packageComponentStock Json?
   version     Int       @default(0)
   isArchived  Boolean   @default(false)
   deletedAt   DateTime?
@@ -220,6 +221,10 @@ model SaleItem {
   quantitySold    Decimal        @db.Decimal(10, 2)
   soldPrice       Decimal        @db.Decimal(12, 2)
   lineDiscount    Decimal        @default(0) @db.Decimal(12, 2)
+  isPiecePackage  Boolean        @default(false)
+  packageSaleMode String?        @db.VarChar(20)
+  packagesSold    Int?
+  packageComponentsSold Json?
   createdAt       DateTime       @default(now())
 
   @@index([saleId])

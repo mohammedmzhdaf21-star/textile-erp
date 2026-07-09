@@ -3,6 +3,17 @@ import api from '../lib/api';
 import { getCurrentUser } from '../lib/auth';
 import { getItemMinimumPrice } from '../lib/dashboardSettings';
 import { createCuttingTaskFromSale, type BranchCode } from '../lib/taskSettings';
+import {
+  formatPackageComponentsSold,
+  formatPackageStockSummary,
+  formatPackageSummary,
+  parsePackageComponents,
+  resolvePackageComponentStock,
+  type PackageComponent,
+  type PackageComponentSold,
+} from '../lib/piecePackages';
+
+type PackageSaleMode = 'FULL' | 'PARTIAL';
 
 type InventorySaleLine = {
   type: 'inventory';
@@ -16,6 +27,11 @@ type InventorySaleLine = {
   sourceItemId?: string | null;
   code?: number;
   colorName?: string;
+  isPiecePackage?: boolean;
+  packageSaleMode?: PackageSaleMode;
+  packagesSold?: number;
+  packageComponentsSold?: PackageComponentSold[];
+  packageSummary?: string;
 };
 
 type PlainClothSaleLine = {
@@ -37,6 +53,9 @@ type InventoryLookupItem = {
   code?: number;
   color?: { name?: string };
   sourceItemId?: string | null;
+  isPiecePackage?: boolean;
+  packageComponents?: PackageComponent[];
+  packageComponentStock?: Record<string, number>;
 };
 
 const branchOptions = ['A', 'B', 'C', 'E', 'F'];
@@ -53,8 +72,14 @@ const clothOptions = ['Silk', 'Velvet', 'Cotton', 'Linen'];
 const soldAsUnitForItem = (item: InventoryLookupItem): 'METER' | 'PIECE' =>
   item.type === 'PIECE' ? 'PIECE' : 'METER';
 
-const amountLabelForUnit = (unit?: 'METER' | 'PIECE') =>
-  unit === 'PIECE' ? 'Quantity (pieces)' : 'Meters';
+const amountLabelForUnit = (unit?: 'METER' | 'PIECE', isPiecePackage?: boolean, mode?: PackageSaleMode) => {
+  if (isPiecePackage && mode === 'FULL') return 'Packages';
+  if (isPiecePackage && mode === 'PARTIAL') return 'Price per piece';
+  return unit === 'PIECE' ? 'Quantity (pieces)' : 'Meters';
+};
+
+const buildInitialPackageSelection = (components: PackageComponent[]): PackageComponentSold[] =>
+  components.map((component) => ({ name: component.name, quantity: 0 }));
 
 const SalesView: React.FC = () => {
   const [branch, setBranch] = useState<string>('A');
@@ -66,10 +91,47 @@ const SalesView: React.FC = () => {
   const [plainCloth, setPlainCloth] = useState({ clothName: clothOptions[0], meters: 1, pricePerMeter: 20 });
   const [scanState, setScanState] = useState({ inventoryItemId: '', sourceBranch: branch, amount: 1, price: 15 });
   const [detectedScanItem, setDetectedScanItem] = useState<InventoryLookupItem | null>(null);
+  const [packageSaleMode, setPackageSaleMode] = useState<PackageSaleMode>('FULL');
+  const [packageComponentsSold, setPackageComponentsSold] = useState<PackageComponentSold[]>([]);
   const [scanMessage, setScanMessage] = useState<string | null>(null);
   const [minimumPriceMessage, setMinimumPriceMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  const detectedPackageComponents = useMemo(
+    () => parsePackageComponents(detectedScanItem?.packageComponents),
+    [detectedScanItem]
+  );
+
+  const detectedPackageStock = useMemo(() => {
+    if (!detectedScanItem?.isPiecePackage) return {};
+    return resolvePackageComponentStock({
+      packageComponents: detectedScanItem.packageComponents,
+      packageComponentStock: detectedScanItem.packageComponentStock,
+      quantity: detectedScanItem.quantity,
+    });
+  }, [detectedScanItem]);
+
+  const selectedPackagePieces = useMemo(
+    () => packageComponentsSold.reduce((sum, component) => sum + component.quantity, 0),
+    [packageComponentsSold]
+  );
+
+  const remainingPackagePreview = useMemo(() => {
+    if (!detectedScanItem?.isPiecePackage || packageSaleMode !== 'PARTIAL') return null;
+    const nextStock = { ...detectedPackageStock };
+    for (const component of packageComponentsSold) {
+      if (component.quantity <= 0) continue;
+      nextStock[component.name] = Math.max(0, (nextStock[component.name] ?? 0) - component.quantity);
+      if (nextStock[component.name] === 0) delete nextStock[component.name];
+    }
+    return nextStock;
+  }, [
+    detectedPackageStock,
+    detectedScanItem?.isPiecePackage,
+    packageComponentsSold,
+    packageSaleMode,
+  ]);
 
   const lineTotal = (line: SaleLine) => {
     if (line.type === 'inventory') return line.quantity * line.price;
@@ -128,6 +190,7 @@ const SalesView: React.FC = () => {
     setDetectedScanItem(item);
     if (item) {
       const unit = soldAsUnitForItem(item);
+      const components = parsePackageComponents(item.packageComponents);
       const savedPrice = getItemMinimumPrice(item.id);
       if (savedPrice) {
         setScanState((current) => ({
@@ -142,11 +205,37 @@ const SalesView: React.FC = () => {
       } else {
         setMinimumPriceMessage(null);
       }
-      setScanMessage(
-        `${item.type} detected: enter ${unit === 'PIECE' ? 'piece quantity' : 'decimal meters'}.`
-      );
+
+      if (item.isPiecePackage && components.length > 0) {
+        setPackageSaleMode('FULL');
+        setPackageComponentsSold(buildInitialPackageSelection(components));
+        const stock = resolvePackageComponentStock({
+          packageComponents: item.packageComponents,
+          packageComponentStock: item.packageComponentStock,
+          quantity: item.quantity,
+        });
+        setScanMessage(
+          `Piece package detected: ${formatPackageSummary(components)}. In stock: ${formatPackageStockSummary(stock)}.`
+        );
+      } else {
+        setPackageSaleMode('FULL');
+        setPackageComponentsSold([]);
+        setScanMessage(
+          `${item.type} detected: enter ${unit === 'PIECE' ? 'piece quantity' : 'decimal meters'}.`
+        );
+      }
     }
     return item;
+  };
+
+  const updatePackagePieceSold = (name: string, quantity: number) => {
+    setPackageComponentsSold((current) =>
+      current.map((component) =>
+        component.name === name
+          ? { ...component, quantity: Math.max(0, Math.floor(quantity)) }
+          : component
+      )
+    );
   };
 
   const addInventoryLine = async () => {
@@ -154,20 +243,47 @@ const SalesView: React.FC = () => {
     if (!inventoryItemId) {
       return alert('Enter an item ID to simulate a scanned inventory line.');
     }
-    if (scanState.amount <= 0 || scanState.price <= 0) {
-      return alert('Enter a valid amount and price for the scanned item.');
+    if (scanState.price <= 0) {
+      return alert('Enter a valid price for the scanned item.');
     }
 
     try {
       const item = detectedScanItem?.id === inventoryItemId ? detectedScanItem : await detectScanItem();
       if (!item) return;
       const soldAsUnit = soldAsUnitForItem(item);
-      const quantity = soldAsUnit === 'PIECE' ? Math.floor(scanState.amount) : scanState.amount;
       const savedPrice = getItemMinimumPrice(item.id);
+      const components = parsePackageComponents(item.packageComponents);
+      const isPiecePackage = Boolean(item.isPiecePackage && components.length > 0);
 
-      if (quantity <= 0) {
+      let quantity = soldAsUnit === 'PIECE' ? Math.floor(scanState.amount) : scanState.amount;
+      let description = `${item.type} from Branch ${scanState.sourceBranch}`;
+      let packageSummary = '';
+      let linePackageMode: PackageSaleMode | undefined;
+      let packagesSold: number | undefined;
+      let componentsSold: PackageComponentSold[] | undefined;
+
+      if (isPiecePackage) {
+        if (packageSaleMode === 'FULL') {
+          packagesSold = Math.floor(scanState.amount);
+          if (packagesSold <= 0) return alert('Enter at least one package to sell.');
+          quantity = packagesSold;
+          linePackageMode = 'FULL';
+          packageSummary = `${packagesSold} full package(s): ${formatPackageSummary(components)}`;
+          description = `Piece package from Branch ${scanState.sourceBranch}`;
+        } else {
+          componentsSold = packageComponentsSold.filter((component) => component.quantity > 0);
+          if (componentsSold.length === 0) {
+            return alert('Select at least one package piece to sell.');
+          }
+          quantity = componentsSold.reduce((sum, component) => sum + component.quantity, 0);
+          linePackageMode = 'PARTIAL';
+          packageSummary = formatPackageComponentsSold(componentsSold);
+          description = `Partial package from Branch ${scanState.sourceBranch}`;
+        }
+      } else if (quantity <= 0) {
         return alert('Enter at least one piece or more than 0 meters.');
       }
+
       if (savedPrice && scanState.price < savedPrice.minimumPrice) {
         return alert(`Minimum price for this item is $${savedPrice.minimumPrice.toFixed(2)}.`);
       }
@@ -178,7 +294,7 @@ const SalesView: React.FC = () => {
           type: 'inventory',
           inventoryItemId: item.id,
           sourceBranch: scanState.sourceBranch,
-          description: `${item.type} from Branch ${scanState.sourceBranch}`,
+          description,
           colorId: item.colorId,
           soldAsUnit,
           quantity,
@@ -186,10 +302,17 @@ const SalesView: React.FC = () => {
           sourceItemId: item.sourceItemId,
           code: item.code,
           colorName: item.color?.name,
+          isPiecePackage,
+          packageSaleMode: linePackageMode,
+          packagesSold,
+          packageComponentsSold: componentsSold,
+          packageSummary,
         },
       ]);
       setScanState((current) => ({ ...current, inventoryItemId: '', amount: 1 }));
       setDetectedScanItem(null);
+      setPackageSaleMode('FULL');
+      setPackageComponentsSold([]);
       setScanMessage(null);
       setMinimumPriceMessage(null);
     } catch (error: any) {
@@ -227,14 +350,24 @@ const SalesView: React.FC = () => {
 
       for (const line of cart) {
         if (line.type === 'inventory') {
-          resolvedItems.push({
+          const payload: Record<string, unknown> = {
             inventoryItemId: line.inventoryItemId,
             colorId: line.colorId,
             soldAsUnit: line.soldAsUnit,
             quantitySold: line.quantity,
             soldPrice: line.price,
             lineDiscount: 0,
-          });
+          };
+          if (line.isPiecePackage) {
+            payload.isPiecePackage = true;
+            payload.packageSaleMode = line.packageSaleMode;
+            if (line.packageSaleMode === 'FULL') {
+              payload.packagesSold = line.packagesSold ?? line.quantity;
+            } else {
+              payload.packageComponentsSold = line.packageComponentsSold ?? [];
+            }
+          }
+          resolvedItems.push(payload);
         } else {
           resolvedItems.push({
             inventoryItemId: undefined,
@@ -331,6 +464,8 @@ const SalesView: React.FC = () => {
               setBranch(option);
               setScanState((current) => ({ ...current, sourceBranch: option }));
               setDetectedScanItem(null);
+              setPackageSaleMode('FULL');
+              setPackageComponentsSold([]);
               setScanMessage(null);
               setMinimumPriceMessage(null);
             }}
@@ -404,20 +539,34 @@ const SalesView: React.FC = () => {
               <div>
                 <label className="block text-sm font-medium text-gray-700">
                   {amountLabelForUnit(
-                    detectedScanItem ? soldAsUnitForItem(detectedScanItem) : undefined
+                    detectedScanItem ? soldAsUnitForItem(detectedScanItem) : undefined,
+                    detectedScanItem?.isPiecePackage,
+                    packageSaleMode
                   )}
                 </label>
-                <input
-                  type="number"
-                  min={detectedScanItem && soldAsUnitForItem(detectedScanItem) === 'PIECE' ? '1' : '0.01'}
-                  step={detectedScanItem && soldAsUnitForItem(detectedScanItem) === 'PIECE' ? '1' : '0.01'}
-                  value={scanState.amount}
-                  onChange={(e) => setScanState((s) => ({ ...s, amount: Number(e.target.value) }))}
-                  className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
-                />
+                {detectedScanItem?.isPiecePackage && packageSaleMode === 'PARTIAL' ? (
+                  <div className="mt-1 rounded-xl border border-gray-300 bg-gray-50 px-3 py-2 text-sm text-gray-700">
+                    {selectedPackagePieces} piece(s) selected
+                  </div>
+                ) : (
+                  <input
+                    type="number"
+                    min={detectedScanItem && soldAsUnitForItem(detectedScanItem) === 'PIECE' ? '1' : '0.01'}
+                    step={detectedScanItem && soldAsUnitForItem(detectedScanItem) === 'PIECE' ? '1' : '0.01'}
+                    value={scanState.amount}
+                    onChange={(e) => setScanState((s) => ({ ...s, amount: Number(e.target.value) }))}
+                    className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
+                  />
+                )}
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700">Unit Price</label>
+                <label className="block text-sm font-medium text-gray-700">
+                  {detectedScanItem?.isPiecePackage && packageSaleMode === 'FULL'
+                    ? 'Price per package'
+                    : detectedScanItem?.isPiecePackage && packageSaleMode === 'PARTIAL'
+                      ? 'Price per piece'
+                      : 'Unit Price'}
+                </label>
                 <input
                   type="number"
                   min="0.01"
@@ -428,6 +577,83 @@ const SalesView: React.FC = () => {
                 />
               </div>
             </div>
+
+            {detectedScanItem?.isPiecePackage && detectedPackageComponents.length > 0 && (
+              <section className="mt-5 rounded-2xl border border-magenta-200 bg-magenta-50 p-4">
+                <p className="text-sm font-semibold text-black">Piece package sale</p>
+                <p className="mt-1 text-sm text-gray-600">
+                  Package set: {formatPackageSummary(detectedPackageComponents)}
+                </p>
+                <p className="mt-1 text-sm text-gray-600">
+                  Available stock: {formatPackageStockSummary(detectedPackageStock)}
+                </p>
+
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setPackageSaleMode('FULL')}
+                    className={`rounded-full px-4 py-2 text-xs font-semibold ${
+                      packageSaleMode === 'FULL'
+                        ? 'bg-black text-white'
+                        : 'border border-gray-300 bg-white text-gray-700'
+                    }`}
+                  >
+                    Sell full package(s)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPackageSaleMode('PARTIAL')}
+                    className={`rounded-full px-4 py-2 text-xs font-semibold ${
+                      packageSaleMode === 'PARTIAL'
+                        ? 'bg-black text-white'
+                        : 'border border-gray-300 bg-white text-gray-700'
+                    }`}
+                  >
+                    Sell selected pieces only
+                  </button>
+                </div>
+
+                {packageSaleMode === 'PARTIAL' && (
+                  <div className="mt-4 space-y-2">
+                    <p className="text-sm font-semibold text-gray-800">
+                      Choose which package pieces are sold
+                    </p>
+                    {packageComponentsSold.map((component) => (
+                      <div
+                        key={component.name}
+                        className="grid grid-cols-[1fr_120px_100px] items-center gap-2 rounded-xl border border-white bg-white px-3 py-2"
+                      >
+                        <span className="text-sm font-medium text-gray-800">{component.name}</span>
+                        <span className="text-xs text-gray-500">
+                          In stock: {detectedPackageStock[component.name] ?? 0}
+                        </span>
+                        <input
+                          type="number"
+                          min="0"
+                          max={detectedPackageStock[component.name] ?? 0}
+                          value={component.quantity}
+                          onChange={(event) =>
+                            updatePackagePieceSold(component.name, Number(event.target.value))
+                          }
+                          className="rounded-lg border border-gray-300 px-2 py-1 text-sm"
+                        />
+                      </div>
+                    ))}
+                    {remainingPackagePreview && (
+                      <p className="text-sm text-gray-700">
+                        Leftover package pieces after sale:{' '}
+                        <strong>
+                          {Object.keys(remainingPackagePreview).length > 0
+                            ? formatPackageStockSummary(remainingPackagePreview)
+                            : 'none'}
+                        </strong>
+                      </p>
+                    )}
+                  </div>
+                )}
+              </section>
+            )}
+
             <button
               type="button"
               className="btn-primary mt-4"
@@ -594,7 +820,11 @@ const SalesView: React.FC = () => {
                     </p>
                     <p className="text-sm text-gray-500">
                       {line.type === 'inventory'
-                        ? `${line.description}: ${line.quantity} ${line.soldAsUnit === 'PIECE' ? 'pieces' : 'meters'} @ $${line.price}/unit`
+                        ? line.isPiecePackage
+                          ? `${line.description}: ${line.packageSummary ?? 'package sale'} @ $${line.price}/${
+                              line.packageSaleMode === 'FULL' ? 'package' : 'piece'
+                            }`
+                          : `${line.description}: ${line.quantity} ${line.soldAsUnit === 'PIECE' ? 'pieces' : 'meters'} @ $${line.price}/unit`
                         : `${line.meters} meters @ $${line.pricePerMeter}/m`}
                     </p>
                   </div>

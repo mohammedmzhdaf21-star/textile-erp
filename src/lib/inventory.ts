@@ -1,5 +1,9 @@
 import { prisma } from './prisma';
 import { Prisma } from '@prisma/client';
+import {
+  buildPackageComponentStock,
+  parsePackageComponents,
+} from './packageStock';
 
 // ============================================================
 // INVENTORY BUSINESS LOGIC
@@ -142,6 +146,14 @@ export async function createInventoryItem(
     input.type === 'PIECE' && !input.isPiecePackage ? input.pieceLength : 0;
 
   const packageKey = input.isPiecePackage ? input.packageKey ?? '' : '';
+  const packageComponents = input.isPiecePackage
+    ? parsePackageComponents(input.packageComponents)
+    : [];
+  const packageQuantity = input.quantity ?? 1;
+  const packageComponentStock =
+    input.isPiecePackage && packageComponents.length > 0
+      ? buildPackageComponentStock(packageComponents, packageQuantity)
+      : undefined;
 
   // Verify branch exists
   const branch = await prisma.branch.findUnique({ where: { id: input.branchId } });
@@ -174,6 +186,9 @@ export async function createInventoryItem(
         packageKey,
         packageComponents: input.packageComponents
           ? (input.packageComponents as Prisma.InputJsonValue)
+          : undefined,
+        packageComponentStock: packageComponentStock
+          ? (packageComponentStock as Prisma.InputJsonValue)
           : undefined,
       },
       include: { color: true, branch: true },

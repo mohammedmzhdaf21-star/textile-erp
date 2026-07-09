@@ -67,3 +67,47 @@ export const parsePackageComponents = (value: unknown): PackageComponent[] => {
     }))
     .filter((entry) => entry.name.length > 0);
 };
+
+export type PackageComponentSold = {
+  name: string;
+  quantity: number;
+};
+
+export const parsePackageComponentStock = (value: unknown): Record<string, number> => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  const stock: Record<string, number> = {};
+  for (const [name, qty] of Object.entries(value as Record<string, unknown>)) {
+    const quantity = Math.floor(Number(qty) || 0);
+    if (quantity > 0) stock[name] = quantity;
+  }
+  return stock;
+};
+
+export const resolvePackageComponentStock = (input: {
+  packageComponents?: unknown;
+  packageComponentStock?: unknown;
+  quantity: number;
+}): Record<string, number> => {
+  const parsedStock = parsePackageComponentStock(input.packageComponentStock);
+  if (Object.keys(parsedStock).length > 0) return parsedStock;
+
+  const components = parsePackageComponents(input.packageComponents);
+  if (components.length === 0) return {};
+  const stock: Record<string, number> = {};
+  for (const component of components) {
+    stock[component.name] = component.countPerPackage * Math.max(0, input.quantity);
+  }
+  return stock;
+};
+
+export const formatPackageStockSummary = (stock: Record<string, number>) =>
+  Object.entries(stock)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([name, quantity]) => `${quantity}× ${name}`)
+    .join(', ');
+
+export const formatPackageComponentsSold = (components: PackageComponentSold[]) =>
+  components
+    .filter((component) => component.quantity > 0)
+    .map((component) => `${component.quantity}× ${component.name}`)
+    .join(', ');

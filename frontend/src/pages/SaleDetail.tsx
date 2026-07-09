@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import api from '../lib/api';
+import { formatPackageComponentsSold } from '../lib/piecePackages';
 
 type SaleItem = {
   id: string;
@@ -12,6 +13,10 @@ type SaleItem = {
   quantitySold: string;
   soldPrice: string;
   lineDiscount: string;
+  isPiecePackage?: boolean;
+  packageSaleMode?: string | null;
+  packagesSold?: number | null;
+  packageComponentsSold?: Array<{ name: string; quantity: number }> | null;
 };
 
 type Sale = {
@@ -218,7 +223,11 @@ const SaleDetail: React.FC = () => {
                       </div>
                     </div>
                     <div className="text-sm text-gray-700">
-                      {item.soldAsUnit} · {Number(item.quantitySold).toFixed(2)} @ {formatCurrency(item.soldPrice)}
+                      {item.isPiecePackage && item.packageSaleMode === 'FULL'
+                        ? `${item.packagesSold ?? Number(item.quantitySold)} full package(s) @ ${formatCurrency(item.soldPrice)}`
+                        : item.isPiecePackage && item.packageSaleMode === 'PARTIAL'
+                          ? `${formatPackageComponentsSold(item.packageComponentsSold ?? [])} @ ${formatCurrency(item.soldPrice)}/piece`
+                          : `${item.soldAsUnit} · ${Number(item.quantitySold).toFixed(2)} @ ${formatCurrency(item.soldPrice)}`}
                     </div>
                   </div>
                 </div>

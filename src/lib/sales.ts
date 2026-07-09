@@ -1,5 +1,16 @@
 import { prisma } from './prisma';
 import { Prisma } from '@prisma/client';
+import {
+  countCompletePackages,
+  deductFullPackageSale,
+  deductPartialPackageSale,
+  parsePackageComponents,
+  restoreFullPackageSale,
+  restorePartialPackageSale,
+  resolvePackageComponentStock,
+  validateFullPackageSale,
+  validatePartialPackageSale,
+} from './packageStock';
 
 // ============================================================
 // SALES BUSINESS LOGIC
@@ -15,6 +26,10 @@ export interface SaleItemInput {
   quantitySold: number;
   soldPrice: number;
   lineDiscount?: number;
+  isPiecePackage?: boolean;
+  packageSaleMode?: 'FULL' | 'PARTIAL';
+  packagesSold?: number;
+  packageComponentsSold?: Array<{ name: string; quantity: number }>;
 }
 
 export interface CreateSaleInput {
@@ -71,6 +86,78 @@ export interface ProcessExchangeInput {
   paymentStatus?: 'FULL' | 'PARTIAL';
   amountPaid?: number;
   notes?: string;
+}
+
+async function applyPackageSaleToInventory(
+  tx: Prisma.TransactionClient,
+  invItem: {
+    id: string;
+    quantity: number;
+    packageComponents: unknown;
+    packageComponentStock: unknown;
+    isPiecePackage: boolean;
+  },
+  item: SaleItemInput,
+  direction: 'deduct' | 'restore'
+) {
+  if (!invItem.isPiecePackage) return;
+
+  const components = parsePackageComponents(invItem.packageComponents);
+  const currentStock = resolvePackageComponentStock({
+    packageComponents: invItem.packageComponents,
+    packageComponentStock: invItem.packageComponentStock,
+    quantity: invItem.quantity,
+  });
+
+  if (item.packageSaleMode === 'FULL') {
+    const packagesSold = Math.floor(item.packagesSold ?? item.quantitySold);
+    const error =
+      direction === 'deduct'
+        ? validateFullPackageSale(components, currentStock, packagesSold)
+        : null;
+    if (error) throw new Error(error);
+
+    const nextStock =
+      direction === 'deduct'
+        ? deductFullPackageSale(components, currentStock, packagesSold)
+        : restoreFullPackageSale(components, currentStock, packagesSold);
+
+    await tx.inventoryItem.update({
+      where: { id: invItem.id },
+      data: {
+        packageComponentStock: nextStock as Prisma.InputJsonValue,
+        quantity:
+          direction === 'deduct'
+            ? { decrement: packagesSold }
+            : { increment: packagesSold },
+        version: { increment: 1 },
+      },
+    });
+    return;
+  }
+
+  if (item.packageSaleMode === 'PARTIAL') {
+    const componentsSold = item.packageComponentsSold ?? [];
+    const error =
+      direction === 'deduct'
+        ? validatePartialPackageSale(currentStock, componentsSold)
+        : null;
+    if (error) throw new Error(error);
+
+    const nextStock =
+      direction === 'deduct'
+        ? deductPartialPackageSale(currentStock, componentsSold)
+        : restorePartialPackageSale(currentStock, componentsSold);
+
+    await tx.inventoryItem.update({
+      where: { id: invItem.id },
+      data: {
+        packageComponentStock: nextStock as Prisma.InputJsonValue,
+        quantity: countCompletePackages(components, nextStock),
+        version: { increment: 1 },
+      },
+    });
+  }
 }
 
 // ============================================================
@@ -172,6 +259,8 @@ export async function createSale(
               version: { increment: 1 },
             },
           });
+        } else if (invItem.isPiecePackage && item.isPiecePackage) {
+          await applyPackageSaleToInventory(tx, invItem, item, 'deduct');
         } else if (item.soldAsUnit === 'PIECE') {
           if (invItem.quantity < item.quantitySold) {
             throw new Error(
@@ -218,6 +307,12 @@ export async function createSale(
           quantitySold: new Prisma.Decimal(item.quantitySold.toFixed(2)),
           soldPrice: new Prisma.Decimal(item.soldPrice.toFixed(2)),
           lineDiscount: new Prisma.Decimal((item.lineDiscount || 0).toFixed(2)),
+          isPiecePackage: item.isPiecePackage || false,
+          packageSaleMode: item.packageSaleMode || null,
+          packagesSold: item.packagesSold ?? null,
+          packageComponentsSold: item.packageComponentsSold
+            ? (item.packageComponentsSold as Prisma.InputJsonValue)
+            : undefined,
         },
       });
     }
@@ -417,6 +512,8 @@ export async function processExchange(
               version: { increment: 1 },
             },
           });
+        } else if (invItem.isPiecePackage && item.isPiecePackage) {
+          await applyPackageSaleToInventory(tx, invItem, item, 'deduct');
         } else if (item.soldAsUnit === 'PIECE') {
           if (invItem.quantity < item.quantitySold) {
             throw new Error(
@@ -461,6 +558,12 @@ export async function processExchange(
           quantitySold: new Prisma.Decimal(item.quantitySold.toFixed(2)),
           soldPrice: new Prisma.Decimal(item.soldPrice.toFixed(2)),
           lineDiscount: new Prisma.Decimal((item.lineDiscount || 0).toFixed(2)),
+          isPiecePackage: item.isPiecePackage || false,
+          packageSaleMode: item.packageSaleMode || null,
+          packagesSold: item.packagesSold ?? null,
+          packageComponentsSold: item.packageComponentsSold
+            ? (item.packageComponentsSold as Prisma.InputJsonValue)
+            : undefined,
         },
       });
     }
@@ -629,6 +732,25 @@ export async function voidSale(
                 version: { increment: 1 },
               },
             });
+          } else if (item.isPiecePackage && item.packageSaleMode) {
+            await applyPackageSaleToInventory(
+              tx,
+              invItem,
+              {
+                inventoryItemId: item.inventoryItemId,
+                colorId: item.colorId,
+                soldAsUnit: 'PIECE',
+                quantitySold: parseFloat(item.quantitySold.toString()),
+                soldPrice: parseFloat(item.soldPrice.toString()),
+                isPiecePackage: true,
+                packageSaleMode: item.packageSaleMode as 'FULL' | 'PARTIAL',
+                packagesSold: item.packagesSold ?? undefined,
+                packageComponentsSold: Array.isArray(item.packageComponentsSold)
+                  ? (item.packageComponentsSold as Array<{ name: string; quantity: number }>)
+                  : undefined,
+              },
+              'restore'
+            );
           } else if (item.soldAsUnit === 'PIECE') {
             await tx.inventoryItem.update({
               where: { id: item.inventoryItemId },
