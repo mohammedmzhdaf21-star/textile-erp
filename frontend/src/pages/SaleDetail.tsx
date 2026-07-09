@@ -226,7 +226,7 @@ const SaleDetail: React.FC = () => {
                       {item.isPiecePackage && item.packageSaleMode === 'FULL'
                         ? `${item.packagesSold ?? Number(item.quantitySold)} full package(s) @ ${formatCurrency(item.soldPrice)}`
                         : item.isPiecePackage && item.packageSaleMode === 'PARTIAL'
-                          ? `${formatPackageComponentsSold(item.packageComponentsSold ?? [])} @ ${formatCurrency(item.soldPrice)}/piece`
+                          ? `${formatPackageComponentsSold(item.packageComponentsSold ?? [])} — ${formatCurrency(item.soldPrice)}`
                           : `${item.soldAsUnit} · ${Number(item.quantitySold).toFixed(2)} @ ${formatCurrency(item.soldPrice)}`}
                     </div>
                   </div>
