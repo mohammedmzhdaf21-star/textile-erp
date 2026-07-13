@@ -120,7 +120,7 @@ const Tasks: React.FC = () => {
         <div>
           <h2 className="text-2xl font-bold text-black">Tasks</h2>
           <p className="mt-1 max-w-2xl text-sm text-gray-600">
-            Admin/owner task schedule by branch. Cutting tasks are also created automatically when a linked cut piece is sold.
+            Admin/owner task schedule by branch. Cutting tasks are created automatically when shelf pieces for a family and color are sold out but a roll is still in stock.
           </p>
         </div>
         <div className="text-sm text-gray-500">Branch {selectedBranch}</div>

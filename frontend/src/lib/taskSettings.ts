@@ -198,7 +198,7 @@ export const createCuttingTaskFromSale = (input: {
     templateKey: 'CUTTING_FABRIC_ROLL',
     title: `Cutting the fabric roll for code ${codeText}`,
     assignedTo: input.assignedTo || 'Inventory team',
-    note: `Piece ${input.soldItemId} was sold. Cut another shelf piece from roll ${input.sourceItemId}${input.colorName ? ` (${input.colorName})` : ''}.`,
+    note: `Shelf pieces for family ${codeText}${input.colorName ? ` (${input.colorName})` : ''} are sold out. Cut a new piece from roll ${input.sourceItemId} and put it on the shelf.`,
     schedule: 'ON_DEMAND',
     sourceSaleId: input.saleId,
     sourceItemId: input.sourceItemId,
