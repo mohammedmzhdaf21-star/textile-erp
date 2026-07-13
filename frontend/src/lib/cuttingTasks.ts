@@ -1,12 +1,16 @@
 import api from './api';
 import { BRANCH_CODE_BY_ID } from './inventoryCodes';
 import {
+  completeTask,
   createCuttingTaskFromSale,
   isTaskComplete,
   readTasks,
   type BranchCode,
   type BranchTask,
 } from './taskSettings';
+
+export const isAutoManagedCuttingTask = (task: BranchTask) =>
+  task.templateKey === 'CUTTING_FABRIC_ROLL';
 
 export type InventoryItemForCutting = {
   id: string;
@@ -98,4 +102,30 @@ export const maybeCreateCuttingTaskAfterPieceSale = async (input: {
     saleId: input.saleId,
     assignedTo: input.assignedTo,
   });
+};
+
+export const completeCuttingTasksAfterRollToPiece = (input: {
+  rollItemId: string;
+  branchId: string;
+  code: number;
+  colorName?: string;
+  newPieceId: string;
+}) => {
+  const branch = BRANCH_CODE_BY_ID[input.branchId] as BranchCode | undefined;
+  if (!branch) return [];
+
+  const matching = readTasks().filter(
+    (task) =>
+      !isTaskComplete(task) &&
+      task.templateKey === 'CUTTING_FABRIC_ROLL' &&
+      task.branch === branch &&
+      (task.sourceItemId === input.rollItemId ||
+        (task.code === input.code && (task.colorName ?? '') === (input.colorName ?? '')))
+  );
+
+  matching.forEach((task) => {
+    completeTask(task.id, 'System (item conversion)');
+  });
+
+  return matching;
 };

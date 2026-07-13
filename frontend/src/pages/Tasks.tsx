@@ -17,6 +17,7 @@ import {
   type BranchTask,
   type TaskAssignment,
 } from '../lib/taskSettings';
+import { isAutoManagedCuttingTask } from '../lib/cuttingTasks';
 
 const formatDateTime = (dateString?: string) =>
   dateString ? new Date(dateString).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : 'Not scheduled';
@@ -120,7 +121,7 @@ const Tasks: React.FC = () => {
         <div>
           <h2 className="text-2xl font-bold text-black">Tasks</h2>
           <p className="mt-1 max-w-2xl text-sm text-gray-600">
-            Admin/owner task schedule by branch. Cutting tasks are created automatically when shelf pieces for a family and color are sold out but a roll is still in stock.
+            Admin/owner task schedule by branch. Cutting tasks are created when shelf pieces sell out and are marked done automatically in Item Conversion.
           </p>
         </div>
         <div className="text-sm text-gray-500">Branch {selectedBranch}</div>
@@ -283,15 +284,31 @@ const Tasks: React.FC = () => {
                             Source roll: {task.sourceItemId}
                           </div>
                         )}
+                        {isAutoManagedCuttingTask(task) && !isTaskComplete(task) && (
+                          <div className="mt-2 rounded-xl bg-white px-3 py-2 text-xs text-amber-800">
+                            Auto-completes when this roll is cut to a piece in Item Conversion.
+                          </div>
+                        )}
                       </div>
                       <div className="flex gap-2">
-                        <button
-                          type="button"
-                          onClick={() => toggleTask(task.id)}
-                          className="rounded-xl bg-black px-3 py-2 text-xs font-semibold text-white"
-                        >
-                          {isTaskComplete(task) ? 'Reopen' : 'Done'}
-                        </button>
+                        {!isAutoManagedCuttingTask(task) && (
+                          <button
+                            type="button"
+                            onClick={() => toggleTask(task.id)}
+                            className="rounded-xl bg-black px-3 py-2 text-xs font-semibold text-white"
+                          >
+                            {isTaskComplete(task) ? 'Reopen' : 'Done'}
+                          </button>
+                        )}
+                        {isAutoManagedCuttingTask(task) && isTaskComplete(task) && (
+                          <button
+                            type="button"
+                            onClick={() => toggleTask(task.id)}
+                            className="rounded-xl border border-gray-300 px-3 py-2 text-xs font-semibold text-gray-700"
+                          >
+                            Reopen
+                          </button>
+                        )}
                         <button
                           type="button"
                           onClick={() => deleteTask(task.id)}

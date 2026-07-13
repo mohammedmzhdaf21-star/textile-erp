@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import QRCode from 'qrcode';
 import api from '../lib/api';
+import { completeCuttingTasksAfterRollToPiece } from '../lib/cuttingTasks';
 
 type BranchCode = 'A' | 'B' | 'C' | 'E' | 'F';
 type ItemType = 'ROLL' | 'PIECE' | 'REMANENT';
@@ -274,7 +275,18 @@ const ItemConversion: React.FC = () => {
         qrCodeDataUrl,
         details: `Cut ${amount.toFixed(2)} meters into one new piece with code ${rollSource.code} and color ${rollSource.color?.name || rollSource.colorId}.`,
       });
-      setMessage('Roll-to-piece conversion complete. New piece QR created.');
+      const completedTasks = completeCuttingTasksAfterRollToPiece({
+        rollItemId: rollSource.id,
+        branchId: rollSource.branchId,
+        code: rollSource.code,
+        colorName: rollSource.color?.name,
+        newPieceId: newItemId,
+      });
+      setMessage(
+        completedTasks.length > 0
+          ? `Roll-to-piece conversion complete. ${completedTasks.length} cutting task(s) marked done automatically.`
+          : 'Roll-to-piece conversion complete. New piece QR created.'
+      );
       await loadItem(rollSource.id, setRollSource);
     } catch (err: any) {
       const body = err?.response?.data;
