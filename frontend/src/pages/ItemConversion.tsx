@@ -150,16 +150,15 @@ const ItemConversion: React.FC = () => {
       },
     });
     const items = (response.data?.items ?? []) as InventoryItem[];
-    const targetSubCode = itemSubCode(rollSource);
 
-    return (
-      items.find((item) => {
-        if (item.isPiecePackage || (item.packageKey ?? '')) return false;
-        if (Math.abs(itemSubCode(item) - targetSubCode) >= 0.001) return false;
-        if (Math.abs(toNumber(item.pieceLength) - pieceLength) >= 0.001) return false;
-        return true;
-      }) ?? null
-    );
+    const matches = items.filter((item) => {
+      if (item.isPiecePackage || (item.packageKey ?? '')) return false;
+      if (Math.abs(toNumber(item.pieceLength) - pieceLength) >= 0.001) return false;
+      return true;
+    });
+
+    // Prefer the sold-out piece (qty 0) — same family code, color, and cut length.
+    return matches.find((item) => item.quantity === 0) ?? matches[0] ?? null;
   };
 
   const patchSourceStock = async (item: InventoryItem, amount: number) => {
@@ -446,7 +445,7 @@ const ItemConversion: React.FC = () => {
         <section className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
           <h3 className="text-xl font-semibold text-black">Roll to piece</h3>
           <p className="mt-1 text-sm text-gray-600">
-            Cut a length from a roll/remnant. If a matching piece already exists for the same code, price, color, and length, stock is added to it instead of creating a new QR.
+            Cut a length from a roll/remnant. If a piece already exists for the same family code, color, and cut length, stock is added to it instead of creating a new QR.
           </p>
 
           <div className="mt-4 grid gap-3 md:grid-cols-[1fr_auto]">
