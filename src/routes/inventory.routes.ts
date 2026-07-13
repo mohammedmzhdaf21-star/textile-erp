@@ -243,7 +243,8 @@ router.patch(
   async (req: Request, res: Response) => {
     try {
       const id = singleParam(req.params.id);
-      const { meters, pieceLength, quantity, costPrice, version } = req.body;
+      const { meters, pieceLength, quantity, costPrice, code, subCode, colorId, version } =
+        req.body;
 
       if (!id) {
         return res.status(400).json({ error: 'Inventory item id is required' });
@@ -264,6 +265,9 @@ router.patch(
           quantity: quantity !== undefined ? parseInt(String(quantity), 10) : undefined,
           costPrice:
             costPrice !== undefined ? parseFloat(String(costPrice)) : undefined,
+          code: code !== undefined ? parseInt(String(code), 10) : undefined,
+          subCode: subCode !== undefined ? parseFloat(String(subCode)) : undefined,
+          colorId: colorId !== undefined ? String(colorId) : undefined,
           version: parseInt(String(version), 10),
         },
         req.user?.userId,
@@ -283,6 +287,9 @@ router.patch(
         return res.status(409).json({ error: msg });
       }
       if (msg.includes('archived')) {
+        return res.status(400).json({ error: msg });
+      }
+      if (msg.includes('already exists') || msg.includes('must be')) {
         return res.status(400).json({ error: msg });
       }
       return res.status(500).json({ error: msg });

@@ -1,6 +1,7 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../lib/api';
+import { getCurrentUser } from '../lib/auth';
 import {
   aggregateFamilyStock,
   aggregateStockBreakdown,
@@ -34,15 +35,37 @@ type InventoryItemView = InventoryStockItem & {
   isPiecePackage?: boolean;
   packageComponents?: unknown;
   packageComponentStock?: unknown;
+  version?: number;
+};
+
+type EditFormState = {
+  code: string;
+  subCode: string;
+  colorId: string;
+  meters: string;
+  pieceLength: string;
+  quantity: string;
 };
 
 const ITEM_TYPES: InventoryItemType[] = ['ROLL', 'PIECE', 'REMANENT'];
 
 const InventoryView: React.FC = () => {
+  const currentUser = getCurrentUser();
+  const canManageInventory =
+    currentUser?.role === 'ADMIN' || currentUser?.role === 'MANAGER';
+
   const [branch, setBranch] = useState<BranchDestinationCode | null>(null);
   const [items, setItems] = useState<InventoryItemView[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [colors, setColors] = useState<Color[]>([]);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [editItem, setEditItem] = useState<InventoryItemView | null>(null);
+  const [editForm, setEditForm] = useState<EditFormState | null>(null);
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [isRemoving, setIsRemoving] = useState(false);
 
   const [scanQuery, setScanQuery] = useState('');
   const [searchLoading, setSearchLoading] = useState(false);
@@ -55,10 +78,10 @@ const InventoryView: React.FC = () => {
   const [familyStock, setFamilyStock] = useState<BranchStockRow[]>([]);
   const [stockBreakdownTarget, setStockBreakdownTarget] = useState<'total' | string | null>(null);
 
-  useEffect(() => {
+  const loadItems = useCallback(() => {
     setLoading(true);
     setError(null);
-    api
+    return api
       .get('/inventory', {
         params: branch ? { branchId: BRANCH_ID_BY_CODE[branch], pageSize: 200 } : { pageSize: 200 },
       })
@@ -79,6 +102,160 @@ const InventoryView: React.FC = () => {
       })
       .finally(() => setLoading(false));
   }, [branch]);
+
+  useEffect(() => {
+    loadItems();
+  }, [loadItems]);
+
+  useEffect(() => {
+    if (!canManageInventory) return;
+    api
+      .get('/inventory/colors')
+      .then((res) => setColors(Array.isArray(res.data) ? res.data : []))
+      .catch(() => setColors([]));
+  }, [canManageInventory]);
+
+  const selectedItems = useMemo(
+    () => items.filter((item) => selectedIds.includes(item.id)),
+    [items, selectedIds]
+  );
+
+  const toggleSelected = (itemId: string) => {
+    setSelectedIds((current) =>
+      current.includes(itemId) ? current.filter((id) => id !== itemId) : [...current, itemId]
+    );
+  };
+
+  const openEditForItem = (item: InventoryItemView) => {
+    setEditItem(item);
+    setEditForm({
+      code: String(item.code),
+      subCode: String(item.subCode ?? item.costPrice ?? 0),
+      colorId: item.colorId,
+      meters: String(item.meters ?? 0),
+      pieceLength: String(item.pieceLength ?? 0),
+      quantity: String(item.quantity ?? 0),
+    });
+    setActionError(null);
+    setActionMessage(null);
+  };
+
+  const closeEditModal = () => {
+    setEditItem(null);
+    setEditForm(null);
+  };
+
+  const removeSelectedItems = async () => {
+    if (selectedItems.length === 0) return;
+    const label =
+      selectedItems.length === 1
+        ? `Remove item ${selectedItems[0].id}?`
+        : `Remove ${selectedItems.length} selected items?`;
+    if (!window.confirm(`${label}\n\nThis archives the item(s) from inventory.`)) return;
+
+    setIsRemoving(true);
+    setActionError(null);
+    setActionMessage(null);
+
+    try {
+      for (const item of selectedItems) {
+        await api.post(`/inventory/${encodeURIComponent(item.id)}/archive`);
+      }
+      setSelectedIds([]);
+      setActionMessage(
+        selectedItems.length === 1
+          ? 'Item removed from inventory.'
+          : `${selectedItems.length} items removed from inventory.`
+      );
+      await loadItems();
+    } catch (err: any) {
+      const body = err?.response?.data;
+      setActionError(body?.error ?? body?.message ?? err?.message ?? 'Failed to remove item(s).');
+    } finally {
+      setIsRemoving(false);
+    }
+  };
+
+  const saveEdit = async () => {
+    if (!editItem || !editForm) return;
+
+    const familyCode = Number(editForm.code);
+    const subCode = Number(editForm.subCode);
+    if (!Number.isFinite(familyCode) || familyCode <= 0) {
+      setActionError('Enter a valid family code.');
+      return;
+    }
+    if (!Number.isFinite(subCode) || subCode < 0) {
+      setActionError('Enter a valid sub code price.');
+      return;
+    }
+    if (!editForm.colorId) {
+      setActionError('Choose a color.');
+      return;
+    }
+
+    const payload: Record<string, unknown> = {
+      version: editItem.version ?? 0,
+      code: familyCode,
+      subCode,
+      colorId: editForm.colorId,
+      costPrice: subCode,
+    };
+
+    if (editItem.type === 'ROLL' || editItem.type === 'REMANENT') {
+      const meters = Number(editForm.meters);
+      if (!Number.isFinite(meters) || meters <= 0) {
+        setActionError('Enter valid meters.');
+        return;
+      }
+      payload.meters = meters;
+    }
+
+    if (editItem.type === 'PIECE' && !editItem.isPiecePackage) {
+      const pieceLength = Number(editForm.pieceLength);
+      const quantity = Number(editForm.quantity);
+      if (!Number.isFinite(pieceLength) || pieceLength <= 0) {
+        setActionError('Enter valid piece length.');
+        return;
+      }
+      if (!Number.isFinite(quantity) || quantity < 0 || !Number.isInteger(quantity)) {
+        setActionError('Enter a valid whole piece quantity.');
+        return;
+      }
+      payload.pieceLength = pieceLength;
+      payload.quantity = quantity;
+    }
+
+    if (editItem.type === 'PIECE' && editItem.isPiecePackage) {
+      const quantity = Number(editForm.quantity);
+      if (!Number.isFinite(quantity) || quantity < 0 || !Number.isInteger(quantity)) {
+        setActionError('Enter a valid whole package quantity.');
+        return;
+      }
+      payload.quantity = quantity;
+    }
+
+    setIsSavingEdit(true);
+    setActionError(null);
+
+    try {
+      const response = await api.patch(`/inventory/${encodeURIComponent(editItem.id)}`, payload);
+      const updatedId = response.data?.item?.id ?? editItem.id;
+      setActionMessage(
+        updatedId === editItem.id
+          ? `Updated item ${updatedId}.`
+          : `Updated item. New ID: ${updatedId}`
+      );
+      setSelectedIds((current) => current.map((id) => (id === editItem.id ? updatedId : id)));
+      closeEditModal();
+      await loadItems();
+    } catch (err: any) {
+      const body = err?.response?.data;
+      setActionError(body?.error ?? body?.message ?? err?.message ?? 'Failed to update item.');
+    } finally {
+      setIsSavingEdit(false);
+    }
+  };
 
   const runQrSearch = async (rawValue?: string) => {
     const query = (rawValue ?? scanQuery).trim();
@@ -485,11 +662,53 @@ const InventoryView: React.FC = () => {
 
       {loading && <div className="text-gray-600">Loading inventory...</div>}
       {error && <div className="mb-4 text-red-600">Error: {error}</div>}
+      {actionMessage && (
+        <div className="mb-4 rounded-2xl border border-green-200 bg-green-50 p-4 text-sm text-green-700">
+          {actionMessage}
+        </div>
+      )}
+      {actionError && (
+        <div className="mb-4 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          {actionError}
+        </div>
+      )}
+
+      {canManageInventory && (
+        <div className="mb-4 flex flex-wrap items-center gap-3 rounded-2xl border border-gray-200 bg-white p-4">
+          <p className="text-sm text-gray-600">
+            {selectedIds.length === 0
+              ? 'Select item(s) in the table to edit or remove.'
+              : `${selectedIds.length} item(s) selected`}
+          </p>
+          <button
+            type="button"
+            className="rounded-xl border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-800 disabled:opacity-50"
+            disabled={selectedIds.length !== 1 || isSavingEdit || isRemoving}
+            onClick={() => {
+              const item = selectedItems[0];
+              if (item) openEditForItem(item);
+            }}
+          >
+            Edit selected
+          </button>
+          <button
+            type="button"
+            className="rounded-xl border border-red-300 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700 disabled:opacity-50"
+            disabled={selectedIds.length === 0 || isSavingEdit || isRemoving}
+            onClick={removeSelectedItems}
+          >
+            {isRemoving ? 'Removing...' : 'Remove selected'}
+          </button>
+        </div>
+      )}
 
       <div className="overflow-x-auto">
         <table className="w-full rounded-lg border border-gray-200 bg-white">
           <thead>
             <tr className="bg-gray-50">
+              {canManageInventory && (
+                <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">Select</th>
+              )}
               <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">ID</th>
               <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">Branch</th>
               <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">Family</th>
@@ -514,7 +733,22 @@ const InventoryView: React.FC = () => {
                 : '—';
 
               return (
-                <tr key={item.id} className="border-t transition-colors hover:bg-gray-50">
+                <tr
+                  key={item.id}
+                  className={`border-t transition-colors hover:bg-gray-50 ${
+                    selectedIds.includes(item.id) ? 'bg-magenta-50' : ''
+                  }`}
+                >
+                  {canManageInventory && (
+                    <td className="px-4 py-2">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.includes(item.id)}
+                        onChange={() => toggleSelected(item.id)}
+                        aria-label={`Select ${item.id}`}
+                      />
+                    </td>
+                  )}
                   <td className="px-4 py-2 text-sm text-gray-800">{item.id}</td>
                   <td className="px-4 py-2 text-sm text-gray-800">
                     {BRANCH_CODE_BY_ID[item.branchId] ?? item.branch?.name ?? item.branchId}
@@ -538,6 +772,151 @@ const InventoryView: React.FC = () => {
       {items.length === 0 && !loading && (
         <div className="mt-4 text-center text-gray-500">
           No inventory items found. Use <Link to="/item-input" className="font-semibold text-magenta-600">New Item</Link> to add stock.
+        </div>
+      )}
+
+      {editItem && editForm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-3xl bg-white p-6 shadow-xl">
+            <h3 className="text-xl font-semibold text-black">Edit inventory item</h3>
+            <p className="mt-1 break-all text-sm text-gray-500">{editItem.id}</p>
+            <p className="mt-2 text-sm text-gray-600">
+              Fix family code, price, color, or stock details entered incorrectly in New Item.
+              Changing code, price, or color may generate a new item ID.
+            </p>
+
+            <div className="mt-4 grid gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Family code</label>
+                <input
+                  type="number"
+                  min="1"
+                  value={editForm.code}
+                  onChange={(event) =>
+                    setEditForm((current) => current && { ...current, code: event.target.value })
+                  }
+                  className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Sub code (price)</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={editForm.subCode}
+                  onChange={(event) =>
+                    setEditForm((current) => current && { ...current, subCode: event.target.value })
+                  }
+                  className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Color</label>
+                <select
+                  value={editForm.colorId}
+                  onChange={(event) =>
+                    setEditForm((current) => current && { ...current, colorId: event.target.value })
+                  }
+                  className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
+                >
+                  {colors.map((color) => (
+                    <option key={color.id} value={color.id}>
+                      {color.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {(editItem.type === 'ROLL' || editItem.type === 'REMANENT') && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Meters</label>
+                  <input
+                    type="number"
+                    min="0.01"
+                    step="0.01"
+                    value={editForm.meters}
+                    onChange={(event) =>
+                      setEditForm((current) => current && { ...current, meters: event.target.value })
+                    }
+                    className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
+                  />
+                </div>
+              )}
+
+              {editItem.type === 'PIECE' && !editItem.isPiecePackage && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Piece length (m)</label>
+                    <input
+                      type="number"
+                      min="0.01"
+                      step="0.01"
+                      value={editForm.pieceLength}
+                      onChange={(event) =>
+                        setEditForm((current) =>
+                          current && { ...current, pieceLength: event.target.value }
+                        )
+                      }
+                      className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Quantity</label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={editForm.quantity}
+                      onChange={(event) =>
+                        setEditForm((current) =>
+                          current && { ...current, quantity: event.target.value }
+                        )
+                      }
+                      className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
+                    />
+                  </div>
+                </>
+              )}
+
+              {editItem.type === 'PIECE' && editItem.isPiecePackage && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Package quantity</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={editForm.quantity}
+                    onChange={(event) =>
+                      setEditForm((current) =>
+                        current && { ...current, quantity: event.target.value }
+                      )
+                    }
+                    className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="mt-6 flex flex-wrap gap-3">
+              <button
+                type="button"
+                className="btn-primary"
+                disabled={isSavingEdit}
+                onClick={saveEdit}
+              >
+                {isSavingEdit ? 'Saving...' : 'Save changes'}
+              </button>
+              <button
+                type="button"
+                className="rounded-xl border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700"
+                onClick={closeEditModal}
+                disabled={isSavingEdit}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
