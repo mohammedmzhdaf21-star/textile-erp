@@ -11,6 +11,7 @@ type InventoryItem = {
   id: string;
   branchId: string;
   code: number;
+  subCode?: number | string;
   colorId: string;
   color?: { id: string; name: string; hexCode?: string };
   branch?: { id: string; name: string };
@@ -58,6 +59,9 @@ const soldAsUnitForItem = (item: InventoryItem): SoldUnit =>
 
 const itemAvailableAmount = (item: InventoryItem) =>
   item.type === 'PIECE' ? item.quantity : toNumber(item.meters);
+
+const itemSubCode = (item: InventoryItem) =>
+  toNumber(item.subCode ?? item.costPrice ?? 0);
 
 const colorCodeForItem = (item: InventoryItem) =>
   (item.color?.name || item.colorId)
@@ -189,6 +193,7 @@ const ItemConversion: React.FC = () => {
         id: newItemId,
         branchId: destinationBranchId,
         code: transferSource.code,
+        subCode: itemSubCode(transferSource),
         colorId: transferSource.colorId,
         type: transferSource.type,
         meters: transferSource.type === 'PIECE' ? undefined : amount,
@@ -255,6 +260,7 @@ const ItemConversion: React.FC = () => {
         id: newItemId,
         branchId: rollSource.branchId,
         code: rollSource.code,
+        subCode: itemSubCode(rollSource),
         colorId: rollSource.colorId,
         type: 'PIECE',
         pieceLength: amount,
