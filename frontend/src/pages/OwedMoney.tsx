@@ -106,7 +106,20 @@ const OwedMoney: React.FC = () => {
   const [localPayments, setLocalPayments] = useState<OwedPayment[]>(() => readOwedPayments());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [paymentSale, setPaymentSale] = useState<OwedRow | null>(null);
+  const [paymentAmount, setPaymentAmount] = useState('');
+  const [paymentError, setPaymentError] = useState<string | null>(null);
   const navigate = useNavigate();
+
+  const paymentAmountNumber = toMoneyNumber(paymentAmount);
+  const paymentRemainingAfter =
+    paymentSale === null
+      ? 0
+      : Math.max(0, paymentSale.outstandingAmount - paymentAmountNumber);
+  const paymentSettlesFull =
+    paymentSale !== null &&
+    paymentAmountNumber > 0 &&
+    paymentAmountNumber >= paymentSale.outstandingAmount - 0.001;
 
   const owedRows = useMemo<OwedRow[]>(() => {
     if (!selectedBranch) return [];
@@ -170,19 +183,46 @@ const OwedMoney: React.FC = () => {
     }
   };
 
-  const payNow = (sale: OwedRow) => {
-    if (!selectedBranch || sale.outstandingAmount <= 0) return;
+  const openPaymentModal = (sale: OwedRow) => {
+    if (sale.outstandingAmount <= 0) return;
+    setPaymentSale(sale);
+    setPaymentAmount(sale.outstandingAmount.toFixed(2));
+    setPaymentError(null);
+  };
+
+  const closePaymentModal = () => {
+    setPaymentSale(null);
+    setPaymentAmount('');
+    setPaymentError(null);
+  };
+
+  const recordPayment = () => {
+    if (!selectedBranch || !paymentSale) return;
+
+    const amount = toMoneyNumber(paymentAmount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setPaymentError('Enter a payment amount greater than zero.');
+      return;
+    }
+    if (amount > paymentSale.outstandingAmount + 0.001) {
+      setPaymentError(
+        `Payment cannot exceed the outstanding balance of $${paymentSale.outstandingAmount.toFixed(2)}.`
+      );
+      return;
+    }
+
     const payment: OwedPayment = {
-      saleId: sale.id,
+      saleId: paymentSale.id,
       branchId: BRANCH_MAP[selectedBranch],
-      amount: sale.outstandingAmount,
+      amount,
       paidAt: new Date().toISOString(),
-      customerName: sale.customerName,
-      employeeName: sale.employee?.name || sale.employeeName,
+      customerName: paymentSale.customerName,
+      employeeName: paymentSale.employee?.name || paymentSale.employeeName,
     };
     const nextPayments = [...readOwedPayments(), payment];
     writeOwedPayments(nextPayments);
     setLocalPayments(nextPayments);
+    closePaymentModal();
   };
 
   const rowClass = (sale: OwedRow) => {
@@ -196,7 +236,7 @@ const OwedMoney: React.FC = () => {
         <div>
           <h2 className="text-2xl font-bold text-black">Owed Money</h2>
           <p className="mt-1 max-w-xl text-sm text-gray-600">
-            Track partially paid or unpaid sales by branch. Pay Now is a frontend stub until backend arrears endpoints are added.
+            Track partially paid or unpaid sales by branch. Record customer payments and see whether each payment settles the balance or leaves money still owed.
           </p>
         </div>
         <div className="text-sm text-gray-500">
@@ -294,7 +334,7 @@ const OwedMoney: React.FC = () => {
 
                     <button
                       type="button"
-                      onClick={() => payNow(sale)}
+                      onClick={() => openPaymentModal(sale)}
                       disabled={sale.outstandingAmount <= 0}
                       className={`rounded-2xl px-4 py-2 text-sm font-semibold ${
                         sale.outstandingAmount <= 0
@@ -302,7 +342,7 @@ const OwedMoney: React.FC = () => {
                           : 'bg-black text-white hover:bg-gray-800'
                       }`}
                     >
-                      {sale.outstandingAmount <= 0 ? 'Settled' : 'Pay Now'}
+                      {sale.outstandingAmount <= 0 ? 'Settled' : 'Record Payment'}
                     </button>
                   </div>
                 </div>
@@ -310,6 +350,94 @@ const OwedMoney: React.FC = () => {
             </div>
           )}
         </section>
+      )}
+
+      {paymentSale && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-xl">
+            <h3 className="text-xl font-semibold text-black">Record customer payment</h3>
+            <p className="mt-1 text-sm text-gray-600">
+              {paymentSale.customerName || 'Unknown customer'} · Sale {paymentSale.id}
+            </p>
+
+            <div className="mt-4 grid grid-cols-2 gap-3 rounded-2xl bg-gray-50 p-4 text-sm">
+              <div>
+                <div className="text-gray-500">Total sale</div>
+                <div className="font-bold text-black">${paymentSale.totalAmount.toFixed(2)}</div>
+              </div>
+              <div>
+                <div className="text-gray-500">Already paid</div>
+                <div className="font-bold text-green-700">${paymentSale.paidAmount.toFixed(2)}</div>
+              </div>
+              <div className="col-span-2">
+                <div className="text-gray-500">Still owed</div>
+                <div className="font-bold text-red-700">${paymentSale.outstandingAmount.toFixed(2)}</div>
+              </div>
+            </div>
+
+            <label className="mt-4 block text-sm font-medium text-gray-700">
+              Amount customer is paying now
+            </label>
+            <input
+              type="number"
+              min="0.01"
+              step="0.01"
+              max={paymentSale.outstandingAmount}
+              value={paymentAmount}
+              onChange={(event) => {
+                setPaymentAmount(event.target.value);
+                setPaymentError(null);
+              }}
+              className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
+              autoFocus
+            />
+
+            {paymentAmountNumber > 0 && (
+              <div
+                className={`mt-4 rounded-2xl border p-4 text-sm ${
+                  paymentSettlesFull
+                    ? 'border-green-200 bg-green-50 text-green-800'
+                    : 'border-amber-200 bg-amber-50 text-amber-900'
+                }`}
+              >
+                {paymentSettlesFull ? (
+                  <>
+                    <p className="font-semibold">This payment settles the full balance.</p>
+                    <p className="mt-1">After payment, nothing will remain owed on this sale.</p>
+                  </>
+                ) : (
+                  <>
+                    <p className="font-semibold">This is a partial payment.</p>
+                    <p className="mt-1">
+                      After payment,{' '}
+                      <span className="font-bold">${paymentRemainingAfter.toFixed(2)}</span> will still
+                      be owed.
+                    </p>
+                  </>
+                )}
+              </div>
+            )}
+
+            {paymentError && (
+              <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                {paymentError}
+              </div>
+            )}
+
+            <div className="mt-6 flex flex-wrap gap-3">
+              <button type="button" className="btn-primary" onClick={recordPayment}>
+                Save payment
+              </button>
+              <button
+                type="button"
+                className="rounded-xl border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700"
+                onClick={closePaymentModal}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
