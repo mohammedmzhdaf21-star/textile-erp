@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../lib/api';
+import { useTranslation } from 'react-i18next';
 
 type Sale = {
   id: string;
@@ -153,6 +154,7 @@ const saleBorderClass = (sale: Sale) => {
 };
 
 const HistorySales: React.FC = () => {
+  const { t } = useTranslation();
   const [selectedBranch, setSelectedBranch] = useState<BranchId | null>(null);
   const [buckets, setBuckets] = useState<DateBucket[]>([]);
   const [selectedDateKey, setSelectedDateKey] = useState<string | null>(null);
@@ -171,7 +173,7 @@ const HistorySales: React.FC = () => {
     const sales = selectedBucket?.sales || [];
 
     sales.forEach((sale) => {
-      const employeeName = sale.employee?.name || sale.employeeName || 'Unknown Employee';
+      const employeeName = sale.employee?.name || sale.employeeName || t('common.unknownEmployee');
       const amount = saleCashAmount(sale);
 
       if (!groups[employeeName]) {
@@ -223,7 +225,7 @@ const HistorySales: React.FC = () => {
       setBuckets([]);
       setError(
         `Request failed${status ? ` (status ${status})` : ''}: ${
-          body?.error ?? body?.message ?? err?.message ?? 'Failed to load history sales'
+          body?.error ?? body?.message ?? err?.message ?? t('historySales.failedToLoad')
         }`
       );
     } finally {
@@ -235,13 +237,13 @@ const HistorySales: React.FC = () => {
     <div className="max-w-full overflow-x-hidden p-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-black">History Sales</h2>
+          <h2 className="text-2xl font-bold text-black">{t('historySales.title')}</h2>
           <p className="mt-1 max-w-xl text-sm text-gray-600">
             Select a branch, choose a past date, and review sales from 09:00 to 02:00 the next day.
           </p>
         </div>
         <div className="text-sm text-gray-500">
-          {selectedBranch ? `Branch ${selectedBranch}` : 'Select a branch'}
+          {selectedBranch ? t('historySales.branchSelected', { branch: selectedBranch }) : t('common.selectBranch')}
         </div>
       </div>
 
@@ -268,13 +270,13 @@ const HistorySales: React.FC = () => {
       {selectedBranch && (
         <section className="mt-8 space-y-6">
           <div className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
-            <h3 className="text-xl font-semibold text-black">Past dates for Branch {selectedBranch}</h3>
+            <h3 className="text-xl font-semibold text-black">{t('historySales.pastDatesTitle', { branch: selectedBranch })}</h3>
             <p className="mt-1 text-sm text-gray-600">
               Today is excluded. Each date covers 09:00 through 02:00 the next day.
             </p>
 
             {loading ? (
-              <div className="mt-4 rounded-2xl bg-gray-50 p-4 text-sm text-gray-600">Loading history...</div>
+              <div className="mt-4 rounded-2xl bg-gray-50 p-4 text-sm text-gray-600">{t('historySales.loadingHistory')}</div>
             ) : error ? (
               <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
                 {error}
@@ -356,7 +358,7 @@ const HistorySales: React.FC = () => {
                           >
                             <div className="flex items-center justify-between gap-3">
                               <div>
-                                <div className="break-all text-sm font-semibold text-black">Sale ID: {sale.id}</div>
+                                <div className="break-all text-sm font-semibold text-black">{t('historySales.saleIdLabel', { id: sale.id })}</div>
                                 <div className="mt-1 text-xs text-gray-500">{formatTime(sale.createdAt)}</div>
                                 <div className={`mt-2 text-sm font-bold ${amount < 0 ? 'text-red-600' : 'text-magenta-600'}`}>
                                   {`Cash impact: ${amount < 0 ? '-' : ''}$${Math.abs(amount).toFixed(2)}`}

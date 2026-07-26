@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import api from '../lib/api';
 import { formatPackageComponentsSold } from '../lib/piecePackages';
+import { useTranslation } from 'react-i18next';
 
 type SaleItem = {
   id: string;
@@ -38,6 +39,7 @@ const formatCurrency = (value: string | number) => {
 };
 
 const SaleDetail: React.FC = () => {
+  const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const location = useLocation();
@@ -49,7 +51,7 @@ const SaleDetail: React.FC = () => {
 
   useEffect(() => {
     if (!id) {
-      setError('Sale ID is missing');
+      setError(t('saleDetail.saleIdMissing'));
       return;
     }
 
@@ -66,7 +68,7 @@ const SaleDetail: React.FC = () => {
         const body = err?.response?.data;
         setError(
           `Request failed${status ? ` (status ${status})` : ''}: ${
-            body?.error ?? body?.message ?? err?.message ?? 'Failed to load sale'
+            body?.error ?? body?.message ?? err?.message ?? t('saleDetail.failedToLoad')
           }`
         );
         console.error('Sale detail load error:', err);
@@ -78,9 +80,9 @@ const SaleDetail: React.FC = () => {
     <div className="max-w-full overflow-x-hidden p-4">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-black">Sale Detail</h2>
+          <h2 className="text-2xl font-bold text-black">{t('saleDetail.title')}</h2>
           <p className="text-sm text-gray-600 max-w-xl">
-            View the sale details and line items for this transaction.
+            {t('saleDetail.subtitle')}
           </p>
         </div>
         <button
@@ -122,27 +124,27 @@ const SaleDetail: React.FC = () => {
               <div className={`rounded-3xl border p-6 shadow-sm ${borderClass}`}>
                 <div className="grid gap-4 md:grid-cols-2">
                   <div>
-                    <div className="text-sm text-gray-500">Sale ID</div>
+                    <div className="text-sm text-gray-500">{t('saleDetail.saleId')}</div>
                     <div className="break-all text-lg font-semibold text-black">{sale.id}</div>
                   </div>
                   <div>
-                    <div className="text-sm text-gray-500">Created</div>
+                    <div className="text-sm text-gray-500">{t('saleDetail.created')}</div>
                     <div className="text-lg font-semibold text-black">{new Date(sale.createdAt).toLocaleString()}</div>
                   </div>
                   <div>
-                    <div className="text-sm text-gray-500">Branch</div>
+                    <div className="text-sm text-gray-500">{t('saleDetail.branch')}</div>
                     <div className="text-lg font-semibold text-black">{sale.branch.name}</div>
                   </div>
                   <div>
-                    <div className="text-sm text-gray-500">Employee</div>
+                    <div className="text-sm text-gray-500">{t('saleDetail.employee')}</div>
                     <div className="text-lg font-semibold text-black">{sale.employee.name}</div>
                   </div>
                   <div>
-                    <div className="text-sm text-gray-500">Customer</div>
+                    <div className="text-sm text-gray-500">{t('saleDetail.customer')}</div>
                     <div className="break-words text-lg font-semibold text-black">{sale.customerName}</div>
                   </div>
                   <div>
-                    <div className="text-sm text-gray-500">Phone</div>
+                    <div className="text-sm text-gray-500">{t('saleDetail.phone')}</div>
                     <div className="text-lg font-semibold text-black">{sale.customerPhone}</div>
                   </div>
                 </div>
@@ -152,15 +154,15 @@ const SaleDetail: React.FC = () => {
 
           <div className="grid gap-4 lg:grid-cols-3">
             <div className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
-              <div className="text-sm text-gray-500">Total Price</div>
+              <div className="text-sm text-gray-500">{t('saleDetail.totalPrice')}</div>
               <div className="mt-2 text-2xl font-bold text-black">{formatCurrency(sale.totalPrice)}</div>
             </div>
             <div className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
-              <div className="text-sm text-gray-500">Discount</div>
+              <div className="text-sm text-gray-500">{t('saleDetail.discount')}</div>
               <div className="mt-2 text-2xl font-bold text-black">{formatCurrency(sale.discount)}</div>
             </div>
             <div className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
-              <div className="text-sm text-gray-500">Payment Method</div>
+              <div className="text-sm text-gray-500">{t('saleDetail.paymentMethod')}</div>
               <div className="mt-2 text-2xl font-bold text-black">{sale.paymentMethod}</div>
             </div>
           </div>
@@ -180,18 +182,18 @@ const SaleDetail: React.FC = () => {
 
             return isPartial ? (
               <div className="rounded-3xl border border-red-200 bg-red-50 p-6 shadow-sm">
-                <h3 className="text-lg font-semibold text-black">Payment Breakdown</h3>
+                <h3 className="text-lg font-semibold text-black">{t('saleDetail.paymentBreakdown')}</h3>
                 <div className="mt-4 grid gap-4 md:grid-cols-3">
                   <div>
-                    <div className="text-sm text-gray-600">Total Price</div>
+                    <div className="text-sm text-gray-600">{t('saleDetail.totalPrice')}</div>
                     <div className="mt-1 text-xl font-bold text-black">{formatCurrency(totalPrice)}</div>
                   </div>
                   <div>
-                    <div className="text-sm text-gray-600">Customer Paid</div>
+                    <div className="text-sm text-gray-600">{t('saleDetail.customerPaid')}</div>
                     <div className="mt-1 text-xl font-bold text-green-600">{formatCurrency(paidAmount)}</div>
                   </div>
                   <div>
-                    <div className="text-sm text-gray-600">Remaining Due</div>
+                    <div className="text-sm text-gray-600">{t('saleDetail.remainingDue')}</div>
                     <div className="mt-1 text-xl font-bold text-red-600">{formatCurrency(remainingDue)}</div>
                   </div>
                 </div>
@@ -201,13 +203,13 @@ const SaleDetail: React.FC = () => {
 
           {sale.notes ? (
             <div className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
-              <div className="text-sm text-gray-500">Notes</div>
+              <div className="text-sm text-gray-500">{t('saleDetail.notes')}</div>
               <div className="mt-2 break-words text-sm text-gray-700">{sale.notes}</div>
             </div>
           ) : null}
 
           <div className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
-            <h3 className="text-lg font-semibold text-black">Line Items</h3>
+            <h3 className="text-lg font-semibold text-black">{t('saleDetail.lineItems')}</h3>
             <div className="mt-4 space-y-4">
               {sale.items.map((item) => (
                 <div key={item.id} className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
@@ -215,11 +217,11 @@ const SaleDetail: React.FC = () => {
                     <div>
                       <div className="break-all text-sm font-semibold text-black">
                         {item.isPlainCloth
-                          ? item.plainClothName || 'Plain Cloth'
+                          ? item.plainClothName || t('common.plainCloth')
                           : `Inventory Item ${item.inventoryItemId}`}
                       </div>
                       <div className="text-xs text-gray-500">
-                        {item.isPlainCloth ? 'Plain cloth line' : `Color: ${item.color?.name}`}
+                        {item.isPlainCloth ? t('common.plainClothLine') : t('saleDetail.colorLabel', { name: item.color?.name })}
                       </div>
                     </div>
                     <div className="text-sm text-gray-700">

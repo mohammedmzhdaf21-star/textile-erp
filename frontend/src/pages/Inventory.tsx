@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import api from '../lib/api';
 import { getCurrentUser } from '../lib/auth';
@@ -10,8 +11,8 @@ import {
   BRANCH_ID_BY_CODE,
   formatStockBreakdownLine,
   formatSubCode,
+  getItemTypeLabel,
   hasStockForType,
-  ITEM_TYPE_LABELS,
   parseInventoryItemId,
   stockAmountForType,
   totalStockForType,
@@ -50,6 +51,7 @@ type EditFormState = {
 const ITEM_TYPES: InventoryItemType[] = ['ROLL', 'PIECE', 'REMANENT'];
 
 const InventoryView: React.FC = () => {
+  const { t } = useTranslation();
   const currentUser = getCurrentUser();
   const canManageInventory =
     currentUser?.role === 'ADMIN' || currentUser?.role === 'MANAGER';
@@ -94,9 +96,10 @@ const InventoryView: React.FC = () => {
         const status = err?.response?.status;
         const body = err?.response?.data;
         setError(
-          `Request failed${status ? ` (status ${status})` : ''}: ${
-            body?.error ?? body?.message ?? err?.message ?? 'Failed to load inventory'
-          }`
+          t('common.requestFailed', {
+            status: status ? t('common.requestFailedStatus', { status }) : '',
+            message: body?.error ?? body?.message ?? err?.message ?? t('inventory.failedToLoad'),
+          })
         );
         console.error('Inventory load error:', err);
       })
@@ -149,9 +152,9 @@ const InventoryView: React.FC = () => {
     if (selectedItems.length === 0) return;
     const label =
       selectedItems.length === 1
-        ? `Remove item ${selectedItems[0].id}?`
-        : `Remove ${selectedItems.length} selected items?`;
-    if (!window.confirm(`${label}\n\nThis archives the item(s) from inventory.`)) return;
+        ? t('inventory.removeConfirmSingle', { id: selectedItems[0].id })
+        : t('inventory.removeConfirmMultiple', { count: selectedItems.length });
+    if (!window.confirm(`${label}\n\n${t('inventory.removeConfirmNote')}`)) return;
 
     setIsRemoving(true);
     setActionError(null);
@@ -164,13 +167,13 @@ const InventoryView: React.FC = () => {
       setSelectedIds([]);
       setActionMessage(
         selectedItems.length === 1
-          ? 'Item removed from inventory.'
-          : `${selectedItems.length} items removed from inventory.`
+          ? t('inventory.itemRemoved')
+          : t('inventory.itemsRemoved', { count: selectedItems.length })
       );
       await loadItems();
     } catch (err: any) {
       const body = err?.response?.data;
-      setActionError(body?.error ?? body?.message ?? err?.message ?? 'Failed to remove item(s).');
+      setActionError(body?.error ?? body?.message ?? err?.message ?? t('inventory.failedToRemove'));
     } finally {
       setIsRemoving(false);
     }
@@ -182,15 +185,15 @@ const InventoryView: React.FC = () => {
     const familyCode = Number(editForm.code);
     const subCode = Number(editForm.subCode);
     if (!Number.isFinite(familyCode) || familyCode <= 0) {
-      setActionError('Enter a valid family code.');
+      setActionError(t('inventory.enterValidFamilyCode'));
       return;
     }
     if (!Number.isFinite(subCode) || subCode < 0) {
-      setActionError('Enter a valid sub code price.');
+      setActionError(t('inventory.enterValidSubCode'));
       return;
     }
     if (!editForm.colorId) {
-      setActionError('Choose a color.');
+      setActionError(t('inventory.chooseColor'));
       return;
     }
 
@@ -205,7 +208,7 @@ const InventoryView: React.FC = () => {
     if (editItem.type === 'ROLL' || editItem.type === 'REMANENT') {
       const meters = Number(editForm.meters);
       if (!Number.isFinite(meters) || meters <= 0) {
-        setActionError('Enter valid meters.');
+        setActionError(t('inventory.enterValidMeters'));
         return;
       }
       payload.meters = meters;
@@ -215,11 +218,11 @@ const InventoryView: React.FC = () => {
       const pieceLength = Number(editForm.pieceLength);
       const quantity = Number(editForm.quantity);
       if (!Number.isFinite(pieceLength) || pieceLength <= 0) {
-        setActionError('Enter valid piece length.');
+        setActionError(t('inventory.enterValidPieceLength'));
         return;
       }
       if (!Number.isFinite(quantity) || quantity < 0 || !Number.isInteger(quantity)) {
-        setActionError('Enter a valid whole piece quantity.');
+        setActionError(t('inventory.enterValidPieceQuantity'));
         return;
       }
       payload.pieceLength = pieceLength;
@@ -229,7 +232,7 @@ const InventoryView: React.FC = () => {
     if (editItem.type === 'PIECE' && editItem.isPiecePackage) {
       const quantity = Number(editForm.quantity);
       if (!Number.isFinite(quantity) || quantity < 0 || !Number.isInteger(quantity)) {
-        setActionError('Enter a valid whole package quantity.');
+        setActionError(t('inventory.enterValidPackageQuantity'));
         return;
       }
       payload.quantity = quantity;
@@ -243,15 +246,15 @@ const InventoryView: React.FC = () => {
       const updatedId = response.data?.item?.id ?? editItem.id;
       setActionMessage(
         updatedId === editItem.id
-          ? `Updated item ${updatedId}.`
-          : `Updated item. New ID: ${updatedId}`
+          ? t('inventory.updatedItem', { id: updatedId })
+          : t('inventory.updatedItemNewId', { id: updatedId })
       );
       setSelectedIds((current) => current.map((id) => (id === editItem.id ? updatedId : id)));
       closeEditModal();
       await loadItems();
     } catch (err: any) {
       const body = err?.response?.data;
-      setActionError(body?.error ?? body?.message ?? err?.message ?? 'Failed to update item.');
+      setActionError(body?.error ?? body?.message ?? err?.message ?? t('inventory.failedToUpdate'));
     } finally {
       setIsSavingEdit(false);
     }
@@ -260,7 +263,7 @@ const InventoryView: React.FC = () => {
   const runQrSearch = async (rawValue?: string) => {
     const query = (rawValue ?? scanQuery).trim();
     if (!query) {
-      setSearchError('Scan or enter a QR item ID.');
+      setSearchError(t('inventory.scanOrEnterQr'));
       return;
     }
 
@@ -286,7 +289,7 @@ const InventoryView: React.FC = () => {
       } catch {
         const parsed = parseInventoryItemId(query);
         if (!parsed.familyCode) {
-          throw new Error('Could not read family code from this QR. Use a valid inventory item ID.');
+          throw new Error(t('inventory.couldNotReadFamilyCode'));
         }
         familyCode = parsed.familyCode;
         subCode = parsed.subCode ?? null;
@@ -310,14 +313,14 @@ const InventoryView: React.FC = () => {
 
         const matched = colorMatches[0] ?? (list as InventoryItemView[])[0];
         if (!matched) {
-          throw new Error(`No inventory found for family code ${familyCode}.`);
+          throw new Error(t('inventory.noInventoryForFamily', { code: familyCode }));
         }
         colorId = matched.colorId;
         colorName = matched.color?.name ?? null;
       }
 
       if (!familyCode || !colorId) {
-        throw new Error('Could not determine family code and color from this scan.');
+        throw new Error(t('inventory.couldNotDetermineScan'));
       }
 
       const stockResponse = await api.get('/inventory', {
@@ -328,7 +331,7 @@ const InventoryView: React.FC = () => {
         : stockResponse.data?.items ?? [];
 
       setSearchFamilyCode(familyCode);
-      setSearchColor({ id: colorId, name: colorName ?? 'Unknown color' });
+      setSearchColor({ id: colorId, name: colorName ?? t('common.unknownColor') });
       setSearchSubCode(subCode);
       setSelectedType(scannedType);
       setFamilyStock(aggregateFamilyStock(stockItems as InventoryStockItem[], familyCode, colorId));
@@ -336,7 +339,7 @@ const InventoryView: React.FC = () => {
       setScanQuery(query);
     } catch (err: any) {
       const body = err?.response?.data;
-      setSearchError(body?.error ?? err?.message ?? 'Search failed.');
+      setSearchError(body?.error ?? err?.message ?? t('inventory.searchFailed'));
       setSearchFamilyCode(null);
       setSearchColor(null);
       setSearchSubCode(null);
@@ -385,16 +388,16 @@ const InventoryView: React.FC = () => {
       const branch = BRANCH_DESTINATIONS.find((entry) => entry.id === stockBreakdownTarget);
       const row = familyStock.find((entry) => entry.branchId === stockBreakdownTarget);
       const amount = row ? stockAmountForType(row, selectedType) : '0';
-      return `${branch?.label ?? 'Branch'} · ${amount}`;
+      return `${t(branch?.labelKey ?? 'branches.labelLabel')} · ${amount}`;
     }
     return '';
   }, [familyStock, selectedType, stockBreakdownTarget]);
 
   const stockBreakdownHeading = useMemo(() => {
-    if (selectedType === 'PIECE') return 'Piece breakdown by length or package';
-    if (selectedType === 'ROLL') return 'Roll breakdown by size';
-    return 'Remnant breakdown by size';
-  }, [selectedType]);
+    if (selectedType === 'PIECE') return t('inventory.pieceBreakdown');
+    if (selectedType === 'ROLL') return t('inventory.rollBreakdown');
+    return t('inventory.remnantBreakdown');
+  }, [selectedType, t]);
 
   const packageStockRows = useMemo(() => {
     if (selectedType !== 'PIECE' || searchFamilyCode === null || !searchColor) return [];
@@ -403,7 +406,7 @@ const InventoryView: React.FC = () => {
         .filter((item) => item.isPiecePackage)
         .map((item) => ({
           branchId: row.branchId,
-          branchLabel: row.branchLabel,
+          branchLabel: t(row.branchLabelKey),
           branchCode: row.branchCode,
           item,
           packageSummary: formatPackageSummary(parsePackageComponents(item.packageComponents)),
@@ -426,21 +429,17 @@ const InventoryView: React.FC = () => {
     <div className="p-4">
       <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-black">Inventory</h2>
-          <p className="text-sm text-gray-500">
-            Scan a QR code to see roll, piece, and remnant stock for a family and color across all branches.
-          </p>
+          <h2 className="text-2xl font-bold text-black">{t('inventory.title')}</h2>
+          <p className="text-sm text-gray-500">{t('inventory.subtitle')}</p>
         </div>
         <Link to="/item-input" className="btn-primary text-center">
-          New Item
+          {t('nav.newItem')}
         </Link>
       </div>
 
       <section className="mb-6 rounded-3xl border border-gray-200 bg-white p-5 shadow-sm">
-        <h3 className="text-lg font-semibold text-black">QR search</h3>
-        <p className="mt-1 text-sm text-gray-500">
-          Scan or paste an item QR code. The app will find the family and color, then show stock in every branch.
-        </p>
+        <h3 className="text-lg font-semibold text-black">{t('inventory.qrSearchTitle')}</h3>
+        <p className="mt-1 text-sm text-gray-500">{t('inventory.qrSearchTitleDescription')}</p>
         <form
           className="mt-4 flex flex-col gap-3 sm:flex-row"
           onSubmit={(event) => {
@@ -452,11 +451,11 @@ const InventoryView: React.FC = () => {
             value={scanQuery}
             onChange={(event) => setScanQuery(event.target.value)}
             className="flex-1 rounded-xl border border-gray-300 px-4 py-3 text-sm"
-            placeholder="Scan QR code or enter item ID"
+            placeholder={t('inventory.scanPlaceholder')}
             autoFocus
           />
           <button type="submit" className="btn-primary" disabled={searchLoading}>
-            {searchLoading ? 'Searching...' : 'Search'}
+            {searchLoading ? t('common.searching') : t('common.search')}
           </button>
           {searchFamilyCode !== null && (
             <button
@@ -464,7 +463,7 @@ const InventoryView: React.FC = () => {
               className="rounded-xl border border-gray-300 px-4 py-3 text-sm font-semibold text-gray-700"
               onClick={clearSearch}
             >
-              Clear
+              {t('common.clear')}
             </button>
           )}
         </form>
@@ -480,15 +479,15 @@ const InventoryView: React.FC = () => {
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <p className="text-sm font-semibold text-black">
-                  Family {searchFamilyCode} · {searchColor.name}
-                  {searchSubCode !== null ? ` · Sub code $${formatSubCode(searchSubCode)}` : ''}
+                  {t('inventory.familyColor', { code: searchFamilyCode, color: searchColor.name })}
+                  {searchSubCode !== null ? t('inventory.subCodePrice', { price: formatSubCode(searchSubCode) }) : ''}
                 </p>
                 {searchScannedId && (
-                  <p className="mt-1 break-all text-xs text-gray-500">Scanned: {searchScannedId}</p>
+                  <p className="mt-1 break-all text-xs text-gray-500">{t('inventory.scanned', { id: searchScannedId })}</p>
                 )}
               </div>
               <p className="text-sm text-gray-600">
-                Total {ITEM_TYPE_LABELS[selectedType].toLowerCase()}:{' '}
+                {t('inventory.totalType', { type: getItemTypeLabel(t, selectedType).toLowerCase() })}{' '}
                 {overallHasStock ? (
                   <button
                     type="button"
@@ -518,17 +517,15 @@ const InventoryView: React.FC = () => {
                       : 'border border-gray-300 bg-white text-gray-700 hover:border-black'
                   }`}
                 >
-                  {ITEM_TYPE_LABELS[type]}
+                  {getItemTypeLabel(t, type)}
                 </button>
               ))}
             </div>
 
             {packageStockRows.length > 0 && selectedType === 'PIECE' && (
               <div className="mt-4 rounded-2xl border border-magenta-200 bg-magenta-50 p-4">
-                <p className="text-sm font-semibold text-black">Piece package stock</p>
-                <p className="mt-1 text-xs text-gray-600">
-                  Each row shows the package set and how many of each piece are in stock.
-                </p>
+                <p className="text-sm font-semibold text-black">{t('inventory.piecePackageStock')}</p>
+                <p className="mt-1 text-xs text-gray-600">{t('inventory.piecePackageStockDescription')}</p>
                 <div className="mt-3 space-y-2">
                   {packageStockRows.map((entry) => (
                     <div
@@ -538,9 +535,12 @@ const InventoryView: React.FC = () => {
                       <p className="font-semibold text-black">
                         {entry.branchLabel} · ${formatSubCode(Number(entry.item.subCode ?? entry.item.costPrice ?? 0))}
                       </p>
-                      <p className="mt-1 text-gray-700">Set: {entry.packageSummary}</p>
+                      <p className="mt-1 text-gray-700">{t('inventory.setLabel', { summary: entry.packageSummary })}</p>
                       <p className="mt-1 text-gray-700">
-                        {Number(entry.item.quantity ?? 0)} sealed package(s) · pieces in stock: {entry.stockSummary}
+                        {t('inventory.sealedPackages', {
+                          count: Number(entry.item.quantity ?? 0),
+                          stock: entry.stockSummary,
+                        })}
                       </p>
                     </div>
                   ))}
@@ -557,7 +557,7 @@ const InventoryView: React.FC = () => {
                     className="text-xs font-semibold text-gray-500 hover:text-black"
                     onClick={() => setStockBreakdownTarget(null)}
                   >
-                    Close
+                    {t('common.close')}
                   </button>
                 </div>
                 <p className="mt-1 text-xs text-gray-500">{stockBreakdownTitle}</p>
@@ -568,14 +568,19 @@ const InventoryView: React.FC = () => {
                       className="flex flex-col gap-1 rounded-xl border border-gray-200 px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between"
                     >
                       <span className="font-medium text-gray-800">
-                        {formatStockBreakdownLine(selectedType, entry)}
+                        {formatStockBreakdownLine(t, selectedType, entry)}
                       </span>
                       {stockBreakdownTarget === 'total' && entry.branches.length > 0 && (
                         <span className="text-xs text-gray-500">
                           {entry.branches
-                            .map(
-                              (branch) =>
-                                `${branch.branchCode === 'S' ? 'Storage' : `Branch ${branch.branchCode}`}: ${branch.count}`
+                            .map((branch) =>
+                              t('inventory.branchCount', {
+                                branch:
+                                  branch.branchCode === 'S'
+                                    ? t('common.storage')
+                                    : t('branches.label', { code: branch.branchCode }),
+                                count: branch.count,
+                              })
                             )
                             .join(' · ')}
                         </span>
@@ -602,9 +607,11 @@ const InventoryView: React.FC = () => {
                   >
                     <div className="flex items-center justify-between gap-3">
                       <div>
-                        <p className="text-sm font-semibold text-black">{destination.label}</p>
+                        <p className="text-sm font-semibold text-black">{t(destination.labelKey)}</p>
                         <p className="text-xs text-gray-500">
-                          {destination.code === 'S' ? 'Storage' : `Branch ${destination.code}`}
+                          {destination.code === 'S'
+                            ? t('common.storage')
+                            : t('branches.label', { code: destination.code })}
                         </p>
                       </div>
                       <div className="text-right">
@@ -623,7 +630,7 @@ const InventoryView: React.FC = () => {
                         ) : (
                           <p className="text-lg font-bold text-black">{amount}</p>
                         )}
-                        <p className="text-xs text-gray-500">{ITEM_TYPE_LABELS[selectedType]}</p>
+                        <p className="text-xs text-gray-500">{getItemTypeLabel(t, selectedType)}</p>
                       </div>
                     </div>
                   </div>
@@ -633,8 +640,11 @@ const InventoryView: React.FC = () => {
 
             {branchesWithStock.length === 0 && (
               <p className="mt-4 text-sm text-gray-500">
-                No {ITEM_TYPE_LABELS[selectedType].toLowerCase()} stock found for family {searchFamilyCode}{' '}
-                in color {searchColor.name} across any branch.
+                {t('inventory.noStockFound', {
+                  type: getItemTypeLabel(t, selectedType).toLowerCase(),
+                  code: searchFamilyCode,
+                  color: searchColor.name,
+                })}
               </p>
             )}
           </div>
@@ -653,15 +663,21 @@ const InventoryView: React.FC = () => {
               }`}
               onClick={() => setBranch(branch === destination.code ? null : destination.code)}
             >
-              {destination.code === 'S' ? 'Storage' : `Branch ${destination.code}`}
+              {destination.code === 'S'
+                ? t('common.storage')
+                : t('branches.label', { code: destination.code })}
             </button>
           ))}
         </div>
-        <p className="mt-2 text-sm text-gray-500">Table filter: {branch ? `Branch ${branch}` : 'All branches'}</p>
+        <p className="mt-2 text-sm text-gray-500">
+          {t('common.tableFilter', {
+            filter: branch ? t('branches.label', { code: branch }) : t('common.allBranches'),
+          })}
+        </p>
       </section>
 
-      {loading && <div className="text-gray-600">Loading inventory...</div>}
-      {error && <div className="mb-4 text-red-600">Error: {error}</div>}
+      {loading && <div className="text-gray-600">{t('inventory.loadingInventory')}</div>}
+      {error && <div className="mb-4 text-red-600">{t('common.error')}: {error}</div>}
       {actionMessage && (
         <div className="mb-4 rounded-2xl border border-green-200 bg-green-50 p-4 text-sm text-green-700">
           {actionMessage}
@@ -677,8 +693,8 @@ const InventoryView: React.FC = () => {
         <div className="mb-4 flex flex-wrap items-center gap-3 rounded-2xl border border-gray-200 bg-white p-4">
           <p className="text-sm text-gray-600">
             {selectedIds.length === 0
-              ? 'Select item(s) in the table to edit or remove.'
-              : `${selectedIds.length} item(s) selected`}
+              ? t('inventory.selectItemsHint')
+              : t('inventory.itemsSelected', { count: selectedIds.length })}
           </p>
           <button
             type="button"
@@ -689,7 +705,7 @@ const InventoryView: React.FC = () => {
               if (item) openEditForItem(item);
             }}
           >
-            Edit selected
+            {t('inventory.editSelected')}
           </button>
           <button
             type="button"
@@ -697,7 +713,7 @@ const InventoryView: React.FC = () => {
             disabled={selectedIds.length === 0 || isSavingEdit || isRemoving}
             onClick={removeSelectedItems}
           >
-            {isRemoving ? 'Removing...' : 'Remove selected'}
+            {isRemoving ? t('common.removing') : t('inventory.removeSelected')}
           </button>
         </div>
       )}
@@ -707,16 +723,16 @@ const InventoryView: React.FC = () => {
           <thead>
             <tr className="bg-gray-50">
               {canManageInventory && (
-                <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">Select</th>
+                <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('common.select')}</th>
               )}
-              <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">ID</th>
-              <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">Branch</th>
-              <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">Family</th>
-              <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">Sub code</th>
-              <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">Type</th>
-              <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">Color</th>
-              <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">Amount</th>
-              <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">Package pieces</th>
+              <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('common.id')}</th>
+              <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('branches.labelLabel')}</th>
+              <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('common.family')}</th>
+              <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('common.subCode')}</th>
+              <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('common.type')}</th>
+              <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('common.color')}</th>
+              <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('common.amount')}</th>
+              <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('common.packagePieces')}</th>
             </tr>
           </thead>
           <tbody>
@@ -756,8 +772,8 @@ const InventoryView: React.FC = () => {
                   <td className="px-4 py-2 text-sm text-gray-800">{item.code}</td>
                   <td className="px-4 py-2 text-sm text-gray-800">${formatSubCode(price)}</td>
                   <td className="px-4 py-2 text-sm text-gray-800">
-                    {ITEM_TYPE_LABELS[item.type as InventoryItemType] ?? item.type}
-                    {item.isPiecePackage ? ' (package)' : ''}
+                    {getItemTypeLabel(t, item.type as InventoryItemType) ?? item.type}
+                    {item.isPiecePackage ? t('inventory.packageSuffix') : ''}
                   </td>
                   <td className="px-4 py-2 text-sm text-gray-800">{item.color?.name ?? '-'}</td>
                   <td className="px-4 py-2 text-sm text-gray-800">{amount}</td>
@@ -771,23 +787,22 @@ const InventoryView: React.FC = () => {
 
       {items.length === 0 && !loading && (
         <div className="mt-4 text-center text-gray-500">
-          No inventory items found. Use <Link to="/item-input" className="font-semibold text-magenta-600">New Item</Link> to add stock.
+          {t('inventory.noItemsPrefix')}{' '}
+          <Link to="/item-input" className="font-semibold text-magenta-600">{t('nav.newItem')}</Link>{' '}
+          {t('inventory.noItemsSuffix')}
         </div>
       )}
 
       {editItem && editForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-3xl bg-white p-6 shadow-xl">
-            <h3 className="text-xl font-semibold text-black">Edit inventory item</h3>
+            <h3 className="text-xl font-semibold text-black">{t('inventory.editItemTitle')}</h3>
             <p className="mt-1 break-all text-sm text-gray-500">{editItem.id}</p>
-            <p className="mt-2 text-sm text-gray-600">
-              Fix family code, price, color, or stock details entered incorrectly in New Item.
-              Changing code, price, or color may generate a new item ID.
-            </p>
+            <p className="mt-2 text-sm text-gray-600">{t('inventory.editItemDescription')}</p>
 
             <div className="mt-4 grid gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700">Family code</label>
+                <label className="block text-sm font-medium text-gray-700">{t('inventory.familyCode')}</label>
                 <input
                   type="number"
                   min="1"
@@ -799,7 +814,7 @@ const InventoryView: React.FC = () => {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700">Sub code (price)</label>
+                <label className="block text-sm font-medium text-gray-700">{t('inventory.subCodePriceLabel')}</label>
                 <input
                   type="number"
                   min="0"
@@ -812,7 +827,7 @@ const InventoryView: React.FC = () => {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700">Color</label>
+                <label className="block text-sm font-medium text-gray-700">{t('common.color')}</label>
                 <select
                   value={editForm.colorId}
                   onChange={(event) =>
@@ -830,7 +845,7 @@ const InventoryView: React.FC = () => {
 
               {(editItem.type === 'ROLL' || editItem.type === 'REMANENT') && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">Meters</label>
+                  <label className="block text-sm font-medium text-gray-700">{t('common.meters')}</label>
                   <input
                     type="number"
                     min="0.01"
@@ -847,7 +862,7 @@ const InventoryView: React.FC = () => {
               {editItem.type === 'PIECE' && !editItem.isPiecePackage && (
                 <>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700">Piece length (m)</label>
+                    <label className="block text-sm font-medium text-gray-700">{t('inventory.pieceLength')}</label>
                     <input
                       type="number"
                       min="0.01"
@@ -862,7 +877,7 @@ const InventoryView: React.FC = () => {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700">Quantity</label>
+                    <label className="block text-sm font-medium text-gray-700">{t('common.quantity')}</label>
                     <input
                       type="number"
                       min="0"
@@ -881,7 +896,7 @@ const InventoryView: React.FC = () => {
 
               {editItem.type === 'PIECE' && editItem.isPiecePackage && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">Package quantity</label>
+                  <label className="block text-sm font-medium text-gray-700">{t('inventory.packageQuantity')}</label>
                   <input
                     type="number"
                     min="0"
@@ -905,7 +920,7 @@ const InventoryView: React.FC = () => {
                 disabled={isSavingEdit}
                 onClick={saveEdit}
               >
-                {isSavingEdit ? 'Saving...' : 'Save changes'}
+                {isSavingEdit ? t('common.saving') : t('common.saveChanges')}
               </button>
               <button
                 type="button"
@@ -913,7 +928,7 @@ const InventoryView: React.FC = () => {
                 onClick={closeEditModal}
                 disabled={isSavingEdit}
               >
-                Cancel
+                {t('common.cancel')}
               </button>
             </div>
           </div>

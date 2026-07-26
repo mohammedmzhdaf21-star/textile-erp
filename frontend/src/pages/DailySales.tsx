@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../lib/api';
+import { useTranslation } from 'react-i18next';
 
 type Sale = {
   id: string;
@@ -94,6 +95,7 @@ const owedPaymentRowsForDate = (branchId: string, dateKey: string) =>
     }));
 
 const DailySales: React.FC = () => {
+  const { t } = useTranslation();
   const [selectedBranch, setSelectedBranch] = useState<BranchId | null>(null);
   const [sales, setSales] = useState<Sale[]>([]);
   const [loading, setLoading] = useState(false);
@@ -177,7 +179,7 @@ const toDate = formatDate(tomorrow);
         const body = err?.response?.data;
         setError(
           `Request failed${status ? ` (status ${status})` : ''}: ${
-            body?.error ?? body?.message ?? err?.message ?? 'Failed to load daily sales'
+            body?.error ?? body?.message ?? err?.message ?? t('dailySales.failedToLoad')
           }`
         );
         console.error('Daily sales load error:', err);
@@ -190,7 +192,7 @@ const toDate = formatDate(tomorrow);
 
     sales.forEach((sale: any) => {
       const employeeName =
-        sale.employee?.name || sale.employeeName || 'Unknown Employee';
+        sale.employee?.name || sale.employeeName || t('common.unknownEmployee');
       // Use paidAmount when available; fallback to totalPrice for fully paid
       const salePaid = saleCashAmount(sale);
 
@@ -219,12 +221,12 @@ const toDate = formatDate(tomorrow);
     <div className="p-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-black">Daily Sales</h2>
+          <h2 className="text-2xl font-bold text-black">{t('dailySales.title')}</h2>
           <p className="mt-1 text-sm text-gray-600 max-w-xl">
             Select a branch and explore today&apos;s sales grouped by employee.
           </p>
         </div>
-        <div className="text-sm text-gray-500">Today: {fromDate}</div>
+        <div className="text-sm text-gray-500">{t('dailySales.todayDate', { date: fromDate })}</div>
       </div>
 
       <section className="mt-6 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
@@ -252,7 +254,7 @@ const toDate = formatDate(tomorrow);
           <div className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
             <div className="flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-center">
               <div>
-                <h3 className="text-xl font-semibold text-black">Branch {selectedBranch}</h3>
+                <h3 className="text-xl font-semibold text-black">{t('dailySales.branchTitle', { branch: selectedBranch })}</h3>
                 <p className="text-sm text-gray-600">
                   Showing daily sales for {selectedBranch} on {fromDate}.
                 </p>
@@ -313,20 +315,22 @@ const toDate = formatDate(tomorrow);
                           <div className="flex items-center justify-between gap-3">
                             <div>
                               <div className="break-all text-sm font-semibold text-black">
-                                {isOwedPayment ? 'Owed payment for Sale ID' : 'Sale ID'}: {sale.sourceSaleId || sale.id}
+                                {isOwedPayment
+                                  ? `${t('dailySales.owedPaymentForSale')} ${sale.sourceSaleId || sale.id}`
+                                  : `${t('dailySales.saleIdLabel')}: ${sale.sourceSaleId || sale.id}`}
                               </div>
                               <div className="mt-1 text-xs text-gray-500">{formatTime(sale.createdAt)}</div>
                               <div className={`mt-2 text-sm font-bold ${amount < 0 ? 'text-red-600' : 'text-magenta-600'}`}>
-                                {`Cash impact: ${amount < 0 ? '-' : ''}$${Math.abs(amount).toFixed(2)}`}
+                                {t('common.cashImpact')}: {amount < 0 ? '-' : ''}${Math.abs(amount).toFixed(2)}
                               </div>
                               {isExchange && (
                                 <span className="mt-2 inline-flex rounded-full bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700">
-                                  Exchange
+                                  {t('common.exchange')}
                                 </span>
                               )}
                               {isOwedPayment && (
                                 <span className="mt-2 inline-flex rounded-full bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700">
-                                  Owed payment
+                                  {t('common.owedPayment')}
                                 </span>
                               )}
                             </div>

@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import api from '../lib/api';
+import { useTranslation } from 'react-i18next';
 
 type Sale = {
   id: string;
@@ -60,6 +61,7 @@ const saleCashAmount = (sale: Sale) => {
 };
 
 const DataAnalysis: React.FC = () => {
+  const { t } = useTranslation();
   const today = new Date();
   const weekAgo = new Date();
   weekAgo.setDate(today.getDate() - 7);
@@ -114,7 +116,7 @@ const DataAnalysis: React.FC = () => {
       end.setHours(23, 59, 59, 999);
 
       if (start > end) {
-        setError('From date must be before or equal to To date.');
+        setError(t('dataAnalysis.invalidDateRange'));
         setSales([]);
         setLoading(false);
         return;
@@ -137,7 +139,7 @@ const DataAnalysis: React.FC = () => {
       setSales([]);
       setError(
         `Request failed${status ? ` (status ${status})` : ''}: ${
-          body?.error ?? body?.message ?? err?.message ?? 'Failed to load sales analysis'
+          body?.error ?? body?.message ?? err?.message ?? t('dataAnalysis.failedToLoad')
         }`
       );
     } finally {
@@ -149,7 +151,7 @@ const DataAnalysis: React.FC = () => {
     <div className="max-w-full overflow-x-hidden p-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-black">Data Analysis</h2>
+          <h2 className="text-2xl font-bold text-black">{t('dataAnalysis.title')}</h2>
           <p className="mt-1 max-w-xl text-sm text-gray-600">
             Review sales graphs and charts by branch and date range.
           </p>
@@ -159,19 +161,19 @@ const DataAnalysis: React.FC = () => {
       <section className="mt-6 rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700">Branch</label>
+            <label className="block text-sm font-medium text-gray-700">{t('dataAnalysis.branch')}</label>
             <select
               value={selectedBranch}
               onChange={(event) => setSelectedBranch(event.target.value as BranchId)}
               className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
             >
               {branches.map((branch) => (
-                <option key={branch} value={branch}>Branch {branch}</option>
+                <option key={branch} value={branch}>{t('common.branchLabel', { code: branch })}</option>
               ))}
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700">From</label>
+            <label className="block text-sm font-medium text-gray-700">{t('dataAnalysis.from')}</label>
             <input
               type="date"
               value={fromDate}
@@ -180,7 +182,7 @@ const DataAnalysis: React.FC = () => {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700">To</label>
+            <label className="block text-sm font-medium text-gray-700">{t('common.to')}</label>
             <input
               type="date"
               value={toDate}
@@ -208,24 +210,24 @@ const DataAnalysis: React.FC = () => {
         <div className="mt-6 space-y-6">
           <section className="grid gap-4 lg:grid-cols-3">
             <div className="rounded-3xl bg-magenta-500 p-6 text-white shadow-sm">
-              <div className="text-sm opacity-80">Total sales</div>
+              <div className="text-sm opacity-80">{t('dataAnalysis.totalSales')}</div>
               <div className="mt-1 text-3xl font-bold">{sales.length}</div>
             </div>
             <div className="rounded-3xl bg-black p-6 text-white shadow-sm">
-              <div className="text-sm opacity-80">Revenue</div>
+              <div className="text-sm opacity-80">{t('dataAnalysis.revenue')}</div>
               <div className="mt-1 text-3xl font-bold">${totalRevenue.toFixed(2)}</div>
             </div>
             <div className="rounded-3xl border-2 border-magenta-500 bg-white p-6 text-black shadow-sm">
-              <div className="text-sm text-gray-500">Average sale</div>
+              <div className="text-sm text-gray-500">{t('dataAnalysis.averageSale')}</div>
               <div className="mt-1 text-3xl font-bold text-magenta-500">${averageSale.toFixed(2)}</div>
             </div>
           </section>
 
           <section className="grid gap-6 lg:grid-cols-2">
             <div className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
-              <h3 className="text-lg font-semibold text-black">Sales by day</h3>
+              <h3 className="text-lg font-semibold text-black">{t('dataAnalysis.salesByDay')}</h3>
               {salesByDay.length === 0 ? (
-                <div className="mt-4 text-sm text-gray-500">Load analysis to see daily bars.</div>
+                <div className="mt-4 text-sm text-gray-500">{t('dataAnalysis.loadToSeeDaily')}</div>
               ) : (
                 <div className="mt-4 space-y-3">
                   {salesByDay.map((entry) => (
@@ -247,9 +249,9 @@ const DataAnalysis: React.FC = () => {
             </div>
 
             <div className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
-              <h3 className="text-lg font-semibold text-black">Sales by employee</h3>
+              <h3 className="text-lg font-semibold text-black">{t('dataAnalysis.salesByEmployee')}</h3>
               {salesByEmployee.length === 0 ? (
-                <div className="mt-4 text-sm text-gray-500">Load analysis to see employee totals.</div>
+                <div className="mt-4 text-sm text-gray-500">{t('dataAnalysis.loadToSeeEmployee')}</div>
               ) : (
                 <div className="mt-4 space-y-3">
                   {salesByEmployee.map((entry) => (

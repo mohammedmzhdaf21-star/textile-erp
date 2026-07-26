@@ -1,14 +1,15 @@
+import type { TFunction } from 'i18next';
 import { buildPackageIdSuffix, type PackageComponent } from './piecePackages';
 
 export type InventoryItemType = 'ROLL' | 'PIECE' | 'REMANENT';
 
 export const BRANCH_DESTINATIONS = [
-  { code: 'A', id: 'B001', label: 'Branch A' },
-  { code: 'B', id: 'B002', label: 'Branch B' },
-  { code: 'C', id: 'B003', label: 'Branch C' },
-  { code: 'E', id: 'B004', label: 'Branch E' },
-  { code: 'F', id: 'B005', label: 'Branch F' },
-  { code: 'S', id: 'B000', label: 'Storage' },
+  { code: 'A', id: 'B001', labelKey: 'branches.A' },
+  { code: 'B', id: 'B002', labelKey: 'branches.B' },
+  { code: 'C', id: 'B003', labelKey: 'branches.C' },
+  { code: 'E', id: 'B004', labelKey: 'branches.E' },
+  { code: 'F', id: 'B005', labelKey: 'branches.F' },
+  { code: 'S', id: 'B000', labelKey: 'branches.S' },
 ] as const;
 
 export type BranchDestinationCode = (typeof BRANCH_DESTINATIONS)[number]['code'];
@@ -21,10 +22,25 @@ export const BRANCH_CODE_BY_ID: Record<string, BranchDestinationCode> = Object.f
   BRANCH_DESTINATIONS.map((branch) => [branch.id, branch.code])
 );
 
+export const ITEM_TYPE_LABEL_KEYS: Record<InventoryItemType, string> = {
+  ROLL: 'itemTypes.ROLL',
+  PIECE: 'itemTypes.PIECE',
+  REMANENT: 'itemTypes.REMANENT',
+};
+
+/** @deprecated Use getItemTypeLabel(t, type) */
 export const ITEM_TYPE_LABELS: Record<InventoryItemType, string> = {
   ROLL: 'Roll',
   PIECE: 'Piece',
   REMANENT: 'Remnant',
+};
+
+export const getItemTypeLabel = (t: TFunction, type: InventoryItemType) =>
+  t(ITEM_TYPE_LABEL_KEYS[type]);
+
+export const getBranchLabel = (t: TFunction, code: BranchDestinationCode) => {
+  const destination = BRANCH_DESTINATIONS.find((branch) => branch.code === code);
+  return destination ? t(destination.labelKey) : code;
 };
 
 export const typeCode = (type: InventoryItemType) =>
@@ -153,7 +169,7 @@ export type InventoryStockItem = {
 export type BranchStockRow = {
   branchId: string;
   branchCode: string;
-  branchLabel: string;
+  branchLabelKey: string;
   rollMeters: number;
   pieceCount: number;
   pieceMeters: number;
@@ -174,7 +190,7 @@ export const aggregateFamilyStock = (
     byBranch.set(destination.id, {
       branchId: destination.id,
       branchCode: destination.code,
-      branchLabel: destination.label,
+      branchLabelKey: destination.labelKey,
       rollMeters: 0,
       pieceCount: 0,
       pieceMeters: 0,
@@ -242,16 +258,16 @@ export type StockSizeBreakdown = {
   count: number;
   branches: Array<{
     branchId: string;
-    branchLabel: string;
+    branchLabelKey: string;
     branchCode: string;
     count: number;
   }>;
 };
 
-const breakdownUnitLabel = (type: InventoryItemType, count: number) => {
-  if (type === 'PIECE') return count === 1 ? 'piece' : 'pieces';
-  if (type === 'ROLL') return count === 1 ? 'roll' : 'rolls';
-  return count === 1 ? 'remnant' : 'remnants';
+const breakdownUnitKey = (type: InventoryItemType, count: number) => {
+  if (type === 'PIECE') return count === 1 ? 'common.pieceSingular' : 'common.pieces';
+  if (type === 'ROLL') return count === 1 ? 'inventory.stockRoll' : 'inventory.stockRolls';
+  return count === 1 ? 'inventory.stockRemnant' : 'inventory.stockRemnants';
 };
 
 export const formatMetersAmount = (meters: number) => {
@@ -259,9 +275,13 @@ export const formatMetersAmount = (meters: number) => {
   return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(2);
 };
 
-export const formatStockBreakdownLine = (type: InventoryItemType, entry: StockSizeBreakdown) => {
-  const unit = breakdownUnitLabel(type, entry.count);
-  return `${entry.count} ${unit} at ${formatMetersAmount(entry.sizeMeters)} m each`;
+export const formatStockBreakdownLine = (t: TFunction, type: InventoryItemType, entry: StockSizeBreakdown) => {
+  const unit = t(breakdownUnitKey(type, entry.count));
+  return t('inventory.stockBreakdownLine', {
+    count: entry.count,
+    unit,
+    size: formatMetersAmount(entry.sizeMeters),
+  });
 };
 
 export const aggregateStockBreakdown = (
@@ -296,7 +316,7 @@ export const aggregateStockBreakdown = (
       } else {
         existing.branches.push({
           branchId: row.branchId,
-          branchLabel: row.branchLabel,
+          branchLabelKey: row.branchLabelKey,
           branchCode: row.branchCode,
           count,
         });
@@ -322,14 +342,23 @@ export const printInventoryLabel = (input: {
   familyCode: number;
   subCode: number;
   type: InventoryItemType;
+  typeLabel: string;
   colorName: string;
   branchLabel: string;
   amountLabel: string;
+  labels: {
+    title: string;
+    familyCode: string;
+    subCode: string;
+    type: string;
+    amount: string;
+    color: string;
+    destination: string;
+  };
 }) => {
   const popup = window.open('', '_blank', 'width=480,height=720');
   if (!popup) {
-    alert('Please allow pop-ups to print the QR label.');
-    return;
+    return false;
   }
 
   popup.document.write(`<!DOCTYPE html>
@@ -349,13 +378,13 @@ export const printInventoryLabel = (input: {
   </head>
   <body>
     <div class="label">
-      <div class="title">Textile ERP Inventory Label</div>
-      <div class="row"><span>Family code</span><strong>${input.familyCode}</strong></div>
-      <div class="row"><span>Sub code (price)</span><strong>$${formatSubCode(input.subCode)}</strong></div>
-      <div class="row"><span>Type</span><strong>${ITEM_TYPE_LABELS[input.type]}</strong></div>
-      <div class="row"><span>Amount</span><strong>${input.amountLabel}</strong></div>
-      <div class="row"><span>Color</span><strong>${input.colorName}</strong></div>
-      <div class="row"><span>Destination</span><strong>${input.branchLabel}</strong></div>
+      <div class="title">${input.labels.title}</div>
+      <div class="row"><span>${input.labels.familyCode}</span><strong>${input.familyCode}</strong></div>
+      <div class="row"><span>${input.labels.subCode}</span><strong>$${formatSubCode(input.subCode)}</strong></div>
+      <div class="row"><span>${input.labels.type}</span><strong>${input.typeLabel}</strong></div>
+      <div class="row"><span>${input.labels.amount}</span><strong>${input.amountLabel}</strong></div>
+      <div class="row"><span>${input.labels.color}</span><strong>${input.colorName}</strong></div>
+      <div class="row"><span>${input.labels.destination}</span><strong>${input.branchLabel}</strong></div>
       <div class="qr"><img src="${input.qrDataUrl}" alt="QR code" /></div>
       <div class="id">${input.itemId}</div>
     </div>
@@ -363,4 +392,5 @@ export const printInventoryLabel = (input: {
   </body>
 </html>`);
   popup.document.close();
+  return true;
 };

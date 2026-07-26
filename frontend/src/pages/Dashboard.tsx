@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import api from "../lib/api";
 import {
@@ -28,6 +29,7 @@ type Sale = {
 };
 
 export default function Dashboard() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const user = getCurrentUser();
   const [priceItemId, setPriceItemId] = useState("");
@@ -46,6 +48,9 @@ export default function Dashboard() {
   const itemPrices = readItemMinimumPrices();
   const employeeAccessRules = readEmployeeAccessRules();
 
+  const unitLabel = (unit: "METER" | "PIECE") =>
+    unit === "PIECE" ? t("common.pieceSingular") : t("common.meterSingular");
+
   const commissionTotal = useMemo(
     () => commissionRows.reduce((sum, row) => sum + row.commission, 0),
     [commissionRows]
@@ -58,7 +63,7 @@ export default function Dashboard() {
 
   async function loadItemForPrice() {
     const itemId = priceItemId.trim();
-    if (!itemId) return alert("Enter or scan an item ID first.");
+    if (!itemId) return alert(t("dashboard.enterItemIdFirst"));
 
     try {
       const response = await api.get(`/inventory/${encodeURIComponent(itemId)}`);
@@ -67,18 +72,23 @@ export default function Dashboard() {
       const existing = getItemMinimumPrice(itemId);
       setPriceUnit(unit);
       if (existing) setMinimumPrice(String(existing.minimumPrice));
-      setPriceMessage(`${item.type || "Item"} detected. Minimum price is per ${unit === "PIECE" ? "piece" : "meter"}.`);
+      setPriceMessage(
+        t("dashboard.itemDetected", {
+          type: item.type || "Item",
+          unit: unitLabel(unit),
+        })
+      );
     } catch (error: any) {
       const body = error?.response?.data;
-      setPriceMessage(body?.error ?? body?.message ?? error?.message ?? "Item not found.");
+      setPriceMessage(body?.error ?? body?.message ?? error?.message ?? t("dashboard.itemNotFound"));
     }
   }
 
   function savePrice() {
     const itemId = priceItemId.trim();
     const parsedPrice = Number(minimumPrice);
-    if (!itemId) return alert("Enter or scan an item ID.");
-    if (!Number.isFinite(parsedPrice) || parsedPrice < 0) return alert("Enter a valid minimum price.");
+    if (!itemId) return alert(t("dashboard.enterItemId"));
+    if (!Number.isFinite(parsedPrice) || parsedPrice < 0) return alert(t("dashboard.enterValidMinimumPrice"));
 
     saveItemMinimumPrice({
       itemId,
@@ -86,7 +96,13 @@ export default function Dashboard() {
       minimumPrice: parsedPrice,
       updatedAt: new Date().toISOString(),
     });
-    setPriceMessage(`Saved ${itemId} minimum price: $${parsedPrice.toFixed(2)} per ${priceUnit === "PIECE" ? "piece" : "meter"}.`);
+    setPriceMessage(
+      t("dashboard.savedMinimumPrice", {
+        itemId,
+        price: parsedPrice.toFixed(2),
+        unit: unitLabel(priceUnit),
+      })
+    );
   }
 
   function toggleSection(section: DashboardSectionKey) {
@@ -99,7 +115,7 @@ export default function Dashboard() {
 
   function saveAccessRule() {
     const email = employeeEmail.trim().toLowerCase();
-    if (!email || !email.includes("@")) return alert("Enter a valid employee email address.");
+    if (!email || !email.includes("@")) return alert(t("dashboard.enterValidEmail"));
 
     saveEmployeeAccessRule({
       email,
@@ -107,12 +123,12 @@ export default function Dashboard() {
       assignedWork,
       updatedAt: new Date().toISOString(),
     });
-    setAccessMessage(`Saved dashboard access for ${email}.`);
+    setAccessMessage(t("dashboard.savedAccessFor", { email }));
   }
 
   async function calculateCommissions() {
     const rate = Number(commissionRate);
-    if (!Number.isFinite(rate) || rate < 0) return alert("Enter a valid commission percent.");
+    if (!Number.isFinite(rate) || rate < 0) return alert(t("dashboard.enterValidCommission"));
     saveCommissionSettings({ ratePercent: rate });
     setCommissionMessage(null);
 
@@ -123,7 +139,7 @@ export default function Dashboard() {
       const rows: Array<{ employee: string; saleId: string; itemId: string; commission: number }> = [];
 
       sales.forEach((sale) => {
-        const employee = sale.employee?.name || sale.employeeName || "Unknown Employee";
+        const employee = sale.employee?.name || sale.employeeName || t("common.unknownEmployee");
         (sale.items || []).forEach((item) => {
           if (!item.inventoryItemId) return;
           const savedPrice = prices[item.inventoryItemId];
@@ -144,10 +160,16 @@ export default function Dashboard() {
       });
 
       setCommissionRows(rows);
-      setCommissionMessage(`Calculated ${rows.length} commission line${rows.length === 1 ? "" : "s"} at ${rate}%.`);
+      setCommissionMessage(
+        t("dashboard.calculatedLines", {
+          count: rows.length,
+          plural: rows.length === 1 ? "" : "s",
+          rate,
+        })
+      );
     } catch (error: any) {
       const body = error?.response?.data;
-      setCommissionMessage(body?.error ?? body?.message ?? error?.message ?? "Failed to calculate commissions.");
+      setCommissionMessage(body?.error ?? body?.message ?? error?.message ?? t("dashboard.failedToCalculate"));
     }
   }
 
@@ -158,70 +180,64 @@ export default function Dashboard() {
           <div className="flex items-center justify-between mb-6">
             <div>
               <h1 className="text-3xl font-extrabold text-black">
-                Welcome, <span className="text-magenta-500">{user?.name}</span>!
+                {t("dashboard.welcome", { name: user?.name })}
               </h1>
               <p className="text-gray-500 mt-1">{user?.email}</p>
             </div>
             <button onClick={handleLogout} className="btn-secondary">
-              Sign Out
+              {t("common.signOut")}
             </button>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-8">
             <div className="bg-gradient-to-br from-magenta-500 to-magenta-700 text-white p-6 rounded-xl shadow-lg">
-              <p className="text-sm opacity-80">Role</p>
+              <p className="text-sm opacity-80">{t("common.role")}</p>
               <p className="text-2xl font-bold mt-1">{user?.role}</p>
             </div>
             <div className="bg-black text-white p-6 rounded-xl shadow-lg">
-              <p className="text-sm opacity-80">Status</p>
-              <p className="text-2xl font-bold mt-1">Active</p>
+              <p className="text-sm opacity-80">{t("common.status")}</p>
+              <p className="text-2xl font-bold mt-1">{t("common.active")}</p>
             </div>
             <div className="bg-white border-2 border-magenta-500 text-black p-6 rounded-xl">
-              <p className="text-sm text-gray-500">Login</p>
-              <p className="text-2xl font-bold mt-1 text-magenta-500">Success!</p>
+              <p className="text-sm text-gray-500">{t("common.login")}</p>
+              <p className="text-2xl font-bold mt-1 text-magenta-500">{t("common.success")}</p>
             </div>
           </div>
 
           <div className="mt-8 p-6 bg-gradient-to-br from-gray-50 to-white border border-gray-200 rounded-xl">
-            <h2 className="text-lg font-bold text-black mb-2">
-              Dashboard management
-            </h2>
-            <p className="text-gray-600">
-              Manage minimum item prices, employee work access, and commission calculations.
-            </p>
+            <h2 className="text-lg font-bold text-black mb-2">{t("dashboard.managementTitle")}</h2>
+            <p className="text-gray-600">{t("dashboard.managementDescription")}</p>
           </div>
 
           <div className="mt-8 grid gap-6 lg:grid-cols-3">
             <section className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
-              <h2 className="text-xl font-bold text-black">Price</h2>
-              <p className="mt-1 text-sm text-gray-600">
-                Scan or enter an item ID and save the minimum sale price per meter or piece.
-              </p>
-              <label className="mt-4 block text-sm font-medium text-gray-700">QR / Item ID</label>
+              <h2 className="text-xl font-bold text-black">{t("dashboard.priceTitle")}</h2>
+              <p className="mt-1 text-sm text-gray-600">{t("dashboard.priceDescription")}</p>
+              <label className="mt-4 block text-sm font-medium text-gray-700">{t("dashboard.qrItemId")}</label>
               <input
                 value={priceItemId}
                 onChange={(event) => setPriceItemId(event.target.value)}
                 className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
-                placeholder="B001-001-REDR"
+                placeholder={t("dashboard.qrPlaceholder")}
               />
               <button type="button" onClick={loadItemForPrice} className="btn-secondary mt-3 w-full">
-                Detect item
+                {t("common.detectItem")}
               </button>
 
               <div className="mt-4 grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">Unit</label>
+                  <label className="block text-sm font-medium text-gray-700">{t("common.unit")}</label>
                   <select
                     value={priceUnit}
                     onChange={(event) => setPriceUnit(event.target.value as "METER" | "PIECE")}
                     className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
                   >
-                    <option value="METER">Meter</option>
-                    <option value="PIECE">Piece</option>
+                    <option value="METER">{t("common.meter")}</option>
+                    <option value="PIECE">{t("common.piece")}</option>
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">Minimum price</label>
+                  <label className="block text-sm font-medium text-gray-700">{t("dashboard.minimumPrice")}</label>
                   <input
                     type="number"
                     min="0"
@@ -233,7 +249,7 @@ export default function Dashboard() {
                 </div>
               </div>
               <button type="button" onClick={savePrice} className="btn-primary mt-4 w-full">
-                Save price
+                {t("common.savePrice")}
               </button>
               {priceMessage && <p className="mt-3 text-sm text-magenta-600">{priceMessage}</p>}
               <div className="mt-4 max-h-40 space-y-2 overflow-auto text-sm">
@@ -241,7 +257,10 @@ export default function Dashboard() {
                   <div key={price.itemId} className="rounded-xl bg-gray-50 p-3">
                     <div className="break-all font-semibold text-black">{price.itemId}</div>
                     <div className="text-gray-600">
-                      ${price.minimumPrice.toFixed(2)} / {price.unit === "PIECE" ? "piece" : "meter"}
+                      {t("dashboard.pricePerUnit", {
+                        price: price.minimumPrice.toFixed(2),
+                        unit: unitLabel(price.unit),
+                      })}
                     </div>
                   </div>
                 ))}
@@ -249,23 +268,21 @@ export default function Dashboard() {
             </section>
 
             <section className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
-              <h2 className="text-xl font-bold text-black">Employee access</h2>
-              <p className="mt-1 text-sm text-gray-600">
-                Assign work and choose which dashboard sections an employee can see.
-              </p>
-              <label className="mt-4 block text-sm font-medium text-gray-700">Employee email</label>
+              <h2 className="text-xl font-bold text-black">{t("dashboard.employeeAccessTitle")}</h2>
+              <p className="mt-1 text-sm text-gray-600">{t("dashboard.employeeAccessDescription")}</p>
+              <label className="mt-4 block text-sm font-medium text-gray-700">{t("dashboard.employeeEmail")}</label>
               <input
                 value={employeeEmail}
                 onChange={(event) => setEmployeeEmail(event.target.value)}
                 className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
-                placeholder="employee@textile.com"
+                placeholder={t("dashboard.employeeEmailPlaceholder")}
               />
-              <label className="mt-4 block text-sm font-medium text-gray-700">Assigned work</label>
+              <label className="mt-4 block text-sm font-medium text-gray-700">{t("dashboard.assignedWork")}</label>
               <textarea
                 value={assignedWork}
                 onChange={(event) => setAssignedWork(event.target.value)}
                 className="mt-1 min-h-20 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
-                placeholder="Sales floor, inventory checks, exchange desk..."
+                placeholder={t("dashboard.assignedWorkPlaceholder")}
               />
               <div className="mt-4 grid max-h-48 grid-cols-2 gap-2 overflow-auto pr-1">
                 {dashboardSections.map((section) => (
@@ -275,30 +292,33 @@ export default function Dashboard() {
                       checked={allowedSections.includes(section.key)}
                       onChange={() => toggleSection(section.key)}
                     />
-                    <span>{section.label}</span>
+                    <span>{t(section.labelKey)}</span>
                   </label>
                 ))}
               </div>
               <button type="button" onClick={saveAccessRule} className="btn-primary mt-4 w-full">
-                Save employee access
+                {t("dashboard.saveEmployeeAccess")}
               </button>
               {accessMessage && <p className="mt-3 text-sm text-magenta-600">{accessMessage}</p>}
               <div className="mt-4 max-h-32 space-y-2 overflow-auto text-xs text-gray-600">
                 {Object.values(employeeAccessRules).map((rule) => (
                   <div key={rule.email} className="rounded-xl bg-gray-50 p-2">
                     <div className="font-semibold text-black">{rule.email}</div>
-                    <div>{rule.sections.length} section(s) · {rule.assignedWork || "No work note"}</div>
+                    <div>
+                      {t("dashboard.sectionsCount", {
+                        count: rule.sections.length,
+                        work: rule.assignedWork || t("dashboard.noWorkNote"),
+                      })}
+                    </div>
                   </div>
                 ))}
               </div>
             </section>
 
             <section className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
-              <h2 className="text-xl font-bold text-black">Commission</h2>
-              <p className="mt-1 text-sm text-gray-600">
-                Calculate employee commission from sales where sold price is above saved minimum item price.
-              </p>
-              <label className="mt-4 block text-sm font-medium text-gray-700">Commission percent</label>
+              <h2 className="text-xl font-bold text-black">{t("dashboard.commissionTitle")}</h2>
+              <p className="mt-1 text-sm text-gray-600">{t("dashboard.commissionDescription")}</p>
+              <label className="mt-4 block text-sm font-medium text-gray-700">{t("dashboard.commissionPercent")}</label>
               <input
                 type="number"
                 min="0"
@@ -312,12 +332,12 @@ export default function Dashboard() {
                 onClick={calculateCommissions}
                 className="mt-4 flex w-full items-center justify-between rounded-lg bg-black px-6 py-3 text-left font-semibold text-white shadow-md transition-all duration-200 hover:bg-gray-800"
               >
-                <span>Run commission</span>
+                <span>{t("dashboard.runCommission")}</span>
                 <span aria-hidden="true">→</span>
               </button>
               {commissionMessage && <p className="mt-3 text-sm text-magenta-600">{commissionMessage}</p>}
               <div className="mt-4 rounded-2xl border-2 border-magenta-500 bg-white p-4 text-black">
-                <div className="text-sm text-gray-500">Total commission</div>
+                <div className="text-sm text-gray-500">{t("dashboard.totalCommission")}</div>
                 <div
                   key={commissionTotal.toFixed(2)}
                   className="mt-2 rounded-xl bg-black px-4 py-3 text-2xl font-bold leading-none text-white"

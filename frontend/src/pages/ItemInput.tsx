@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import QRCode from 'qrcode';
 import { Link } from 'react-router-dom';
 import api from '../lib/api';
@@ -9,7 +10,7 @@ import {
   BRANCH_ID_BY_CODE,
   buildInventoryItemId,
   formatSubCode,
-  ITEM_TYPE_LABELS,
+  getItemTypeLabel,
   printInventoryLabel,
   type BranchDestinationCode,
   type InventoryItemType,
@@ -52,6 +53,7 @@ const ITEM_TYPES: InventoryItemType[] = ['ROLL', 'PIECE', 'REMANENT'];
 const MAX_PICTURE_BYTES = 2 * 1024 * 1024;
 
 const ItemInputPage: React.FC = () => {
+  const { t } = useTranslation();
   const [colors, setColors] = useState<Color[]>([]);
   const [destination, setDestination] = useState<BranchDestinationCode>('A');
   const [colorId, setColorId] = useState<string>('');
@@ -84,7 +86,9 @@ const ItemInputPage: React.FC = () => {
   const branchId = BRANCH_ID_BY_CODE[destination];
   const selectedColor = colors.find((color) => color.id === colorId);
   const branchLabel =
-    BRANCH_DESTINATIONS.find((branch) => branch.code === destination)?.label ?? destination;
+    BRANCH_DESTINATIONS.find((branch) => branch.code === destination)
+      ? t(BRANCH_DESTINATIONS.find((branch) => branch.code === destination)!.labelKey)
+      : destination;
 
   const normalizedPackageComponents = useMemo(
     () => normalizePackageComponents(packageComponents),
@@ -125,13 +129,17 @@ const ItemInputPage: React.FC = () => {
   const amountLabel = useMemo(() => {
     if (type === 'PIECE' && isPiecePackage) {
       const perPackage = totalPiecesPerPackage(normalizedPackageComponents);
-      return `${quantity} package(s) · ${perPackage} piece(s) each (${formatPackageSummary(normalizedPackageComponents)})`;
+      return t('itemInput.amountPackage', {
+        qty: quantity,
+        perPackage,
+        summary: formatPackageSummary(normalizedPackageComponents),
+      });
     }
     if (type === 'PIECE') {
-      return `${quantity} piece(s) × ${pieceLength} m`;
+      return t('itemInput.amountPiece', { qty: quantity, length: pieceLength });
     }
-    return `${meters} m`;
-  }, [isPiecePackage, meters, normalizedPackageComponents, pieceLength, quantity, type]);
+    return t('itemInput.amountMeters', { meters });
+  }, [isPiecePackage, meters, normalizedPackageComponents, pieceLength, quantity, t, type]);
 
   const familySubCodes = useMemo(() => {
     const unique = new Map<string, InventoryItemView>();
@@ -186,7 +194,7 @@ const ItemInputPage: React.FC = () => {
       })
       .catch((err) => {
         console.error('Failed to load colors', err);
-        setErrorMessage('Failed to load colors.');
+        setErrorMessage(t('itemInput.failedToLoadColors'));
       })
       .finally(() => setLoadingDefaults(false));
   }, []);
@@ -251,7 +259,7 @@ const ItemInputPage: React.FC = () => {
     } catch (error) {
       if (requestId !== familyCodeRequestId.current) return;
       console.error('Failed to load next family code', error);
-      setErrorMessage('Failed to find the next family code. You can still enter one manually.');
+      setErrorMessage(t('itemInput.failedNextFamilyCode'));
     } finally {
       if (requestId === familyCodeRequestId.current) {
         setLoadingFamilyCode(false);
@@ -270,13 +278,13 @@ const ItemInputPage: React.FC = () => {
     if (!file) return;
 
     if (!file.type.startsWith('image/')) {
-      setErrorMessage('Please choose an image file for the item picture.');
+      setErrorMessage(t('itemInput.chooseImageFile'));
       event.target.value = '';
       return;
     }
 
     if (file.size > MAX_PICTURE_BYTES) {
-      setErrorMessage('Item picture must be 2 MB or smaller.');
+      setErrorMessage(t('itemInput.imageTooLarge'));
       event.target.value = '';
       return;
     }
@@ -288,7 +296,7 @@ const ItemInputPage: React.FC = () => {
       setErrorMessage(null);
     };
     reader.onerror = () => {
-      setErrorMessage('Failed to read the selected picture.');
+      setErrorMessage(t('itemInput.failedToReadPicture'));
     };
     reader.readAsDataURL(file);
   };
@@ -321,34 +329,34 @@ const ItemInputPage: React.FC = () => {
   const handleCreateItem = async () => {
     const currentUser = getCurrentUser();
     if (!currentUser) {
-      return alert('You must be logged in to create inventory items.');
+      return alert(t('itemInput.mustBeLoggedIn'));
     }
     if (!branchId || !colorId || !familyCode || subCode < 0) {
-      return alert('Choose family code, sub code (price), color, and destination branch.');
+      return alert(t('itemInput.chooseRequiredFields'));
     }
     if ((type === 'ROLL' || type === 'REMANENT') && meters <= 0) {
-      return alert('Enter a positive meters value.');
+      return alert(t('itemInput.enterPositiveMeters'));
     }
     if (type === 'PIECE' && isPiecePackage) {
       const packageError = validatePackageComponents(packageComponents);
       if (packageError) return alert(packageError);
-      if (quantity <= 0) return alert('Enter a valid number of packages.');
+      if (quantity <= 0) return alert(t('itemInput.enterValidPackages'));
     } else if (type === 'PIECE' && (quantity <= 0 || pieceLength <= 0)) {
-      return alert('Enter valid quantity and piece length for pieces.');
+      return alert(t('itemInput.enterValidPieceFields'));
     }
     if (duplicateExists) {
       return alert(
         type === 'PIECE' && isPiecePackage
-          ? 'This family already has a piece package with the same pieces, price, color, and branch.'
+          ? t('itemInput.duplicatePackageAlert')
           : type === 'PIECE'
-            ? 'This family already has a piece item with the same price, color, branch, and piece length.'
-            : 'This family already has an item with the same sub code (price), color, type, and branch.'
+            ? t('itemInput.duplicatePieceAlert')
+            : t('itemInput.duplicateOtherAlert')
       );
     }
 
     const id = generatedItemId;
     if (!id) {
-      return alert('Could not build item ID. Check all fields.');
+      return alert(t('itemInput.couldNotBuildId'));
     }
 
     const createdQrDataUrl = await QRCode.toDataURL(id, {
@@ -388,7 +396,7 @@ const ItemInputPage: React.FC = () => {
     try {
       const createResponse = await api.post('/inventory', payload);
       const savedQrDataUrl = createResponse.data?.item?.qrCodeDataUrl || createdQrDataUrl;
-      setSuccessMessage(`Item ${id} created for ${branchLabel}.`);
+      setSuccessMessage(t('itemInput.itemCreated', { id, branch: branchLabel }));
       setCreatedItemId(id);
       setCreatedItemQrDataUrl(savedQrDataUrl);
       setCreatedPictureDataUrl(pictureDataUrl);
@@ -404,9 +412,10 @@ const ItemInputPage: React.FC = () => {
       const status = error?.response?.status;
       const body = error?.response?.data;
       setErrorMessage(
-        `Failed to create inventory item${status ? ` (status ${status})` : ''}: ${
-          body?.error ?? body?.message ?? error?.message ?? 'Unexpected error'
-        }`
+        t('itemInput.failedToCreate', {
+          status: status ? t('common.requestFailedStatus', { status }) : '',
+          message: body?.error ?? body?.message ?? error?.message ?? t('errors.unexpected'),
+        })
       );
       console.error('Inventory create error:', error);
     }
@@ -414,27 +423,36 @@ const ItemInputPage: React.FC = () => {
 
   const handlePrint = (itemId: string, dataUrl: string) => {
     if (!selectedColor) return;
-    printInventoryLabel({
+    const printed = printInventoryLabel({
       itemId,
       qrDataUrl: dataUrl,
       familyCode,
       subCode,
       type,
+      typeLabel: getItemTypeLabel(t, type),
       colorName: selectedColor.name,
       branchLabel,
       amountLabel,
+      labels: {
+        title: t('itemInput.qrLabel'),
+        familyCode: t('itemInput.familyLabel'),
+        subCode: t('itemInput.subCodeLabel'),
+        type: t('itemInput.typeLabel'),
+        amount: t('itemInput.amountLabel'),
+        color: t('itemInput.colorLabel'),
+        destination: t('itemInput.destinationLabel'),
+      },
     });
+    if (!printed) alert(t('errors.allowPopups'));
   };
 
   return (
     <div className="p-4">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-black">New Item</h2>
+          <h2 className="text-2xl font-bold text-black">{t('itemInput.title')}</h2>
           <p className="mt-1 max-w-3xl text-sm text-gray-600">
-            Create inventory using a family code and sub code (price). Choose roll, piece, or
-            remnant, set the amount and color, send it to a branch or storage, then print the QR
-            label.
+            {t('itemInput.subtitle')}
           </p>
         </div>
         <Link to="/inventory" className="text-sm font-semibold text-magenta-600 hover:underline">
@@ -444,12 +462,12 @@ const ItemInputPage: React.FC = () => {
 
       <div className="mt-6 grid gap-6 xl:grid-cols-[1.35fr_0.65fr]">
         <section className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
-          <h3 className="text-lg font-semibold text-black">Item details</h3>
+          <h3 className="text-lg font-semibold text-black">{t('itemInput.itemDetails')}</h3>
 
           <div className="mt-5 rounded-2xl border border-gray-200 bg-gray-50 p-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
               <div className="flex-1">
-                <label className="block text-sm font-medium text-gray-700">Family code</label>
+                <label className="block text-sm font-medium text-gray-700">{t('itemInput.familyCode')}</label>
                 <input
                   type="number"
                   min="1"
@@ -457,7 +475,7 @@ const ItemInputPage: React.FC = () => {
                   onChange={(e) => setFamilyCode(Number(e.target.value))}
                   className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
                 />
-                <p className="mt-1 text-xs text-gray-500">Product family: 1, 2, 3, and so on.</p>
+                <p className="mt-1 text-xs text-gray-500">{t('itemInput.familyCodeHint')}</p>
               </div>
               <button
                 type="button"
@@ -465,17 +483,17 @@ const ItemInputPage: React.FC = () => {
                 onClick={loadNextFamilyCode}
                 disabled={loadingFamilyCode}
               >
-                {loadingFamilyCode ? 'Finding next family...' : 'Next family code'}
+                {loadingFamilyCode ? t('itemInput.findingNextFamily') : t('itemInput.nextFamilyCode')}
               </button>
             </div>
 
             <div className="mt-4">
               <p className="text-sm font-semibold text-gray-800">
-                Sub codes in family {familyCode}
+                {t('itemInput.subCodesInFamily', { code: familyCode })}
               </p>
               {familySubCodes.length === 0 ? (
                 <p className="mt-2 text-sm text-gray-500">
-                  No items in this family yet. The sub code you enter below will be the first one.
+                  {t('itemInput.noItemsInFamily')}
                 </p>
               ) : (
                 <div className="mt-3 flex flex-wrap gap-2">
@@ -508,7 +526,7 @@ const ItemInputPage: React.FC = () => {
                       className="rounded-full border border-gray-300 bg-white px-3 py-1 text-xs font-semibold text-gray-700 hover:border-black"
                     >
                       ${formatSubCode(Number(item.subCode ?? item.costPrice ?? 0))} ·{' '}
-                      {item.color?.name ?? 'Color'} · {ITEM_TYPE_LABELS[item.type]}
+                      {item.color?.name ?? t('common.color')} · {getItemTypeLabel(t, item.type)}
                       {item.isPiecePackage
                         ? ` · pkg: ${formatPackageSummary(parsePackageComponents(item.packageComponents))}`
                         : item.type === 'PIECE'
@@ -524,7 +542,7 @@ const ItemInputPage: React.FC = () => {
 
           <div className="mt-6 grid gap-4 sm:grid-cols-2">
             <div>
-              <label className="block text-sm font-medium text-gray-700">Sub code (price)</label>
+              <label className="block text-sm font-medium text-gray-700">{t('itemInput.subCodePrice')}</label>
               <input
                 type="number"
                 min="0"
@@ -533,11 +551,11 @@ const ItemInputPage: React.FC = () => {
                 onChange={(e) => setSubCode(Number(e.target.value))}
                 className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
               />
-              <p className="mt-1 text-xs text-gray-500">This is the item price tier under the family.</p>
+              <p className="mt-1 text-xs text-gray-500">{t('itemInput.subCodeHint')}</p>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700">Color</label>
+              <label className="block text-sm font-medium text-gray-700">{t('itemInput.color')}</label>
               <select
                 value={colorId}
                 onChange={(e) => setColorId(e.target.value)}
@@ -552,7 +570,7 @@ const ItemInputPage: React.FC = () => {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700">Type</label>
+              <label className="block text-sm font-medium text-gray-700">{t('itemInput.type')}</label>
               <select
                 value={type}
                 onChange={(e) => {
@@ -564,14 +582,14 @@ const ItemInputPage: React.FC = () => {
               >
                 {ITEM_TYPES.map((itemType) => (
                   <option key={itemType} value={itemType}>
-                    {ITEM_TYPE_LABELS[itemType]}
+                    {getItemTypeLabel(t, itemType)}
                   </option>
                 ))}
               </select>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700">How many</label>
+              <label className="block text-sm font-medium text-gray-700">{t('itemInput.howMany')}</label>
               {type === 'PIECE' && isPiecePackage ? (
                 <input
                   type="number"
@@ -579,7 +597,7 @@ const ItemInputPage: React.FC = () => {
                   value={quantity}
                   onChange={(e) => setQuantity(Number(e.target.value))}
                   className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
-                  placeholder="Number of packages"
+                  placeholder={t('itemInput.numberOfPackages')}
                 />
               ) : type === 'PIECE' ? (
                 <div className="mt-1 grid grid-cols-2 gap-2">
@@ -589,7 +607,7 @@ const ItemInputPage: React.FC = () => {
                     value={quantity}
                     onChange={(e) => setQuantity(Number(e.target.value))}
                     className="rounded-xl border border-gray-300 px-3 py-2 text-sm"
-                    placeholder="Pieces"
+                    placeholder={t('itemInput.piecesPlaceholder')}
                   />
                   <input
                     type="number"
@@ -598,7 +616,7 @@ const ItemInputPage: React.FC = () => {
                     value={pieceLength}
                     onChange={(e) => setPieceLength(Number(e.target.value))}
                     className="rounded-xl border border-gray-300 px-3 py-2 text-sm"
-                    placeholder="Length each"
+                    placeholder={t('itemInput.lengthEachPlaceholder')}
                   />
                 </div>
               ) : (
@@ -609,7 +627,7 @@ const ItemInputPage: React.FC = () => {
                   value={meters}
                   onChange={(e) => setMeters(Number(e.target.value))}
                   className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
-                  placeholder={type === 'ROLL' ? 'Meters in roll' : 'Remnant meters'}
+                  placeholder={type === 'ROLL' ? t('itemInput.metersInRoll') : t('itemInput.remnantMeters')}
                 />
               )}
             </div>
@@ -625,11 +643,9 @@ const ItemInputPage: React.FC = () => {
                   className="mt-1 h-4 w-4 rounded border-gray-300"
                 />
                 <span>
-                  <span className="block text-sm font-semibold text-black">Piece package</span>
+                  <span className="block text-sm font-semibold text-black">{t('itemInput.piecePackage')}</span>
                   <span className="mt-1 block text-sm text-gray-600">
-                    A family set sold as one package (e.g. dress, coat, underwear, hijab). Customers
-                    may buy only some pieces later; leftovers stay as package pieces, not fabric
-                    remnants.
+                    {t('itemInput.piecePackageDescription')}
                   </span>
                 </span>
               </label>
@@ -637,7 +653,7 @@ const ItemInputPage: React.FC = () => {
               {isPiecePackage && (
                 <div className="mt-5 space-y-3">
                   <div className="flex items-center justify-between gap-3">
-                    <p className="text-sm font-semibold text-gray-800">Pieces in each package</p>
+                    <p className="text-sm font-semibold text-gray-800">{t('itemInput.piecesInPackage')}</p>
                     <button
                       type="button"
                       onClick={addPackageComponent}
@@ -656,7 +672,7 @@ const ItemInputPage: React.FC = () => {
                           updatePackageComponent(index, 'name', event.target.value)
                         }
                         className="rounded-xl border border-gray-300 px-3 py-2 text-sm"
-                        placeholder="Piece name (e.g. Dress)"
+                        placeholder={t('itemInput.pieceNamePlaceholder')}
                       />
                       <input
                         type="number"
@@ -666,7 +682,7 @@ const ItemInputPage: React.FC = () => {
                           updatePackageComponent(index, 'countPerPackage', Number(event.target.value))
                         }
                         className="rounded-xl border border-gray-300 px-3 py-2 text-sm"
-                        placeholder="Count"
+                        placeholder={t('common.count')}
                       />
                       <button
                         type="button"
@@ -680,9 +696,8 @@ const ItemInputPage: React.FC = () => {
                   ))}
 
                   <p className="text-sm text-gray-600">
-                    Each package contains{' '}
-                    <strong>{totalPiecesPerPackage(normalizedPackageComponents)} piece(s)</strong>:{' '}
-                    {formatPackageSummary(normalizedPackageComponents)}
+                    {t('itemInput.eachPackageContains', { count: totalPiecesPerPackage(normalizedPackageComponents), summary: 
+                    formatPackageSummary(normalizedPackageComponents) })}
                   </p>
                 </div>
               )}
@@ -690,7 +705,7 @@ const ItemInputPage: React.FC = () => {
           )}
 
           <div className="mt-6">
-            <label className="block text-sm font-medium text-gray-700">Send to branch</label>
+            <label className="block text-sm font-medium text-gray-700">{t('itemInput.sendToBranch')}</label>
             <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
               {BRANCH_DESTINATIONS.map((branch) => (
                 <button
@@ -703,30 +718,30 @@ const ItemInputPage: React.FC = () => {
                       : 'border border-gray-200 bg-white text-gray-800 hover:border-black'
                   }`}
                 >
-                  {branch.code === 'S' ? 'Storage' : `Branch ${branch.code}`}
+                  {t(branch.labelKey)}
                 </button>
               ))}
             </div>
           </div>
 
           <section className="mt-6 rounded-2xl border border-gray-200 bg-gray-50 p-5">
-            <h4 className="text-base font-semibold text-black">Item description</h4>
+            <h4 className="text-base font-semibold text-black">{t('itemInput.itemDescription')}</h4>
             <p className="mt-1 text-sm text-gray-500">
-              Add notes about fabric quality, pattern, supplier, or anything staff should know.
+              {t('itemInput.itemDescriptionHint')}
             </p>
             <textarea
               value={description}
               onChange={(event) => setDescription(event.target.value)}
               rows={4}
               className="mt-4 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
-              placeholder="Example: Premium velvet, 150cm wide, suitable for evening wear."
+              placeholder={t('itemInput.descriptionPlaceholder')}
             />
           </section>
 
           <section className="mt-6 rounded-2xl border border-gray-200 bg-gray-50 p-5">
-            <h4 className="text-base font-semibold text-black">Item image</h4>
+            <h4 className="text-base font-semibold text-black">{t('itemInput.itemImage')}</h4>
             <p className="mt-1 text-sm text-gray-500">
-              Upload a product photo. It is saved with this inventory item.
+              {t('itemInput.itemImageHint')}
             </p>
             <input
               type="file"
@@ -738,7 +753,7 @@ const ItemInputPage: React.FC = () => {
               <div className="mt-4 rounded-2xl border border-gray-200 bg-white p-3">
                 <img
                   src={pictureDataUrl}
-                  alt={pictureName || 'Selected item picture'}
+                  alt={pictureName || t('itemInput.selectedPictureAlt')}
                   className="h-40 w-full rounded-xl border border-gray-200 object-contain p-2"
                 />
                 <div className="mt-3 flex items-center justify-between gap-3 text-sm">
@@ -758,7 +773,7 @@ const ItemInputPage: React.FC = () => {
               onClick={handleCreateItem}
               disabled={loadingDefaults || duplicateExists}
             >
-              {loadingDefaults ? 'Loading...' : 'Save item & generate QR'}
+              {loadingDefaults ? t('common.loading') : t('itemInput.saveItemAndQr')}
             </button>
             {qrDataUrl && generatedItemId && (
               <button
@@ -774,58 +789,61 @@ const ItemInputPage: React.FC = () => {
           {duplicateExists && (
             <p className="mt-4 text-sm font-semibold text-red-600">
               {type === 'PIECE' && isPiecePackage
-                ? `This family already has this piece package (${formatPackageSummary(normalizedPackageComponents)}) with this price and color in ${branchLabel}.`
+                ? t('itemInput.duplicatePackage', {
+                    summary: formatPackageSummary(normalizedPackageComponents),
+                    branch: branchLabel,
+                  })
                 : type === 'PIECE'
-                  ? `This family already has a ${pieceLength} m piece with this price and color in ${branchLabel}. Use a different piece length to create a new QR.`
-                  : `This family already has this sub code / color / type combination for ${branchLabel}.`}
+                  ? t('itemInput.duplicatePiece', { length: pieceLength, branch: branchLabel })
+                  : t('itemInput.duplicateOther', { branch: branchLabel })}
             </p>
           )}
         </section>
 
         <aside className="space-y-6">
           <section className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
-            <h3 className="text-lg font-semibold text-black">QR label</h3>
+            <h3 className="text-lg font-semibold text-black">{t('itemInput.qrLabel')}</h3>
             <p className="mt-1 text-sm text-gray-500">
-              Scan this code in Sales or Exchange. Print a hard copy for the shelf or roll tag.
+              {t('itemInput.qrLabelHint')}
             </p>
             <div className="mt-4 flex flex-col items-center rounded-2xl bg-gray-50 p-4">
               {qrDataUrl ? (
                 <>
-                  <img src={qrDataUrl} alt={`QR code for ${generatedItemId}`} className="h-48 w-48" />
+                  <img src={qrDataUrl} alt={t('itemInput.qrAlt', { id: generatedItemId })} className="h-48 w-48" />
                   <p className="mt-3 break-all text-center text-sm font-semibold text-black">
                     {generatedItemId}
                   </p>
                   <div className="mt-4 grid w-full gap-2 text-sm text-gray-700">
                     <div className="flex justify-between">
-                      <span>Family</span>
+                      <span>{t('itemInput.familyLabel')}</span>
                       <strong>{familyCode}</strong>
                     </div>
                     <div className="flex justify-between">
-                      <span>Sub code</span>
+                      <span>{t('itemInput.subCodeLabel')}</span>
                       <strong>${formatSubCode(subCode)}</strong>
                     </div>
                     <div className="flex justify-between">
-                      <span>Type</span>
-                      <strong>{ITEM_TYPE_LABELS[type]}</strong>
+                      <span>{t('itemInput.type')}</span>
+                      <strong>{getItemTypeLabel(t, type)}</strong>
                     </div>
                     <div className="flex justify-between">
-                      <span>Amount</span>
+                      <span>{t('itemInput.amountLabel')}</span>
                       <strong>{amountLabel}</strong>
                     </div>
                     {type === 'PIECE' && isPiecePackage && (
                       <div className="flex justify-between">
-                        <span>Package</span>
+                        <span>{t('itemInput.packageLabel')}</span>
                         <strong className="text-right">
                           {formatPackageSummary(normalizedPackageComponents)}
                         </strong>
                       </div>
                     )}
                     <div className="flex justify-between">
-                      <span>Color</span>
-                      <strong>{selectedColor?.name ?? '—'}</strong>
+                      <span>{t('itemInput.color')}</span>
+                      <strong>{selectedColor?.name ?? t('common.dash')}</strong>
                     </div>
                     <div className="flex justify-between">
-                      <span>Destination</span>
+                      <span>{t('itemInput.destinationLabel')}</span>
                       <strong>{branchLabel}</strong>
                     </div>
                   </div>
@@ -847,23 +865,23 @@ const ItemInputPage: React.FC = () => {
                   </div>
                 </>
               ) : (
-                <p className="text-sm text-gray-500">Fill in the form to generate a QR code.</p>
+                <p className="text-sm text-gray-500">{t('itemInput.fillFormForQr')}</p>
               )}
             </div>
 
             {createdItemId && (
               <div className="mt-4 rounded-2xl border border-green-200 bg-green-50 p-4 text-sm text-green-700">
-                <p className="font-semibold">Item saved successfully.</p>
-                <p className="mt-1 break-all">ID: {createdItemId}</p>
+                <p className="font-semibold">{t('itemInput.itemSaved')}</p>
+                <p className="mt-1 break-all">{t('itemInput.idLabel', { id: createdItemId })}</p>
                 {createdDescription && (
                   <p className="mt-2 text-green-800">
-                    <span className="font-semibold">Description:</span> {createdDescription}
+                    <span className="font-semibold">{t('itemInput.descriptionLabel')}</span> {createdDescription}
                   </p>
                 )}
                 {createdPictureDataUrl && (
                   <img
                     src={createdPictureDataUrl}
-                    alt={`Saved picture for ${createdItemId}`}
+                    alt={t('itemInput.savedPictureAlt', { id: createdItemId })}
                     className="mt-3 h-32 w-full rounded-xl border border-green-200 bg-white object-contain p-2"
                   />
                 )}
