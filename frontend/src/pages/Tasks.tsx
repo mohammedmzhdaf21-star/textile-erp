@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { getCurrentUser } from '../lib/auth';
 import {
   branches,
@@ -17,6 +17,7 @@ import {
   type BranchTask,
   type TaskAssignment,
 } from '../lib/taskSettings';
+import { isAutoManagedCuttingTask } from '../lib/cuttingTasks';
 
 const formatDateTime = (dateString?: string) =>
   dateString ? new Date(dateString).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : 'Not scheduled';
@@ -35,6 +36,17 @@ const Tasks: React.FC = () => {
   const [note, setNote] = useState('');
   const [schedule, setSchedule] = useState<TaskAssignment['schedule']>('DAILY');
   const [message, setMessage] = useState<string | null>(null);
+
+  const refreshTasks = () => {
+    setTasks(readTasks());
+    setAssignments(readTaskAssignments());
+  };
+
+  useEffect(() => {
+    const onTasksUpdated = () => refreshTasks();
+    window.addEventListener('branch-tasks-updated', onTasksUpdated);
+    return () => window.removeEventListener('branch-tasks-updated', onTasksUpdated);
+  }, []);
 
   const branchAssignments = useMemo(
     () => assignments.filter((assignment) => assignment.branch === selectedBranch),
@@ -120,7 +132,7 @@ const Tasks: React.FC = () => {
         <div>
           <h2 className="text-2xl font-bold text-black">Tasks</h2>
           <p className="mt-1 max-w-2xl text-sm text-gray-600">
-            Admin/owner task schedule by branch. Cutting tasks are also created automatically when a linked cut piece is sold.
+            Admin/owner task schedule by branch. Cutting tasks are created when shelf pieces sell out and are marked done automatically in Item Conversion.
           </p>
         </div>
         <div className="text-sm text-gray-500">Branch {selectedBranch}</div>
@@ -283,15 +295,31 @@ const Tasks: React.FC = () => {
                             Source roll: {task.sourceItemId}
                           </div>
                         )}
+                        {isAutoManagedCuttingTask(task) && !isTaskComplete(task) && (
+                          <div className="mt-2 rounded-xl bg-white px-3 py-2 text-xs text-amber-800">
+                            Auto-completes when this roll is cut to a piece in Item Conversion.
+                          </div>
+                        )}
                       </div>
                       <div className="flex gap-2">
-                        <button
-                          type="button"
-                          onClick={() => toggleTask(task.id)}
-                          className="rounded-xl bg-black px-3 py-2 text-xs font-semibold text-white"
-                        >
-                          {isTaskComplete(task) ? 'Reopen' : 'Done'}
-                        </button>
+                        {!isAutoManagedCuttingTask(task) && (
+                          <button
+                            type="button"
+                            onClick={() => toggleTask(task.id)}
+                            className="rounded-xl bg-black px-3 py-2 text-xs font-semibold text-white"
+                          >
+                            {isTaskComplete(task) ? 'Reopen' : 'Done'}
+                          </button>
+                        )}
+                        {isAutoManagedCuttingTask(task) && isTaskComplete(task) && (
+                          <button
+                            type="button"
+                            onClick={() => toggleTask(task.id)}
+                            className="rounded-xl border border-gray-300 px-3 py-2 text-xs font-semibold text-gray-700"
+                          >
+                            Reopen
+                          </button>
+                        )}
                         <button
                           type="button"
                           onClick={() => deleteTask(task.id)}

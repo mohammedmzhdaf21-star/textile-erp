@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import QRCode from 'qrcode';
 import api from '../lib/api';
+import { completeCuttingTasksAfterRollToPiece } from '../lib/cuttingTasks';
+import { buildInventoryItemId } from '../lib/inventoryCodes';
 
 type BranchCode = 'A' | 'B' | 'C' | 'E' | 'F';
 type ItemType = 'ROLL' | 'PIECE' | 'REMANENT';
@@ -10,6 +12,7 @@ type InventoryItem = {
   id: string;
   branchId: string;
   code: number;
+  subCode?: number | string;
   colorId: string;
   color?: { id: string; name: string; hexCode?: string };
   branch?: { id: string; name: string };
@@ -22,6 +25,8 @@ type InventoryItem = {
   qrCodeDataUrl?: string | null;
   sourceItemId?: string | null;
   conversionType?: string | null;
+  isPiecePackage?: boolean;
+  packageKey?: string;
 };
 
 type ConversionSummary = {
@@ -57,6 +62,9 @@ const soldAsUnitForItem = (item: InventoryItem): SoldUnit =>
 
 const itemAvailableAmount = (item: InventoryItem) =>
   item.type === 'PIECE' ? item.quantity : toNumber(item.meters);
+
+const itemSubCode = (item: InventoryItem) =>
+  toNumber(item.subCode ?? item.costPrice ?? 0);
 
 const colorCodeForItem = (item: InventoryItem) =>
   (item.color?.name || item.colorId)
@@ -131,6 +139,28 @@ const ItemConversion: React.FC = () => {
     }
   };
 
+  const findExistingPieceForRollCut = async (rollSource: InventoryItem, pieceLength: number) => {
+    const response = await api.get('/inventory', {
+      params: {
+        branchId: rollSource.branchId,
+        colorId: rollSource.colorId,
+        type: 'PIECE',
+        code: rollSource.code,
+        pageSize: 200,
+      },
+    });
+    const items = (response.data?.items ?? []) as InventoryItem[];
+
+    const matches = items.filter((item) => {
+      if (item.isPiecePackage || (item.packageKey ?? '')) return false;
+      if (Math.abs(toNumber(item.pieceLength) - pieceLength) >= 0.001) return false;
+      return true;
+    });
+
+    // Prefer the sold-out piece (qty 0) — same family code, color, and cut length.
+    return matches.find((item) => item.quantity === 0) ?? matches[0] ?? null;
+  };
+
   const patchSourceStock = async (item: InventoryItem, amount: number) => {
     if (item.type === 'PIECE') {
       await api.patch(`/inventory/${encodeURIComponent(item.id)}`, {
@@ -188,6 +218,7 @@ const ItemConversion: React.FC = () => {
         id: newItemId,
         branchId: destinationBranchId,
         code: transferSource.code,
+        subCode: itemSubCode(transferSource),
         colorId: transferSource.colorId,
         type: transferSource.type,
         meters: transferSource.type === 'PIECE' ? undefined : amount,
@@ -237,8 +268,28 @@ const ItemConversion: React.FC = () => {
     setMessage(null);
 
     try {
-      const newItemId = await findAvailableId(rollSource.branchId, rollSource, 'PIECE');
-      const qrCodeDataUrl = await createQrDataUrl(newItemId);
+      const existingPiece = await findExistingPieceForRollCut(rollSource, amount);
+      let pieceItemId: string;
+      let qrCodeDataUrl: string;
+      let addedToExisting = false;
+
+      if (existingPiece) {
+        pieceItemId = existingPiece.id;
+        qrCodeDataUrl =
+          existingPiece.qrCodeDataUrl || (await createQrDataUrl(existingPiece.id));
+        addedToExisting = true;
+      } else {
+        pieceItemId = buildInventoryItemId({
+          branchId: rollSource.branchId,
+          familyCode: rollSource.code,
+          subCode: itemSubCode(rollSource),
+          colorName: rollSource.color?.name || rollSource.colorId,
+          colorId: rollSource.colorId,
+          type: 'PIECE',
+          pieceLength: amount,
+        });
+        qrCodeDataUrl = await createQrDataUrl(pieceItemId);
+      }
 
       await patchSourceStock(rollSource, amount);
       setRollSource((current) =>
@@ -250,31 +301,55 @@ const ItemConversion: React.FC = () => {
             }
           : current
       );
-      await api.post('/inventory', {
-        id: newItemId,
-        branchId: rollSource.branchId,
-        code: rollSource.code,
-        colorId: rollSource.colorId,
-        type: 'PIECE',
-        pieceLength: amount,
-        quantity: 1,
-        costPrice: rollSource.costPrice ? toNumber(rollSource.costPrice) : undefined,
-        qrCodeValue: newItemId,
-        qrCodeDataUrl,
-        pictureName: rollSource.id,
-        pictureDataUrl: rollSource.qrCodeDataUrl || undefined,
-        sourceItemId: rollSource.id,
-        conversionType: 'ROLL_TO_PIECE',
-      });
+
+      if (addedToExisting && existingPiece) {
+        await api.patch(`/inventory/${encodeURIComponent(pieceItemId)}`, {
+          version: existingPiece.version,
+          quantity: existingPiece.quantity + 1,
+        });
+      } else {
+        await api.post('/inventory', {
+          id: pieceItemId,
+          branchId: rollSource.branchId,
+          code: rollSource.code,
+          subCode: itemSubCode(rollSource),
+          colorId: rollSource.colorId,
+          type: 'PIECE',
+          pieceLength: amount,
+          quantity: 1,
+          costPrice: rollSource.costPrice ? toNumber(rollSource.costPrice) : undefined,
+          qrCodeValue: pieceItemId,
+          qrCodeDataUrl,
+          pictureName: rollSource.id,
+          pictureDataUrl: rollSource.qrCodeDataUrl || undefined,
+          sourceItemId: rollSource.id,
+          conversionType: 'ROLL_TO_PIECE',
+        });
+      }
 
       setSummary({
-        title: 'Piece created from roll',
+        title: addedToExisting ? 'Stock added to existing piece' : 'Piece created from roll',
         sourceId: rollSource.id,
-        newItemId,
+        newItemId: pieceItemId,
         qrCodeDataUrl,
-        details: `Cut ${amount.toFixed(2)} meters into one new piece with code ${rollSource.code} and color ${rollSource.color?.name || rollSource.colorId}.`,
+        details: addedToExisting
+          ? `Cut ${amount.toFixed(2)} meters and added 1 piece to existing item ${pieceItemId} (code ${rollSource.code}, color ${rollSource.color?.name || rollSource.colorId}).`
+          : `Cut ${amount.toFixed(2)} meters into one new piece with code ${rollSource.code} and color ${rollSource.color?.name || rollSource.colorId}.`,
       });
-      setMessage('Roll-to-piece conversion complete. New piece QR created.');
+      const completedTasks = completeCuttingTasksAfterRollToPiece({
+        rollItemId: rollSource.id,
+        branchId: rollSource.branchId,
+        code: rollSource.code,
+        colorName: rollSource.color?.name,
+        newPieceId: pieceItemId,
+      });
+      setMessage(
+        completedTasks.length > 0
+          ? `Roll-to-piece conversion complete. ${completedTasks.length} cutting task(s) marked done automatically.`
+          : addedToExisting
+            ? 'Roll-to-piece conversion complete. Stock added to existing piece.'
+            : 'Roll-to-piece conversion complete. New piece QR created.'
+      );
       await loadItem(rollSource.id, setRollSource);
     } catch (err: any) {
       const body = err?.response?.data;
@@ -370,7 +445,7 @@ const ItemConversion: React.FC = () => {
         <section className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
           <h3 className="text-xl font-semibold text-black">Roll to piece</h3>
           <p className="mt-1 text-sm text-gray-600">
-            Cut a length from a roll/remnant and create a new piece QR linked to the roll code and color.
+            Cut a length from a roll/remnant. If a piece already exists for the same family code, color, and cut length, stock is added to it instead of creating a new QR.
           </p>
 
           <div className="mt-4 grid gap-3 md:grid-cols-[1fr_auto]">
@@ -398,7 +473,7 @@ const ItemConversion: React.FC = () => {
           />
 
           <button type="button" onClick={cutRollToPiece} disabled={isProcessing} className="btn-primary mt-4 w-full">
-            {isProcessing ? 'Cutting...' : 'Create piece QR'}
+            {isProcessing ? 'Cutting...' : 'Cut roll to piece'}
           </button>
         </section>
       </div>

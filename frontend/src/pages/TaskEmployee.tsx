@@ -1,5 +1,6 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { getCurrentUser } from '../lib/auth';
+import { isAutoManagedCuttingTask } from '../lib/cuttingTasks';
 import {
   branches,
   completeTask,
@@ -34,6 +35,12 @@ const TaskEmployee: React.FC = () => {
 
   const refresh = () => setTasks(readTasks());
 
+  useEffect(() => {
+    const onTasksUpdated = () => refresh();
+    window.addEventListener('branch-tasks-updated', onTasksUpdated);
+    return () => window.removeEventListener('branch-tasks-updated', onTasksUpdated);
+  }, []);
+
   const markDone = (task: BranchTask) => {
     const checkedBy = `${employeeName} (${employeeEmail})`;
     completeTask(task.id, checkedBy);
@@ -47,7 +54,7 @@ const TaskEmployee: React.FC = () => {
         <div>
           <h2 className="text-2xl font-bold text-black">Task Employee</h2>
           <p className="mt-1 max-w-2xl text-sm text-gray-600">
-            Employees check off assigned branch tasks here. Completed task details appear in the admin Tasks section.
+            Employees check off assigned branch tasks here. Cutting tasks complete automatically when a roll is converted to a piece in Item Conversion.
           </p>
         </div>
         <div className="text-sm text-gray-500">Signed in as {employeeName}</div>
@@ -116,6 +123,11 @@ const TaskEmployee: React.FC = () => {
                       {scheduleLabel(task.schedule)} · Assigned to {task.assignedTo}
                     </div>
                     {task.note && <div className="mt-2 text-sm text-gray-700">{task.note}</div>}
+                    {isAutoManagedCuttingTask(task) && !isTaskComplete(task) && (
+                      <div className="mt-2 rounded-xl bg-white px-3 py-2 text-sm text-amber-800">
+                        This cutting task is completed automatically in Item Conversion when the roll is cut into a shelf piece.
+                      </div>
+                    )}
                     {isTaskComplete(task) && (
                       <div className="mt-2 rounded-xl bg-white px-3 py-2 text-sm text-green-700">
                         Checked by {task.checkedBy || 'Unknown employee'} at {formatDateTime(task.checkedAt)}
@@ -123,18 +135,20 @@ const TaskEmployee: React.FC = () => {
                     )}
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={() => markDone(task)}
-                    disabled={isTaskComplete(task)}
-                    className={`rounded-xl px-4 py-2 text-sm font-semibold ${
-                      isTaskComplete(task)
-                        ? 'bg-gray-200 text-gray-500'
-                        : 'bg-black text-white hover:bg-gray-800'
-                    }`}
-                  >
-                    {isTaskComplete(task) ? 'Done' : 'Check done'}
-                  </button>
+                  {!isAutoManagedCuttingTask(task) && (
+                    <button
+                      type="button"
+                      onClick={() => markDone(task)}
+                      disabled={isTaskComplete(task)}
+                      className={`rounded-xl px-4 py-2 text-sm font-semibold ${
+                        isTaskComplete(task)
+                          ? 'bg-gray-200 text-gray-500'
+                          : 'bg-black text-white hover:bg-gray-800'
+                      }`}
+                    >
+                      {isTaskComplete(task) ? 'Done' : 'Check done'}
+                    </button>
+                  )}
                 </div>
               </div>
             ))}

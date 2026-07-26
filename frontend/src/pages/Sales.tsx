@@ -2,7 +2,8 @@ import React, { useMemo, useState } from 'react';
 import api from '../lib/api';
 import { getCurrentUser } from '../lib/auth';
 import { getItemMinimumPrice } from '../lib/dashboardSettings';
-import { createCuttingTaskFromSale, type BranchCode } from '../lib/taskSettings';
+import { maybeCreateCuttingTaskAfterPieceSale } from '../lib/cuttingTasks';
+import type { BranchCode } from '../lib/taskSettings';
 import {
   formatPackageComponentsSold,
   formatPackageStockSummary,
@@ -425,19 +426,26 @@ const SalesView: React.FC = () => {
           throw postErr;
         }
       }
-      cart.forEach((line) => {
-        if (line.type !== 'inventory' || line.soldAsUnit !== 'PIECE' || !line.sourceItemId) return;
-        createCuttingTaskFromSale({
-          branch: (line.sourceBranch as BranchCode) || (branch as BranchCode),
-          code: line.code,
-          colorName: line.colorName,
-          sourceItemId: line.sourceItemId,
-          soldItemId: line.inventoryItemId,
-          saleId,
-          assignedTo: 'Inventory team',
-        });
-      });
-      setSuccessMessage(`Sale created for branch ${branch}. Total ${saleTotal.toFixed(2)}`);
+      let cuttingTasksCreated = 0;
+      for (const line of cart) {
+        if (line.type !== 'inventory' || line.soldAsUnit !== 'PIECE') continue;
+        try {
+          const task = await maybeCreateCuttingTaskAfterPieceSale({
+            soldItemId: line.inventoryItemId,
+            saleId,
+            branchCode: (line.sourceBranch as BranchCode) || (branch as BranchCode),
+            assignedTo: 'Inventory team',
+          });
+          if (task) cuttingTasksCreated += 1;
+        } catch (taskError) {
+          console.warn('Failed to evaluate cutting task after piece sale', taskError);
+        }
+      }
+      setSuccessMessage(
+        cuttingTasksCreated > 0
+          ? `Sale created for branch ${branch}. Total ${saleTotal.toFixed(2)}. ${cuttingTasksCreated} cutting task(s) added for employees.`
+          : `Sale created for branch ${branch}. Total ${saleTotal.toFixed(2)}`
+      );
       setCart([]);
       setAmountPaid('0');
       setPaymentStatus('FULL');
