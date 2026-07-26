@@ -143,6 +143,7 @@
     "owedMoney": "پارەی قەرز",
     "tasks": "ئەرکەکان",
     "taskEmployee": "ئەرکی کارمەند",
+    "openTasksBadge": "{{count}} ئەرکی کراوە",
     "dataAnalysis": "شیکردنەوەی داتا",
     "trusteeCommission": "کۆمیشنی وەبەرهێنەر",
     "exchange": "گۆڕینەوە",
