@@ -1,9 +1,10 @@
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { NavLink } from 'react-router-dom';
 import { canAccessRoute } from '../lib/dashboardSettings';
 import { getCurrentUser } from '../lib/auth';
+import { countOpenTasks } from '../lib/taskSettings';
 import LanguageSwitcher from './LanguageSwitcher';
 
 const navigation = [
@@ -25,7 +26,15 @@ const navigation = [
 const Sidebar: React.FC = () => {
   const { t } = useTranslation();
   const user = getCurrentUser();
+  const [openTaskCount, setOpenTaskCount] = useState(() => countOpenTasks());
   const visibleNavigation = navigation.filter((nav) => canAccessRoute(user?.email, nav.to));
+
+  useEffect(() => {
+    const refreshCount = () => setOpenTaskCount(countOpenTasks());
+    refreshCount();
+    window.addEventListener('branch-tasks-updated', refreshCount);
+    return () => window.removeEventListener('branch-tasks-updated', refreshCount);
+  }, []);
 
   return (
     <aside className="h-full w-64 shrink-0 bg-white border-r border-gray-200 p-4 flex flex-col">
@@ -47,7 +56,21 @@ const Sidebar: React.FC = () => {
                 : 'block px-3 py-2 rounded-md text-gray-700 hover:bg-gray-100 transition-colors';
             }}
           >
-            <span className={nav.to === '/sales' ? 'relative z-10' : undefined}>{t(nav.labelKey)}</span>
+            <span
+              className={`flex items-center justify-between gap-2 ${
+                nav.to === '/sales' ? 'relative z-10' : ''
+              }`}
+            >
+              <span>{t(nav.labelKey)}</span>
+              {nav.to === '/task-employee' && openTaskCount > 0 && (
+                <span
+                  className="inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-red-600 px-1.5 text-[11px] font-bold leading-none text-white"
+                  aria-label={t('nav.openTasksBadge', { count: openTaskCount })}
+                >
+                  {openTaskCount > 99 ? '99+' : openTaskCount}
+                </span>
+              )}
+            </span>
           </NavLink>
         ))}
       </nav>

@@ -167,6 +167,9 @@ export const nextDueAt = (schedule: TaskAssignment['schedule'], from = new Date(
 export const isTaskComplete = (task: BranchTask) =>
   task.status === 'DONE' || Boolean(task.checkedAt);
 
+export const countOpenTasks = () =>
+  readTasks().filter((task) => !isTaskComplete(task)).length;
+
 export const createTask = (task: Omit<BranchTask, 'id' | 'createdAt' | 'status'>) => {
   const nextTask: BranchTask = {
     ...task,

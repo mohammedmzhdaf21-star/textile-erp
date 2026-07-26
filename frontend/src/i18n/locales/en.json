@@ -143,6 +143,7 @@
     "owedMoney": "Owed Money",
     "tasks": "Tasks",
     "taskEmployee": "Task Employee",
+    "openTasksBadge": "{{count}} open tasks",
     "dataAnalysis": "Data Analysis",
     "trusteeCommission": "Trustee Commission",
     "exchange": "Exchange",
