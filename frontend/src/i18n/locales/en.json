@@ -464,7 +464,18 @@
     "failedToLoad": "Failed to load history sales",
     "historicalWindow": "Branch {{branch}} historical sales window.",
     "noSalesForWindow": "No sales found for this branch/date window.",
-    "saleIdLabel": "Sale ID: {{id}}"
+    "saleIdLabel": "Sale ID: {{id}}",
+    "searchTitle": "Find a sale",
+    "searchDescription": "Search by customer phone number or scan/paste the QR item code from the product they bought.",
+    "searchPlaceholder": "Phone number or item QR code (e.g. B001-001-150-BLAR)",
+    "searchButton": "Search sales",
+    "searchRequired": "Enter a phone number or item QR code to search.",
+    "searchFailed": "Sale search failed.",
+    "searchNoResults": "No sales found for this phone or item code.",
+    "searchResults": "{{count}} sale(s) found",
+    "searchBranchHint": "Results are filtered to Branch {{branch}} only.",
+    "itemIdLabel": "Item: {{id}}",
+    "cashImpact": "Cash impact: {{amount}}"
   },
   "owedMoney": {
     "title": "Owed Money",
