@@ -12,6 +12,7 @@ import {
   formatSubCode,
   getItemTypeLabel,
   printInventoryLabel,
+  resolveMeteredInstanceKey,
   type BranchDestinationCode,
   type InventoryItemType,
 } from '../lib/inventoryCodes';
@@ -100,6 +101,19 @@ const ItemInputPage: React.FC = () => {
     [isPiecePackage, normalizedPackageComponents]
   );
 
+  const meteredInstanceKey = useMemo(() => {
+    if (type !== 'ROLL' && type !== 'REMANENT') return '';
+    if (!branchId || !familyCode || !colorId || subCode < 0) return '';
+    return resolveMeteredInstanceKey({
+      type,
+      items: familyItems,
+      branchId,
+      familyCode,
+      subCode,
+      colorId,
+    });
+  }, [branchId, colorId, familyCode, familyItems, subCode, type]);
+
   const generatedItemId = useMemo(() => {
     if (!branchId || !familyCode || !selectedColor || subCode < 0) return '';
     if (isPiecePackage && normalizedPackageComponents.length === 0) return '';
@@ -113,12 +127,14 @@ const ItemInputPage: React.FC = () => {
       pieceLength: type === 'PIECE' && !isPiecePackage ? pieceLength : undefined,
       isPiecePackage,
       packageComponents: normalizedPackageComponents,
+      instanceKey: meteredInstanceKey || undefined,
     });
   }, [
     branchId,
     colorId,
     familyCode,
     isPiecePackage,
+    meteredInstanceKey,
     normalizedPackageComponents,
     pieceLength,
     selectedColor,
@@ -178,7 +194,7 @@ const ItemInputPage: React.FC = () => {
       );
     }
 
-    return sameBase;
+    return false;
   });
 
   useEffect(() => {
@@ -379,7 +395,10 @@ const ItemInputPage: React.FC = () => {
       pictureName: pictureName || undefined,
       pictureDataUrl: pictureDataUrl || undefined,
     };
-    if (type === 'ROLL' || type === 'REMANENT') payload.meters = Number(meters);
+    if (type === 'ROLL' || type === 'REMANENT') {
+      payload.meters = Number(meters);
+      if (meteredInstanceKey) payload.packageKey = meteredInstanceKey;
+    }
     if (type === 'PIECE' && isPiecePackage) {
       payload.isPiecePackage = true;
       payload.packageKey = packageKey;

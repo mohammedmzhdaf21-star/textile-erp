@@ -149,7 +149,11 @@ export async function createInventoryItem(
   const pieceLength =
     input.type === 'PIECE' && !input.isPiecePackage ? input.pieceLength : 0;
 
-  const packageKey = input.isPiecePackage ? input.packageKey ?? '' : '';
+  const packageKey = input.isPiecePackage
+    ? input.packageKey ?? ''
+    : input.type === 'ROLL' || input.type === 'REMANENT'
+      ? input.packageKey ?? ''
+      : '';
   const packageComponents = input.isPiecePackage
     ? parsePackageComponents(input.packageComponents)
     : [];
