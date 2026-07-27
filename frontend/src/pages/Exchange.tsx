@@ -1,14 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import api from '../lib/api';
 import { getCurrentUser } from '../lib/auth';
-import { completeCuttingTasksAfterRollToPiece } from '../lib/cuttingTasks';
-import { isBelowRemnantThreshold } from '../lib/inventoryRules';
-import { printPieceInventoryLabel } from '../lib/pieceLabel';
-import {
-  cutRollToPieceStock,
-  itemSubCode,
-  type RollInventoryItem,
-} from '../lib/rollToPiece';
 import { useTranslation } from 'react-i18next';
 
 type BranchCode = 'A' | 'B' | 'C' | 'E' | 'F';
@@ -67,14 +59,6 @@ const BRANCH_MAP: Record<BranchCode, string> = {
   F: 'B002',
 };
 
-const BRANCH_CODE_BY_ID: Record<string, BranchCode> = {
-  B001: 'A',
-  B002: 'B',
-  B003: 'C',
-  B004: 'E',
-  B005: 'F',
-};
-
 const soldAsUnitForItem = (item: InventoryLookupItem): 'METER' | 'PIECE' =>
   item.type === 'PIECE' ? 'PIECE' : 'METER';
 
@@ -122,13 +106,6 @@ const ExchangePage: React.FC = () => {
     meters: 1,
     pricePerMeter: 20,
   });
-  const [rollCutScan, setRollCutScan] = useState({
-    rollId: '',
-    cutMeters: 2.25,
-    price: 15,
-  });
-  const [rollCutSource, setRollCutSource] = useState<RollInventoryItem | null>(null);
-  const [isCuttingForExchange, setIsCuttingForExchange] = useState(false);
 
   const totalNewSaleAmount = useMemo(
     () =>
@@ -349,108 +326,6 @@ const ExchangePage: React.FC = () => {
       },
     ]);
     setPlainSale((current) => ({ ...current, meters: 1, pricePerMeter: 20 }));
-  };
-
-  const loadRollForCut = async () => {
-    const rollId = rollCutScan.rollId.trim();
-    if (!rollId) {
-      return alert(t('itemConversion.enterItemIdFirst'));
-    }
-
-    try {
-      const response = await api.get(`/inventory/${encodeURIComponent(rollId)}`);
-      const item = response.data as RollInventoryItem;
-      if (item.type !== 'ROLL' && item.type !== 'REMANENT') {
-        return alert(t('itemConversion.onlyRollsRemnants'));
-      }
-      setRollCutSource(item);
-      setRollCutScan((current) => ({
-        ...current,
-        price: itemSubCode(item),
-      }));
-      setErrorMessage(null);
-    } catch (error: any) {
-      const status = error?.response?.status;
-      const body = error?.response?.data;
-      alert(
-        t('exchange.unableToLoadSaleItem', {
-          status: status ? t('common.requestFailedStatus', { status }) : '',
-          message: body?.error ?? body?.message ?? error?.message,
-        })
-      );
-    }
-  };
-
-  const cutAndAddToExchange = async () => {
-    if (!rollCutSource) {
-      return alert(t('itemConversion.loadRollFirst'));
-    }
-    const meters = Number(rollCutScan.cutMeters);
-    if (!Number.isFinite(meters) || meters <= 0) {
-      return alert(t('itemConversion.enterValidMetersToCut'));
-    }
-    if (isBelowRemnantThreshold(meters)) {
-      return alert(t('exchange.cutOnlyPieces'));
-    }
-    const price = Number(rollCutScan.price);
-    if (!Number.isFinite(price) || price <= 0) {
-      return alert(t('exchange.enterValidAmountPrice'));
-    }
-
-    setIsCuttingForExchange(true);
-    setErrorMessage(null);
-    setSuccessMessage(null);
-
-    try {
-      const result = await cutRollToPieceStock(rollCutSource, meters, { uniquePiece: true });
-      const labelPrinted = printPieceInventoryLabel({
-        t,
-        itemId: result.pieceItemId,
-        qrDataUrl: result.qrCodeDataUrl,
-        familyCode: rollCutSource.code,
-        subCode: itemSubCode(rollCutSource),
-        type: 'PIECE',
-        pieceLength: result.pieceLength,
-        colorName: rollCutSource.color?.name,
-        branchId: rollCutSource.branchId,
-      });
-
-      const sourceBranch = BRANCH_CODE_BY_ID[rollCutSource.branchId] ?? selectedBranch;
-      setNewSaleLines((current) => [
-        ...current,
-        {
-          type: 'inventory',
-          inventoryItemId: result.pieceItemId,
-          sourceBranch,
-          colorId: rollCutSource.colorId,
-          itemType: 'PIECE',
-          price,
-          soldAsUnit: 'PIECE',
-          quantity: 1,
-        },
-      ]);
-
-      completeCuttingTasksAfterRollToPiece({
-        rollItemId: rollCutSource.id,
-        branchId: rollCutSource.branchId,
-        code: rollCutSource.code,
-        colorName: rollCutSource.color?.name,
-        newPieceId: result.pieceItemId,
-      });
-
-      const refreshed = await api.get(`/inventory/${encodeURIComponent(rollCutSource.id)}`);
-      setRollCutSource(refreshed.data as RollInventoryItem);
-      setSuccessMessage(
-        labelPrinted ? t('exchange.cutAddedToExchange') : t('exchange.cutPrintBlocked')
-      );
-    } catch (error: any) {
-      const body = error?.response?.data;
-      setErrorMessage(
-        body?.error ?? body?.message ?? error?.message ?? t('itemConversion.failedToCut')
-      );
-    } finally {
-      setIsCuttingForExchange(false);
-    }
   };
 
   const removeReturnedInventory = (index: number) => {
@@ -683,68 +558,8 @@ const ExchangePage: React.FC = () => {
               </div>
             </div>
             <button type="button" className="btn-primary mt-4" onClick={addNewSaleLine}>
-              {t('exchange.addReplacementItem')}
+              Add replacement item
             </button>
-
-            <div className="mt-6 rounded-3xl border border-magenta-200 bg-magenta-50 p-4">
-              <h4 className="text-base font-semibold text-black">{t('exchange.cutFromRollTitle')}</h4>
-              <p className="mt-1 text-sm text-gray-600">{t('exchange.cutFromRollDescription')}</p>
-              <div className="mt-4 grid gap-3 sm:grid-cols-4">
-                <div className="sm:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700">{t('exchange.rollIdPlaceholder')}</label>
-                  <div className="mt-1 grid gap-2 sm:grid-cols-[1fr_auto]">
-                    <input
-                      value={rollCutScan.rollId}
-                      onChange={(e) => setRollCutScan((current) => ({ ...current, rollId: e.target.value }))}
-                      className="w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
-                      placeholder={t('exchange.rollIdPlaceholder')}
-                    />
-                    <button type="button" className="btn-secondary" onClick={loadRollForCut}>
-                      {t('exchange.loadRoll')}
-                    </button>
-                  </div>
-                  {rollCutSource && (
-                    <p className="mt-2 text-xs text-gray-600 break-all">
-                      {rollCutSource.id} · {rollCutSource.type}
-                    </p>
-                  )}
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">{t('exchange.metersToCut')}</label>
-                  <input
-                    type="number"
-                    min="2"
-                    step="0.01"
-                    value={rollCutScan.cutMeters}
-                    onChange={(e) =>
-                      setRollCutScan((current) => ({ ...current, cutMeters: Number(e.target.value) }))
-                    }
-                    className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">{t('exchange.pricePerUnit')}</label>
-                  <input
-                    type="number"
-                    min="0.01"
-                    step="0.01"
-                    value={rollCutScan.price}
-                    onChange={(e) =>
-                      setRollCutScan((current) => ({ ...current, price: Number(e.target.value) }))
-                    }
-                    className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
-                  />
-                </div>
-              </div>
-              <button
-                type="button"
-                className="btn-primary mt-4"
-                onClick={cutAndAddToExchange}
-                disabled={isCuttingForExchange}
-              >
-                {isCuttingForExchange ? t('exchange.cuttingForExchange') : t('exchange.cutAddAndPrint')}
-              </button>
-            </div>
 
             <div className="mt-6 rounded-3xl border border-gray-200 bg-gray-50 p-4">
               <h4 className="text-base font-semibold text-black mb-3">{t('exchange.plainClothReplacement')}</h4>

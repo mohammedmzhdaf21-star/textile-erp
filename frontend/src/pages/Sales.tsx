@@ -3,7 +3,16 @@ import { useTranslation } from 'react-i18next';
 import api from '../lib/api';
 import { getCurrentUser } from '../lib/auth';
 import { getItemMinimumPrice } from '../lib/dashboardSettings';
-import { maybeCreateCuttingTaskAfterPieceSale } from '../lib/cuttingTasks';
+import { completeCuttingTasksAfterRollToPiece, maybeCreateCuttingTaskAfterPieceSale } from '../lib/cuttingTasks';
+import { sellCutPiece } from '../lib/cutAndSell';
+import { getColorLabel } from '../lib/colorLabels';
+import { isBelowRemnantThreshold } from '../lib/inventoryRules';
+import { printPieceInventoryLabel } from '../lib/pieceLabel';
+import {
+  cutRollToPieceStock,
+  itemSubCode,
+  type RollInventoryItem,
+} from '../lib/rollToPiece';
 import type { BranchCode } from '../lib/taskSettings';
 import {
   formatPackageComponentsSold,
@@ -115,6 +124,15 @@ const SalesView: React.FC = () => {
   const [minimumPriceMessage, setMinimumPriceMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [rollCutScan, setRollCutScan] = useState({ rollId: '', cutMeters: 2.25, price: 15 });
+  const [rollCutSource, setRollCutSource] = useState<RollInventoryItem | null>(null);
+  const [isCuttingRoll, setIsCuttingRoll] = useState(false);
+  const [cutSaleSummary, setCutSaleSummary] = useState<{
+    pieceItemId: string;
+    qrCodeDataUrl: string;
+    rollSourceId: string;
+    labelPrinted: boolean;
+  } | null>(null);
 
   const detectedPackageComponents = useMemo(
     () => parsePackageComponents(detectedScanItem?.packageComponents),
@@ -357,6 +375,140 @@ const SalesView: React.FC = () => {
 
   const removeLine = (index: number) => {
     setCart((current) => current.filter((_, idx) => idx !== index));
+  };
+
+  const loadRollForSaleCut = async () => {
+    const rollId = rollCutScan.rollId.trim();
+    if (!rollId) {
+      return alert(t('itemConversion.enterItemIdFirst'));
+    }
+
+    try {
+      const response = await api.get(`/inventory/${encodeURIComponent(rollId)}`);
+      const item = response.data as RollInventoryItem;
+      if (item.type !== 'ROLL' && item.type !== 'REMANENT') {
+        return alert(t('itemConversion.onlyRollsRemnants'));
+      }
+      setRollCutSource(item);
+      setRollCutScan((current) => ({
+        ...current,
+        price: itemSubCode(item),
+      }));
+      setCutSaleSummary(null);
+    } catch (error: any) {
+      const status = error?.response?.status;
+      const body = error?.response?.data;
+      alert(
+        t('sales.unableToLoadItem', {
+          status: status ? t('common.requestFailedStatus', { status }) : '',
+          message: body?.error ?? body?.message ?? error?.message,
+        })
+      );
+    }
+  };
+
+  const cutRollSellAndPrint = async () => {
+    if (!rollCutSource) {
+      return alert(t('itemConversion.loadRollFirst'));
+    }
+    const meters = Number(rollCutScan.cutMeters);
+    const price = Number(rollCutScan.price);
+    if (!Number.isFinite(meters) || meters <= 0) {
+      return alert(t('itemConversion.enterValidMetersToCut'));
+    }
+    if (isBelowRemnantThreshold(meters)) {
+      return alert(t('sales.cutOnlyPieces'));
+    }
+    if (!Number.isFinite(price) || price <= 0) {
+      return alert(t('sales.enterValidPrice'));
+    }
+    if (!customerName.trim() || !customerPhone.trim()) {
+      return alert(t('sales.provideCustomer'));
+    }
+    const currentUser = getCurrentUser();
+    if (!currentUser) {
+      return alert(t('sales.mustBeLoggedIn'));
+    }
+    if (meters > Number(rollCutSource.meters ?? 0)) {
+      return alert(t('itemConversion.cutExceedsRoll'));
+    }
+
+    setIsCuttingRoll(true);
+    setSuccessMessage(null);
+    setCutSaleSummary(null);
+
+    try {
+      const result = await cutRollToPieceStock(rollCutSource, meters, { uniquePiece: true });
+      await sellCutPiece({
+        pieceItemId: result.pieceItemId,
+        colorId: rollCutSource.colorId,
+        branchId: rollCutSource.branchId,
+        employeeId: currentUser.id,
+        customerName: customerName.trim(),
+        customerPhone: customerPhone.trim(),
+        soldPrice: price,
+        rollSourceId: rollCutSource.id,
+      });
+
+      const labelPrinted = printPieceInventoryLabel({
+        t,
+        itemId: result.pieceItemId,
+        qrDataUrl: result.qrCodeDataUrl,
+        familyCode: rollCutSource.code,
+        subCode: itemSubCode(rollCutSource),
+        type: 'PIECE',
+        pieceLength: result.pieceLength,
+        colorName: rollCutSource.color?.name,
+        branchId: rollCutSource.branchId,
+      });
+
+      completeCuttingTasksAfterRollToPiece({
+        rollItemId: rollCutSource.id,
+        branchId: rollCutSource.branchId,
+        code: rollCutSource.code,
+        colorName: rollCutSource.color?.name,
+        newPieceId: result.pieceItemId,
+      });
+
+      const refreshed = await api.get(`/inventory/${encodeURIComponent(rollCutSource.id)}`);
+      setRollCutSource(refreshed.data as RollInventoryItem);
+      setCutSaleSummary({
+        pieceItemId: result.pieceItemId,
+        qrCodeDataUrl: result.qrCodeDataUrl,
+        rollSourceId: rollCutSource.id,
+        labelPrinted,
+      });
+      setSuccessMessage(
+        labelPrinted ? t('sales.cutSellPrintComplete') : t('sales.cutSellComplete')
+      );
+    } catch (error: any) {
+      const status = error?.response?.status;
+      const body = error?.response?.data;
+      alert(
+        t('sales.cutSellFailed', {
+          status: status ? t('common.requestFailedStatus', { status }) : '',
+          message: body?.error ?? body?.message ?? error?.message ?? t('itemConversion.failedToCut'),
+        })
+      );
+    } finally {
+      setIsCuttingRoll(false);
+    }
+  };
+
+  const reprintCutSaleLabel = () => {
+    if (!cutSaleSummary || !rollCutSource) return;
+    const printed = printPieceInventoryLabel({
+      t,
+      itemId: cutSaleSummary.pieceItemId,
+      qrDataUrl: cutSaleSummary.qrCodeDataUrl,
+      familyCode: rollCutSource.code,
+      subCode: itemSubCode(rollCutSource),
+      type: 'PIECE',
+      pieceLength: Number(rollCutScan.cutMeters),
+      colorName: rollCutSource.color?.name,
+      branchId: rollCutSource.branchId,
+    });
+    if (!printed) alert(t('errors.allowPopups'));
   };
 
   const createSale = async () => {
@@ -693,8 +845,109 @@ const SalesView: React.FC = () => {
               className="btn-primary mt-4"
               onClick={addInventoryLine}
             >
-              Add scanned item
+              {t('sales.addScannedItem')}
             </button>
+          </section>
+
+          <section className="rounded-3xl border border-magenta-200 bg-magenta-50 p-6 shadow-sm">
+            <h3 className="text-lg font-semibold text-black">{t('sales.cutFromRollTitle')}</h3>
+            <p className="mb-4 text-sm text-gray-600">{t('sales.cutFromRollDescription')}</p>
+            <div className="grid gap-3 sm:grid-cols-4">
+              <div className="sm:col-span-2">
+                <label className="block text-sm font-medium text-gray-700">{t('sales.rollId')}</label>
+                <div className="mt-1 grid gap-2 sm:grid-cols-[1fr_auto]">
+                  <input
+                    value={rollCutScan.rollId}
+                    onChange={(e) => setRollCutScan((current) => ({ ...current, rollId: e.target.value }))}
+                    className="w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
+                    placeholder={t('sales.rollIdPlaceholder')}
+                  />
+                  <button type="button" className="btn-secondary" onClick={loadRollForSaleCut}>
+                    {t('sales.loadRoll')}
+                  </button>
+                </div>
+                {rollCutSource && (
+                  <p className="mt-2 break-all text-xs text-gray-600">
+                    {rollCutSource.id} · {rollCutSource.type} ·{' '}
+                    {getColorLabel(t, rollCutSource.color?.name) || rollCutSource.colorId}
+                  </p>
+                )}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">{t('sales.metersToCut')}</label>
+                <input
+                  type="number"
+                  min="2"
+                  step="0.01"
+                  value={rollCutScan.cutMeters}
+                  onChange={(e) =>
+                    setRollCutScan((current) => ({ ...current, cutMeters: Number(e.target.value) }))
+                  }
+                  className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">{t('sales.unitPrice')}</label>
+                <input
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  value={rollCutScan.price}
+                  onChange={(e) =>
+                    setRollCutScan((current) => ({ ...current, price: Number(e.target.value) }))
+                  }
+                  className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
+                />
+              </div>
+            </div>
+            <button
+              type="button"
+              className="btn-primary mt-4"
+              onClick={cutRollSellAndPrint}
+              disabled={isCuttingRoll}
+            >
+              {isCuttingRoll ? t('sales.cuttingRoll') : t('sales.cutSellAndPrint')}
+            </button>
+
+            {cutSaleSummary && (
+              <div className="mt-5 rounded-2xl border border-green-200 bg-white p-4">
+                <p className="text-sm font-semibold text-green-800">{t('sales.saleRecordedForPiece')}</p>
+                {cutSaleSummary.labelPrinted && (
+                  <p className="mt-1 text-sm text-green-700">{t('sales.labelSentToPrinter')}</p>
+                )}
+                <div className="mt-4 grid gap-4 md:grid-cols-[220px_1fr]">
+                  <div className="rounded-2xl bg-gray-50 p-3">
+                    <img
+                      src={cutSaleSummary.qrCodeDataUrl}
+                      alt={t('itemConversion.qrAlt', { id: cutSaleSummary.pieceItemId })}
+                      className="h-44 w-44"
+                    />
+                  </div>
+                  <div className="text-sm">
+                    <div className="font-semibold text-black">{t('itemConversion.newQrItem')}</div>
+                    <div className="break-all text-gray-700">{cutSaleSummary.pieceItemId}</div>
+                    <div className="mt-3 font-semibold text-black">{t('itemConversion.linkedSourceLabel')}</div>
+                    <div className="break-all text-gray-700">{cutSaleSummary.rollSourceId}</div>
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={reprintCutSaleLabel}
+                        className="rounded-xl bg-black px-4 py-2 text-sm font-semibold text-white"
+                      >
+                        {t('itemInput.printLabel')}
+                      </button>
+                      <a
+                        className="inline-flex rounded-xl border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700"
+                        href={cutSaleSummary.qrCodeDataUrl}
+                        download={`${cutSaleSummary.pieceItemId}-qr.png`}
+                      >
+                        {t('itemConversion.downloadQr')}
+                      </a>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </section>
 
           <section className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
