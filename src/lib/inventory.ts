@@ -326,7 +326,7 @@ export async function updateInventoryItem(
   }
 
   const normalized = normalizeInventoryShape({
-        type: effectiveType,
+    type: existing.type,
     meters:
       existing.type === 'ROLL' || existing.type === 'REMANENT'
         ? nextMeters
