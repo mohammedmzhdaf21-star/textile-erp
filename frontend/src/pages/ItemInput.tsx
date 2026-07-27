@@ -222,7 +222,9 @@ const ItemInputPage: React.FC = () => {
     }
 
     api
-      .get('/inventory', { params: { code: familyCode, pageSize: 200 } })
+      .get('/inventory', {
+        params: { code: familyCode, pageSize: 200, includeArchived: true },
+      })
       .then((res) => {
         const data = res.data;
         const items = Array.isArray(data) ? data : data?.items ?? [];
@@ -370,7 +372,40 @@ const ItemInputPage: React.FC = () => {
       );
     }
 
-    const id = generatedItemId;
+    let id = generatedItemId;
+    let instanceKeyForCreate = meteredInstanceKey;
+
+    if (type === 'ROLL' || type === 'REMANENT') {
+      try {
+        const freshResponse = await api.get('/inventory', {
+          params: { code: familyCode, pageSize: 200, includeArchived: true },
+        });
+        const freshData = freshResponse.data;
+        const freshItems = (Array.isArray(freshData) ? freshData : freshData?.items ?? []) as InventoryItemView[];
+        instanceKeyForCreate = resolveMeteredInstanceKey({
+          type,
+          items: freshItems,
+          branchId,
+          familyCode,
+          subCode,
+          colorId,
+        });
+        if (selectedColor) {
+          id = buildInventoryItemId({
+            branchId,
+            familyCode,
+            subCode,
+            colorName: selectedColor.name,
+            colorId: selectedColor.id,
+            type,
+            instanceKey: instanceKeyForCreate || undefined,
+          });
+        }
+      } catch (refreshError) {
+        console.error('Failed to refresh family inventory before create', refreshError);
+      }
+    }
+
     if (!id) {
       return alert(t('itemInput.couldNotBuildId'));
     }
@@ -397,7 +432,7 @@ const ItemInputPage: React.FC = () => {
     };
     if (type === 'ROLL' || type === 'REMANENT') {
       payload.meters = Number(meters);
-      if (meteredInstanceKey) payload.packageKey = meteredInstanceKey;
+      if (instanceKeyForCreate) payload.packageKey = instanceKeyForCreate;
     }
     if (type === 'PIECE' && isPiecePackage) {
       payload.isPiecePackage = true;
@@ -414,9 +449,11 @@ const ItemInputPage: React.FC = () => {
 
     try {
       const createResponse = await api.post('/inventory', payload);
-      const savedQrDataUrl = createResponse.data?.item?.qrCodeDataUrl || createdQrDataUrl;
-      setSuccessMessage(t('itemInput.itemCreated', { id, branch: branchLabel }));
-      setCreatedItemId(id);
+      const savedItem = createResponse.data?.item;
+      const savedId = savedItem?.id || id;
+      const savedQrDataUrl = savedItem?.qrCodeDataUrl || createdQrDataUrl;
+      setSuccessMessage(t('itemInput.itemCreated', { id: savedId, branch: branchLabel }));
+      setCreatedItemId(savedId);
       setCreatedItemQrDataUrl(savedQrDataUrl);
       setCreatedPictureDataUrl(pictureDataUrl);
       setCreatedDescription(description.trim());

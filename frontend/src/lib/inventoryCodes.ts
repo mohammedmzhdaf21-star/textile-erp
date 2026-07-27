@@ -106,7 +106,7 @@ export const resolveMeteredInstanceKey = (input: {
     const itemPrice = Number(item.subCode ?? item.costPrice ?? 0);
     return (
       item.branchId === input.branchId &&
-      item.code === input.familyCode &&
+      Number(item.code) === Number(input.familyCode) &&
       Math.abs(itemPrice - input.subCode) < 0.001 &&
       item.colorId === input.colorId &&
       item.type === input.type

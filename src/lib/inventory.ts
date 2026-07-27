@@ -4,7 +4,11 @@ import {
   buildPackageComponentStock,
   parsePackageComponents,
 } from './packageStock';
-import { resolveInventoryItemId } from './inventoryCodes';
+import {
+  buildInventoryItemId,
+  resolveInventoryItemId,
+  resolveMeteredInstanceKey,
+} from './inventoryCodes';
 
 // ============================================================
 // INVENTORY BUSINESS LOGIC
@@ -149,7 +153,7 @@ export async function createInventoryItem(
   const pieceLength =
     input.type === 'PIECE' && !input.isPiecePackage ? input.pieceLength : 0;
 
-  const packageKey = input.isPiecePackage
+  let packageKey = input.isPiecePackage
     ? input.packageKey ?? ''
     : input.type === 'ROLL' || input.type === 'REMANENT'
       ? input.packageKey ?? ''
@@ -171,11 +175,64 @@ export async function createInventoryItem(
   const color = await prisma.color.findUnique({ where: { id: input.colorId } });
   if (!color) throw new Error('Color not found');
 
+  let itemId = input.id;
+  let qrCodeValue = input.qrCodeValue || input.id;
+
+  if (input.type === 'ROLL' || input.type === 'REMANENT') {
+    const existingMeteredItems = await prisma.inventoryItem.findMany({
+      where: {
+        branchId: input.branchId,
+        code: input.code,
+        subCode: input.subCode,
+        colorId: input.colorId,
+        type: input.type,
+      },
+      select: {
+        id: true,
+        branchId: true,
+        code: true,
+        subCode: true,
+        colorId: true,
+        type: true,
+        packageKey: true,
+        costPrice: true,
+      },
+    });
+
+    packageKey = resolveMeteredInstanceKey({
+      type: input.type,
+      items: existingMeteredItems.map((item) => ({
+        branchId: item.branchId,
+        code: item.code,
+        subCode: item.subCode,
+        costPrice: item.costPrice,
+        colorId: item.colorId,
+        type: item.type,
+        packageKey: item.packageKey,
+      })),
+      branchId: input.branchId,
+      familyCode: input.code,
+      subCode: input.subCode,
+      colorId: input.colorId,
+    });
+
+    itemId = buildInventoryItemId({
+      branchId: input.branchId,
+      familyCode: input.code,
+      subCode: input.subCode,
+      colorName: color.name,
+      colorId: color.id,
+      type: input.type,
+      instanceKey: packageKey || undefined,
+    });
+    qrCodeValue = itemId;
+  }
+
   // Create the item + audit log in a transaction
   const item = await prisma.$transaction(async (tx) => {
     const created = await tx.inventoryItem.create({
       data: {
-        id: input.id,
+        id: itemId,
         branchId: input.branchId,
         code: input.code,
         subCode: input.subCode,
@@ -185,7 +242,7 @@ export async function createInventoryItem(
         pieceLength,
         quantity: input.quantity ?? 1,
         costPrice: input.costPrice ?? input.subCode,
-        qrCodeValue: input.qrCodeValue || input.id,
+        qrCodeValue,
         qrCodeDataUrl: input.qrCodeDataUrl,
         pictureName: input.pictureName,
         pictureDataUrl: input.pictureDataUrl,
