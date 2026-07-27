@@ -465,7 +465,9 @@
     "inventoryItem": "Inventory Item {{id}}",
     "colorLabel": "Color: {{name}}",
     "fullPackages": "{{count}} full package(s) @ {{price}}",
-    "lineDetail": "{{unit}} · {{quantity}} @ {{price}}"
+    "lineDetail": "{{unit}} · {{quantity}} @ {{price}}",
+    "qrAlt": "QR code for {{id}}",
+    "downloadQr": "Download QR image"
   },
   "dailySales": {
     "title": "Daily Sales",
@@ -478,7 +480,8 @@
     "failedToLoad": "Failed to load daily sales",
     "noSales": "No sales found for this branch today. Select a different branch or try again later.",
     "owedPaymentForSale": "Owed payment for Sale ID",
-    "saleIdLabel": "Sale ID"
+    "saleIdLabel": "Sale ID",
+    "qrSaved": "QR saved"
   },
   "historySales": {
     "title": "History Sales",
@@ -501,7 +504,8 @@
     "searchResults": "{{count}} sale(s) found",
     "searchBranchHint": "Results are filtered to Branch {{branch}} only.",
     "itemIdLabel": "Item: {{id}}",
-    "cashImpact": "Cash impact: {{amount}}"
+    "cashImpact": "Cash impact: {{amount}}",
+    "qrSaved": "QR saved"
   },
   "owedMoney": {
     "title": "Owed Money",

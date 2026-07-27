@@ -448,6 +448,8 @@ const SalesView: React.FC = () => {
         customerPhone: customerPhone.trim(),
         soldPrice: price,
         rollSourceId: rollCutSource.id,
+        qrCodeValue: result.pieceItemId,
+        qrCodeDataUrl: result.qrCodeDataUrl,
       });
 
       const labelPrinted = printPieceInventoryLabel({

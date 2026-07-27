@@ -9,6 +9,8 @@ export const sellCutPiece = async (input: {
   customerPhone: string;
   soldPrice: number;
   rollSourceId: string;
+  qrCodeValue: string;
+  qrCodeDataUrl: string;
   notes?: string;
 }) => {
   const response = await api.post('/sales', {
@@ -24,6 +26,8 @@ export const sellCutPiece = async (input: {
         quantitySold: 1,
         soldPrice: input.soldPrice,
         lineDiscount: 0,
+        qrCodeValue: input.qrCodeValue,
+        qrCodeDataUrl: input.qrCodeDataUrl,
       },
     ],
     discount: 0,

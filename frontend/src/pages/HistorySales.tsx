@@ -21,7 +21,8 @@ type Sale = {
   paymentMethod?: string;
   items?: Array<{
     inventoryItemId?: string | null;
-    color?: { name?: string };
+    qrCodeValue?: string | null;
+    qrCodeDataUrl?: string | null;
   }>;
 };
 
@@ -325,6 +326,9 @@ const HistorySales: React.FC = () => {
               <div className="mt-1 break-all font-mono text-xs text-gray-500">
                 {t('historySales.itemIdLabel', { id: matchedItemId })}
               </div>
+            )}
+            {sale.items?.some((item) => item.qrCodeDataUrl) && (
+              <div className="mt-1 text-xs font-semibold text-gray-600">{t('historySales.qrSaved')}</div>
             )}
             <div className={`mt-2 text-sm font-bold ${amount < 0 ? 'text-red-600' : 'text-magenta-600'}`}>
               {t('historySales.cashImpact', {

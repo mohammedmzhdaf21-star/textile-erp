@@ -225,6 +225,8 @@ model SaleItem {
   packageSaleMode String?        @db.VarChar(20)
   packagesSold    Int?
   packageComponentsSold Json?
+  qrCodeValue     String?        @db.VarChar(255)
+  qrCodeDataUrl   String?        @db.Text
   createdAt       DateTime       @default(now())
 
   @@index([saleId])

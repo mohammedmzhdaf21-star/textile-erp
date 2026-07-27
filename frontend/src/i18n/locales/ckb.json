@@ -465,7 +465,9 @@
     "inventoryItem": "بەرهەمی کۆگا {{id}}",
     "colorLabel": "ڕەنگ: {{name}}",
     "fullPackages": "{{count}} پاکێجی تەواو @ {{price}}",
-    "lineDetail": "{{unit}} · {{quantity}} @ {{price}}"
+    "lineDetail": "{{unit}} · {{quantity}} @ {{price}}",
+    "qrAlt": "کۆدی QR بۆ {{id}}",
+    "downloadQr": "وێنەی QR داگرە"
   },
   "dailySales": {
     "title": "فرۆشتنی ڕۆژانە",
@@ -478,7 +480,8 @@
     "failedToLoad": "بارکردنی فرۆشتنی ڕۆژانە سەرنەکەوت",
     "noSales": "هیچ فرۆشتنێک بۆ ئەم لقە ئەمڕۆ نەدۆزرایەوە. لقێکی تر هەڵبژێرە یان دواتر هەوڵ بدەرەوە.",
     "owedPaymentForSale": "پارەدانی قەرز بۆ ناسنامەی فرۆشتن",
-    "saleIdLabel": "ناسنامەی فرۆشتن"
+    "saleIdLabel": "ناسنامەی فرۆشتن",
+    "qrSaved": "QR پاشەکەوت کرا"
   },
   "historySales": {
     "title": "مێژووی فرۆشتن",
@@ -501,7 +504,8 @@
     "searchResults": "{{count}} فرۆشتن دۆزرایەوە",
     "searchBranchHint": "ئەنجامەکان تەنها بۆ لقی {{branch}}ن. سەرەتا لقێکی تر هەڵبژێرە ئەگەر پێویستە.",
     "itemIdLabel": "بەرهەم: {{id}}",
-    "cashImpact": "کاریگەری نەقد: {{amount}}"
+    "cashImpact": "کاریگەری نەقد: {{amount}}",
+    "qrSaved": "QR پاشەکەوت کرا"
   },
   "owedMoney": {
     "title": "پارەی قەرز",

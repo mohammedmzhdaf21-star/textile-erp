@@ -17,6 +17,10 @@ type Sale = {
   employeeName?: string;
   paymentStatus?: 'PAID' | 'PARTIAL' | 'UNPAID';
   paidAmount?: number;
+  items?: Array<{
+    inventoryItemId?: string | null;
+    qrCodeDataUrl?: string | null;
+  }>;
 };
 
 type OwedPayment = {
@@ -331,6 +335,11 @@ const toDate = formatDate(tomorrow);
                               {isOwedPayment && (
                                 <span className="mt-2 inline-flex rounded-full bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700">
                                   {t('common.owedPayment')}
+                                </span>
+                              )}
+                              {sale.items?.some((item) => item.qrCodeDataUrl) && (
+                                <span className="mt-2 inline-flex rounded-full bg-gray-100 px-2 py-1 text-xs font-semibold text-gray-700">
+                                  {t('dailySales.qrSaved')}
                                 </span>
                               )}
                             </div>
