@@ -11,6 +11,7 @@ import {
   validateFullPackageSale,
   validatePartialPackageSale,
 } from './packageStock';
+import { meterStockUpdateAfterDeduction } from './inventoryRules';
 
 // ============================================================
 // SALES BUSINESS LOGIC
@@ -252,10 +253,13 @@ export async function createSale(
               `Not enough stock for ${item.inventoryItemId}. Available: ${currentMeters}m, Requested: ${item.quantitySold}m`
             );
           }
+          const remainingMeters = currentMeters - item.quantitySold;
+          const meterUpdate = meterStockUpdateAfterDeduction(invItem.type, remainingMeters);
           await tx.inventoryItem.update({
             where: { id: item.inventoryItemId },
             data: {
-              meters: new Prisma.Decimal((currentMeters - item.quantitySold).toFixed(2)),
+              meters: new Prisma.Decimal(meterUpdate.meters.toFixed(2)),
+              ...(meterUpdate.type ? { type: meterUpdate.type } : {}),
               version: { increment: 1 },
             },
           });
@@ -505,10 +509,13 @@ export async function processExchange(
               `Not enough stock for ${item.inventoryItemId}. Available: ${currentMeters}m, Requested: ${item.quantitySold}m`
             );
           }
+          const remainingMeters = currentMeters - item.quantitySold;
+          const meterUpdate = meterStockUpdateAfterDeduction(invItem.type, remainingMeters);
           await tx.inventoryItem.update({
             where: { id: item.inventoryItemId },
             data: {
-              meters: new Prisma.Decimal((currentMeters - item.quantitySold).toFixed(2)),
+              meters: new Prisma.Decimal(meterUpdate.meters.toFixed(2)),
+              ...(meterUpdate.type ? { type: meterUpdate.type } : {}),
               version: { increment: 1 },
             },
           });

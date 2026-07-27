@@ -4,18 +4,19 @@ import { Link } from 'react-router-dom';
 import api from '../lib/api';
 import { getCurrentUser } from '../lib/auth';
 import {
+  aggregateDetailedStockBreakdown,
   aggregateFamilyStock,
-  aggregateStockBreakdown,
   BRANCH_CODE_BY_ID,
   BRANCH_DESTINATIONS,
   BRANCH_ID_BY_CODE,
-  formatStockBreakdownLine,
+  formatDetailedStockBreakdownLine,
+  formatStockAmountLabel,
   formatSubCode,
+  formatTotalStockLabel,
   getItemTypeLabel,
+  hasStockForRow,
   hasStockForType,
   parseInventoryItemId,
-  stockAmountForType,
-  totalStockForType,
   type BranchDestinationCode,
   type BranchStockRow,
   type InventoryItemType,
@@ -352,7 +353,7 @@ const InventoryView: React.FC = () => {
   };
 
   const branchesWithStock = useMemo(
-    () => familyStock.filter((row) => stockAmountForType(row, selectedType) !== '0'),
+    () => familyStock.filter((row) => hasStockForRow(row, selectedType)),
     [familyStock, selectedType]
   );
 
@@ -375,28 +376,39 @@ const InventoryView: React.FC = () => {
   const activeStockBreakdown = useMemo(() => {
     if (!stockBreakdownTarget) return [];
     if (stockBreakdownTarget === 'total') {
-      return aggregateStockBreakdown(familyStock, selectedType);
+      return aggregateDetailedStockBreakdown(familyStock, selectedType);
     }
-    return aggregateStockBreakdown(familyStock, selectedType, stockBreakdownTarget);
+    return aggregateDetailedStockBreakdown(familyStock, selectedType, stockBreakdownTarget);
   }, [familyStock, selectedType, stockBreakdownTarget]);
 
   const stockBreakdownTitle = useMemo(() => {
     if (stockBreakdownTarget === 'total') {
-      return `All branches · ${totalStockForType(familyStock, selectedType)}`;
+      return t('inventory.allBranchesTotal', {
+        amount: formatTotalStockLabel(t, familyStock, selectedType),
+      });
     }
     if (stockBreakdownTarget) {
       const branch = BRANCH_DESTINATIONS.find((entry) => entry.id === stockBreakdownTarget);
       const row = familyStock.find((entry) => entry.branchId === stockBreakdownTarget);
-      const amount = row ? stockAmountForType(row, selectedType) : '0';
-      return `${t(branch?.labelKey ?? 'branches.labelLabel')} · ${amount}`;
+      const amount = row ? formatStockAmountLabel(t, row, selectedType) : '0';
+      return t('inventory.branchAmount', {
+        branch: t(branch?.labelKey ?? 'branches.labelLabel'),
+        amount,
+      });
     }
     return '';
-  }, [familyStock, selectedType, stockBreakdownTarget]);
+  }, [familyStock, selectedType, stockBreakdownTarget, t]);
 
   const stockBreakdownHeading = useMemo(() => {
     if (selectedType === 'PIECE') return t('inventory.pieceBreakdown');
     if (selectedType === 'ROLL') return t('inventory.rollBreakdown');
     return t('inventory.remnantBreakdown');
+  }, [selectedType, t]);
+
+  const stockBreakdownHint = useMemo(() => {
+    if (selectedType === 'PIECE') return t('inventory.pieceBreakdownHint');
+    if (selectedType === 'ROLL') return t('inventory.rollBreakdownHint');
+    return t('inventory.remnantBreakdownHint');
   }, [selectedType, t]);
 
   const packageStockRows = useMemo(() => {
@@ -494,10 +506,10 @@ const InventoryView: React.FC = () => {
                     onClick={() => toggleStockBreakdown('total')}
                     className="font-bold text-black underline decoration-dotted underline-offset-4 hover:text-magenta-600"
                   >
-                    {totalStockForType(familyStock, selectedType)}
+                    {formatTotalStockLabel(t, familyStock, selectedType)}
                   </button>
                 ) : (
-                  <strong>{totalStockForType(familyStock, selectedType)}</strong>
+                  <strong>{formatTotalStockLabel(t, familyStock, selectedType)}</strong>
                 )}
               </p>
             </div>
@@ -561,30 +573,28 @@ const InventoryView: React.FC = () => {
                   </button>
                 </div>
                 <p className="mt-1 text-xs text-gray-500">{stockBreakdownTitle}</p>
+                <p className="mt-1 text-xs text-gray-500">{stockBreakdownHint}</p>
                 <div className="mt-4 space-y-2">
                   {activeStockBreakdown.map((entry) => (
                     <div
-                      key={entry.sizeMeters}
+                      key={entry.key}
                       className="flex flex-col gap-1 rounded-xl border border-gray-200 px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between"
                     >
                       <span className="font-medium text-gray-800">
-                        {formatStockBreakdownLine(t, selectedType, entry)}
+                        {formatDetailedStockBreakdownLine(t, selectedType, entry)}
                       </span>
-                      {stockBreakdownTarget === 'total' && entry.branches.length > 0 && (
-                        <span className="text-xs text-gray-500">
-                          {entry.branches
-                            .map((branch) =>
-                              t('inventory.branchCount', {
-                                branch:
-                                  branch.branchCode === 'S'
-                                    ? t('common.storage')
-                                    : t('branches.label', { code: branch.branchCode }),
-                                count: branch.count,
-                              })
-                            )
-                            .join(' · ')}
-                        </span>
-                      )}
+                      <div className="flex flex-col items-start gap-1 text-xs text-gray-500 sm:items-end">
+                        {stockBreakdownTarget === 'total' && entry.branchCode && (
+                          <span>
+                            {entry.branchCode === 'S'
+                              ? t('common.storage')
+                              : t('branches.label', { code: entry.branchCode })}
+                          </span>
+                        )}
+                        {entry.itemId && (
+                          <span className="break-all font-mono">{entry.itemId}</span>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -594,8 +604,8 @@ const InventoryView: React.FC = () => {
             <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {BRANCH_DESTINATIONS.map((destination) => {
                 const row = familyStock.find((entry) => entry.branchId === destination.id);
-                const amount = row ? stockAmountForType(row, selectedType) : '0';
-                const hasStock = amount !== '0';
+                const amount = row ? formatStockAmountLabel(t, row, selectedType) : '0';
+                const hasStock = row ? hasStockForRow(row, selectedType) : false;
                 const isClickableStock = hasStock && row;
 
                 return (

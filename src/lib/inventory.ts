@@ -9,6 +9,7 @@ import {
   resolveInventoryItemId,
   resolveMeteredInstanceKey,
 } from './inventoryCodes';
+import { normalizeInventoryShape } from './inventoryRules';
 
 // ============================================================
 // INVENTORY BUSINESS LOGIC
@@ -134,28 +135,42 @@ export async function createInventoryItem(
   performedById?: string,
   performedByEmail?: string
 ) {
+  const normalized = normalizeInventoryShape({
+    type: input.type,
+    meters: input.meters,
+    pieceLength: input.pieceLength,
+    quantity: input.quantity,
+    isPiecePackage: input.isPiecePackage,
+  });
+
+  const effectiveType = normalized.type;
+  const effectiveMeters =
+    effectiveType === 'REMANENT' || effectiveType === 'ROLL'
+      ? normalized.meters
+      : input.meters;
+  const pieceLength =
+    effectiveType === 'PIECE' && !input.isPiecePackage ? normalized.pieceLength : 0;
+  const effectiveQuantity = normalized.quantity ?? input.quantity ?? 1;
+
   // Validate based on type
-  if (input.type === 'ROLL' && (!input.meters || input.meters <= 0)) {
+  if (effectiveType === 'ROLL' && (!effectiveMeters || effectiveMeters <= 0)) {
     throw new Error('ROLL items require positive meters value');
   }
-  if (input.type === 'PIECE' && input.isPiecePackage) {
+  if (effectiveType === 'PIECE' && input.isPiecePackage) {
     if (!input.packageComponents?.length) {
       throw new Error('Piece packages require at least one package component');
     }
-  } else if (input.type === 'PIECE' && (!input.pieceLength || input.pieceLength <= 0)) {
+  } else if (effectiveType === 'PIECE' && (!pieceLength || pieceLength <= 0)) {
     throw new Error('PIECE items require positive pieceLength value');
   }
 
-  if (input.type === 'REMANENT' && (!input.meters || input.meters <= 0)) {
+  if (effectiveType === 'REMANENT' && (!effectiveMeters || effectiveMeters <= 0)) {
     throw new Error('REMANENT items require positive meters value');
   }
 
-  const pieceLength =
-    input.type === 'PIECE' && !input.isPiecePackage ? input.pieceLength : 0;
-
   let packageKey = input.isPiecePackage
     ? input.packageKey ?? ''
-    : input.type === 'ROLL' || input.type === 'REMANENT'
+    : effectiveType === 'ROLL' || effectiveType === 'REMANENT'
       ? input.packageKey ?? ''
       : '';
   const packageComponents = input.isPiecePackage
@@ -178,14 +193,14 @@ export async function createInventoryItem(
   let itemId = input.id;
   let qrCodeValue = input.qrCodeValue || input.id;
 
-  if (input.type === 'ROLL' || input.type === 'REMANENT') {
+  if (effectiveType === 'ROLL' || effectiveType === 'REMANENT') {
     const existingMeteredItems = await prisma.inventoryItem.findMany({
       where: {
         branchId: input.branchId,
         code: input.code,
         subCode: input.subCode,
         colorId: input.colorId,
-        type: input.type,
+        type: effectiveType,
       },
       select: {
         id: true,
@@ -200,7 +215,7 @@ export async function createInventoryItem(
     });
 
     packageKey = resolveMeteredInstanceKey({
-      type: input.type,
+      type: effectiveType,
       items: existingMeteredItems.map((item) => ({
         branchId: item.branchId,
         code: item.code,
@@ -222,8 +237,23 @@ export async function createInventoryItem(
       subCode: input.subCode,
       colorName: color.name,
       colorId: color.id,
-      type: input.type,
+      type: effectiveType,
       instanceKey: packageKey || undefined,
+    });
+    qrCodeValue = itemId;
+  } else if (effectiveType !== input.type) {
+    itemId = buildInventoryItemId({
+      branchId: input.branchId,
+      familyCode: input.code,
+      subCode: input.subCode,
+      colorName: color.name,
+      colorId: color.id,
+      type: effectiveType,
+      pieceLength: effectiveType === 'PIECE' ? pieceLength : undefined,
+      isPiecePackage: input.isPiecePackage,
+      packageComponents: input.isPiecePackage
+        ? parsePackageComponents(input.packageComponents)
+        : undefined,
     });
     qrCodeValue = itemId;
   }
@@ -237,10 +267,10 @@ export async function createInventoryItem(
         code: input.code,
         subCode: input.subCode,
         colorId: input.colorId,
-        type: input.type,
-        meters: input.meters,
+        type: effectiveType,
+        meters: effectiveMeters,
         pieceLength,
-        quantity: input.quantity ?? 1,
+        quantity: effectiveQuantity,
         costPrice: input.costPrice ?? input.subCode,
         qrCodeValue,
         qrCodeDataUrl: input.qrCodeDataUrl,
@@ -348,8 +378,38 @@ export async function updateInventoryItem(
     throw new Error('PIECE quantity cannot be negative');
   }
 
+  const normalized = normalizeInventoryShape({
+    type: existing.type,
+    meters:
+      existing.type === 'ROLL' || existing.type === 'REMANENT'
+        ? nextMeters
+        : undefined,
+    pieceLength:
+      existing.type === 'PIECE' && !existing.isPiecePackage ? nextPieceLength : undefined,
+    quantity: nextQuantity,
+    isPiecePackage: existing.isPiecePackage,
+  });
+
+  const effectiveType = normalized.type;
+  const effectiveMeters =
+    effectiveType === 'REMANENT' || effectiveType === 'ROLL'
+      ? normalized.meters ?? nextMeters
+      : nextMeters;
   const storedPieceLength =
-    existing.type === 'PIECE' && !existing.isPiecePackage ? nextPieceLength : 0;
+    effectiveType === 'PIECE' && !existing.isPiecePackage
+      ? normalized.pieceLength ?? nextPieceLength
+      : 0;
+  const effectiveQuantity = normalized.quantity ?? nextQuantity;
+
+  if (effectiveType === 'ROLL' && effectiveMeters !== undefined && effectiveMeters <= 0) {
+    throw new Error('ROLL items require positive meters value');
+  }
+  if (effectiveType === 'REMANENT' && effectiveMeters !== undefined && effectiveMeters <= 0) {
+    throw new Error('REMANENT items require positive meters value');
+  }
+  if (effectiveType === 'PIECE' && !existing.isPiecePackage && storedPieceLength <= 0) {
+    throw new Error('PIECE items require positive pieceLength value');
+  }
 
   const nextId = resolveInventoryItemId({
     branchId: existing.branchId,
@@ -357,7 +417,7 @@ export async function updateInventoryItem(
     subCode: nextSubCode,
     colorName: color.name,
     colorId: nextColorId,
-    type: existing.type,
+    type: effectiveType,
     pieceLength: storedPieceLength,
     isPiecePackage: existing.isPiecePackage,
     packageComponents: existing.packageComponents,
@@ -368,7 +428,8 @@ export async function updateInventoryItem(
     nextCode !== existing.code ||
     Number(existing.subCode) !== nextSubCode ||
     nextColorId !== existing.colorId ||
-    Number(existing.pieceLength) !== storedPieceLength;
+    Number(existing.pieceLength) !== storedPieceLength ||
+    effectiveType !== existing.type;
 
   if (identityChanged) {
     const duplicate = await prisma.inventoryItem.findFirst({
@@ -377,7 +438,7 @@ export async function updateInventoryItem(
         code: nextCode,
         subCode: nextSubCode,
         colorId: nextColorId,
-        type: existing.type,
+        type: effectiveType,
         pieceLength: storedPieceLength,
         packageKey: existing.packageKey,
         isArchived: false,
@@ -405,9 +466,10 @@ export async function updateInventoryItem(
       code: nextCode,
       subCode: nextSubCode,
       colorId: nextColorId,
+      type: effectiveType,
       pieceLength: storedPieceLength,
-      meters: nextMeters,
-      quantity: nextQuantity,
+      meters: effectiveMeters,
+      quantity: effectiveQuantity,
       costPrice: nextCostPrice,
       qrCodeValue: nextId,
       version: { increment: 1 },
@@ -461,10 +523,10 @@ export async function updateInventoryItem(
         code: nextCode,
         subCode: nextSubCode,
         colorId: nextColorId,
-        type: existing.type,
-        meters: nextMeters,
+        type: effectiveType,
+        meters: effectiveMeters,
         pieceLength: storedPieceLength,
-        quantity: nextQuantity,
+        quantity: effectiveQuantity,
         costPrice: nextCostPrice,
         qrCodeValue: nextId,
         qrCodeDataUrl: existing.qrCodeDataUrl,

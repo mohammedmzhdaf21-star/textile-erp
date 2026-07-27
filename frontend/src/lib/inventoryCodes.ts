@@ -281,6 +281,98 @@ export const aggregateFamilyStock = (
   return Array.from(byBranch.values());
 };
 
+const meteredItemsForRow = (row: BranchStockRow, type: 'ROLL' | 'REMANENT') =>
+  row.items.filter((item) => item.type === type && Number(item.meters ?? 0) > 0);
+
+const pieceItemsForRow = (row: BranchStockRow) =>
+  row.items.filter(
+    (item) =>
+      item.type === 'PIECE' && !item.isPiecePackage && Number(item.quantity ?? 0) > 0
+  );
+
+export const hasStockForRow = (row: BranchStockRow, type: InventoryItemType) => {
+  if (type === 'ROLL') return meteredItemsForRow(row, 'ROLL').length > 0;
+  if (type === 'REMANENT') return meteredItemsForRow(row, 'REMANENT').length > 0;
+  return pieceItemsForRow(row).length > 0;
+};
+
+export const formatStockAmountLabel = (
+  t: TFunction,
+  row: BranchStockRow,
+  type: InventoryItemType
+) => {
+  if (type === 'ROLL') {
+    const rolls = meteredItemsForRow(row, 'ROLL');
+    if (!rolls.length) return '0';
+    const meters = rolls.reduce((sum, item) => sum + Number(item.meters ?? 0), 0);
+    const unit = t(rolls.length === 1 ? 'inventory.stockRoll' : 'inventory.stockRolls');
+    return t('inventory.stockMeteredSummary', {
+      count: rolls.length,
+      unit,
+      meters: formatMetersAmount(meters),
+    });
+  }
+  if (type === 'REMANENT') {
+    const remnants = meteredItemsForRow(row, 'REMANENT');
+    if (!remnants.length) return '0';
+    const meters = remnants.reduce((sum, item) => sum + Number(item.meters ?? 0), 0);
+    const unit = t(remnants.length === 1 ? 'inventory.stockRemnant' : 'inventory.stockRemnants');
+    return t('inventory.stockMeteredSummary', {
+      count: remnants.length,
+      unit,
+      meters: formatMetersAmount(meters),
+    });
+  }
+  const pieces = pieceItemsForRow(row);
+  const count = pieces.reduce((sum, item) => sum + Number(item.quantity ?? 0), 0);
+  if (count <= 0) return '0';
+  const unit = t(count === 1 ? 'common.pieceSingular' : 'common.pieces');
+  const lengths = new Set(pieces.map((item) => Number(item.pieceLength ?? 0)));
+  if (lengths.size <= 1) {
+    return t('inventory.stockPieceSummary', { count, unit });
+  }
+  return t('inventory.stockPieceSummaryWithSizes', { count, unit, sizes: lengths.size });
+};
+
+export const formatTotalStockLabel = (
+  t: TFunction,
+  rows: BranchStockRow[],
+  type: InventoryItemType
+) => {
+  if (type === 'ROLL') {
+    const rolls = rows.flatMap((row) => meteredItemsForRow(row, 'ROLL'));
+    if (!rolls.length) return '0';
+    const meters = rolls.reduce((sum, item) => sum + Number(item.meters ?? 0), 0);
+    const unit = t(rolls.length === 1 ? 'inventory.stockRoll' : 'inventory.stockRolls');
+    return t('inventory.stockMeteredSummary', {
+      count: rolls.length,
+      unit,
+      meters: formatMetersAmount(meters),
+    });
+  }
+  if (type === 'REMANENT') {
+    const remnants = rows.flatMap((row) => meteredItemsForRow(row, 'REMANENT'));
+    if (!remnants.length) return '0';
+    const meters = remnants.reduce((sum, item) => sum + Number(item.meters ?? 0), 0);
+    const unit = t(remnants.length === 1 ? 'inventory.stockRemnant' : 'inventory.stockRemnants');
+    return t('inventory.stockMeteredSummary', {
+      count: remnants.length,
+      unit,
+      meters: formatMetersAmount(meters),
+    });
+  }
+  const pieces = rows.flatMap((row) => pieceItemsForRow(row));
+  const count = pieces.reduce((sum, item) => sum + Number(item.quantity ?? 0), 0);
+  if (count <= 0) return '0';
+  const unit = t(count === 1 ? 'common.pieceSingular' : 'common.pieces');
+  const lengths = new Set(pieces.map((item) => Number(item.pieceLength ?? 0)));
+  if (lengths.size <= 1) {
+    return t('inventory.stockPieceSummary', { count, unit });
+  }
+  return t('inventory.stockPieceSummaryWithSizes', { count, unit, sizes: lengths.size });
+};
+
+/** @deprecated Use formatStockAmountLabel */
 export const stockAmountForType = (row: BranchStockRow, type: InventoryItemType) => {
   if (type === 'ROLL') {
     return row.rollMeters > 0 ? `${row.rollMeters.toFixed(2)} m` : '0';
@@ -291,6 +383,7 @@ export const stockAmountForType = (row: BranchStockRow, type: InventoryItemType)
   return row.remnantMeters > 0 ? `${row.remnantMeters.toFixed(2)} m` : '0';
 };
 
+/** @deprecated Use formatTotalStockLabel */
 export const totalStockForType = (rows: BranchStockRow[], type: InventoryItemType) => {
   if (type === 'ROLL') {
     const total = rows.reduce((sum, row) => sum + row.rollMeters, 0);
@@ -339,6 +432,87 @@ export const formatMetersAmount = (meters: number) => {
   return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(2);
 };
 
+export type StockDetailEntry = {
+  key: string;
+  sizeMeters: number;
+  count: number;
+  itemId?: string;
+  branchId?: string;
+  branchLabelKey?: string;
+  branchCode?: string;
+};
+
+export const aggregateDetailedStockBreakdown = (
+  rows: BranchStockRow[],
+  type: InventoryItemType,
+  branchId?: string
+): StockDetailEntry[] => {
+  const rowsToProcess = branchId ? rows.filter((row) => row.branchId === branchId) : rows;
+
+  if (type === 'ROLL' || type === 'REMANENT') {
+    const results: StockDetailEntry[] = [];
+    for (const row of rowsToProcess) {
+      for (const item of row.items) {
+        if (item.type !== type) continue;
+        const meters = Number(item.meters ?? 0);
+        if (meters <= 0) continue;
+        results.push({
+          key: item.id,
+          sizeMeters: meters,
+          count: 1,
+          itemId: item.id,
+          branchId: row.branchId,
+          branchLabelKey: row.branchLabelKey,
+          branchCode: row.branchCode,
+        });
+      }
+    }
+    return results.sort((a, b) => a.sizeMeters - b.sizeMeters);
+  }
+
+  const byLength = new Map<number, StockDetailEntry>();
+  for (const row of rowsToProcess) {
+    for (const item of row.items) {
+      if (item.type !== 'PIECE' || item.isPiecePackage) continue;
+      const length = Number(item.pieceLength ?? 0);
+      const qty = Number(item.quantity ?? 0);
+      if (length <= 0 || qty <= 0) continue;
+
+      const existing = byLength.get(length);
+      if (existing) {
+        existing.count += qty;
+      } else {
+        byLength.set(length, {
+          key: `piece-${length}`,
+          sizeMeters: length,
+          count: qty,
+        });
+      }
+    }
+  }
+
+  return Array.from(byLength.values()).sort((a, b) => a.sizeMeters - b.sizeMeters);
+};
+
+export const formatDetailedStockBreakdownLine = (
+  t: TFunction,
+  type: InventoryItemType,
+  entry: StockDetailEntry
+) => {
+  if (type === 'ROLL') {
+    return t('inventory.stockRollLine', { meters: formatMetersAmount(entry.sizeMeters) });
+  }
+  if (type === 'REMANENT') {
+    return t('inventory.stockRemnantLine', { meters: formatMetersAmount(entry.sizeMeters) });
+  }
+  const unit = t(entry.count === 1 ? 'common.pieceSingular' : 'common.pieces');
+  return t('inventory.stockBreakdownLine', {
+    count: entry.count,
+    unit,
+    size: formatMetersAmount(entry.sizeMeters),
+  });
+};
+
 export const formatStockBreakdownLine = (t: TFunction, type: InventoryItemType, entry: StockSizeBreakdown) => {
   const unit = t(breakdownUnitKey(type, entry.count));
   return t('inventory.stockBreakdownLine', {
@@ -359,6 +533,7 @@ export const aggregateStockBreakdown = (
   for (const row of rowsToProcess) {
     for (const item of row.items) {
       if (item.type !== type) continue;
+      if (type === 'PIECE' && item.isPiecePackage) continue;
 
       const sizeMeters =
         type === 'PIECE' ? Number(item.pieceLength ?? 0) : Number(item.meters ?? 0);

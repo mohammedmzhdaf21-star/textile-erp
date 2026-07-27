@@ -26,6 +26,11 @@ import {
   validatePackageComponents,
   type PackageComponent,
 } from '../lib/piecePackages';
+import {
+  isBelowRemnantThreshold,
+  normalizeInventoryShape,
+  REMNANT_THRESHOLD_METERS,
+} from '../lib/inventoryRules';
 
 type Color = {
   id: string;
@@ -156,6 +161,13 @@ const ItemInputPage: React.FC = () => {
     }
     return t('itemInput.amountMeters', { meters });
   }, [isPiecePackage, meters, normalizedPackageComponents, pieceLength, quantity, t, type]);
+
+  const willSaveAsRemnant = useMemo(() => {
+    if (isPiecePackage) return false;
+    if (type === 'ROLL') return isBelowRemnantThreshold(Number(meters));
+    if (type === 'PIECE') return isBelowRemnantThreshold(Number(pieceLength));
+    return false;
+  }, [isPiecePackage, meters, pieceLength, type]);
 
   const familySubCodes = useMemo(() => {
     const unique = new Map<string, InventoryItemView>();
@@ -372,10 +384,19 @@ const ItemInputPage: React.FC = () => {
       );
     }
 
-    let id = generatedItemId;
-    let instanceKeyForCreate = meteredInstanceKey;
+    const normalized = normalizeInventoryShape({
+      type,
+      meters: Number(meters),
+      pieceLength: Number(pieceLength),
+      quantity: Number(quantity),
+      isPiecePackage,
+    });
+    const effectiveType = normalized.type;
 
-    if (type === 'ROLL' || type === 'REMANENT') {
+    let instanceKeyForCreate = '';
+    let id = '';
+
+    if (effectiveType === 'ROLL' || effectiveType === 'REMANENT') {
       try {
         const freshResponse = await api.get('/inventory', {
           params: { code: familyCode, pageSize: 200, includeArchived: true },
@@ -383,29 +404,33 @@ const ItemInputPage: React.FC = () => {
         const freshData = freshResponse.data;
         const freshItems = (Array.isArray(freshData) ? freshData : freshData?.items ?? []) as InventoryItemView[];
         instanceKeyForCreate = resolveMeteredInstanceKey({
-          type,
+          type: effectiveType,
           items: freshItems,
           branchId,
           familyCode,
           subCode,
           colorId,
         });
-        if (selectedColor) {
-          id = buildInventoryItemId({
-            branchId,
-            familyCode,
-            subCode,
-            colorName: selectedColor.name,
-            colorId: selectedColor.id,
-            type,
-            instanceKey: instanceKeyForCreate || undefined,
-          });
-        }
       } catch (refreshError) {
         console.error('Failed to refresh family inventory before create', refreshError);
       }
     }
 
+    if (selectedColor) {
+      id = buildInventoryItemId({
+        branchId,
+        familyCode,
+        subCode,
+        colorName: selectedColor.name,
+        colorId: selectedColor.id,
+        type: effectiveType,
+        pieceLength:
+          effectiveType === 'PIECE' && !isPiecePackage ? normalized.pieceLength : undefined,
+        isPiecePackage,
+        packageComponents: normalizedPackageComponents,
+        instanceKey: instanceKeyForCreate || undefined,
+      });
+    }
     if (!id) {
       return alert(t('itemInput.couldNotBuildId'));
     }
@@ -422,7 +447,7 @@ const ItemInputPage: React.FC = () => {
       code: familyCode,
       subCode,
       colorId,
-      type,
+      type: effectiveType,
       costPrice: subCode,
       qrCodeValue: id,
       qrCodeDataUrl: createdQrDataUrl,
@@ -430,8 +455,8 @@ const ItemInputPage: React.FC = () => {
       pictureName: pictureName || undefined,
       pictureDataUrl: pictureDataUrl || undefined,
     };
-    if (type === 'ROLL' || type === 'REMANENT') {
-      payload.meters = Number(meters);
+    if (effectiveType === 'ROLL' || effectiveType === 'REMANENT') {
+      payload.meters = Number(normalized.meters ?? meters);
       if (instanceKeyForCreate) payload.packageKey = instanceKeyForCreate;
     }
     if (type === 'PIECE' && isPiecePackage) {
@@ -439,9 +464,9 @@ const ItemInputPage: React.FC = () => {
       payload.packageKey = packageKey;
       payload.packageComponents = normalizedPackageComponents;
       payload.quantity = Number(quantity);
-    } else if (type === 'PIECE') {
-      payload.pieceLength = Number(pieceLength);
-      payload.quantity = Number(quantity);
+    } else if (effectiveType === 'PIECE') {
+      payload.pieceLength = Number(normalized.pieceLength ?? pieceLength);
+      payload.quantity = Number(normalized.quantity ?? quantity);
     }
 
     setSuccessMessage(null);
@@ -687,6 +712,11 @@ const ItemInputPage: React.FC = () => {
                 />
               )}
             </div>
+            {willSaveAsRemnant && (
+              <p className="mt-2 text-sm font-medium text-amber-700">
+                {t('itemInput.savedAsRemnantHint', { threshold: REMNANT_THRESHOLD_METERS })}
+              </p>
+            )}
           </div>
 
           {type === 'PIECE' && (

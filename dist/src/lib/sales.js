@@ -1,0 +1,723 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.createSale = createSale;
+exports.processExchange = processExchange;
+exports.listSales = listSales;
+exports.getSale = getSale;
+exports.voidSale = voidSale;
+exports.processRefund = processRefund;
+exports.getSalesStats = getSalesStats;
+const prisma_1 = require("./prisma");
+const client_1 = require("@prisma/client");
+const packageStock_1 = require("./packageStock");
+async function applyPackageSaleToInventory(tx, invItem, item, direction) {
+    if (!invItem.isPiecePackage)
+        return;
+    const components = (0, packageStock_1.parsePackageComponents)(invItem.packageComponents);
+    const currentStock = (0, packageStock_1.resolvePackageComponentStock)({
+        packageComponents: invItem.packageComponents,
+        packageComponentStock: invItem.packageComponentStock,
+        quantity: invItem.quantity,
+    });
+    if (item.packageSaleMode === 'FULL') {
+        const packagesSold = Math.floor(item.packagesSold ?? item.quantitySold);
+        const error = direction === 'deduct'
+            ? (0, packageStock_1.validateFullPackageSale)(components, currentStock, packagesSold)
+            : null;
+        if (error)
+            throw new Error(error);
+        const nextStock = direction === 'deduct'
+            ? (0, packageStock_1.deductFullPackageSale)(components, currentStock, packagesSold)
+            : (0, packageStock_1.restoreFullPackageSale)(components, currentStock, packagesSold);
+        await tx.inventoryItem.update({
+            where: { id: invItem.id },
+            data: {
+                packageComponentStock: nextStock,
+                quantity: direction === 'deduct'
+                    ? { decrement: packagesSold }
+                    : { increment: packagesSold },
+                version: { increment: 1 },
+            },
+        });
+        return;
+    }
+    if (item.packageSaleMode === 'PARTIAL') {
+        const componentsSold = item.packageComponentsSold ?? [];
+        const error = direction === 'deduct'
+            ? (0, packageStock_1.validatePartialPackageSale)(currentStock, componentsSold)
+            : null;
+        if (error)
+            throw new Error(error);
+        const nextStock = direction === 'deduct'
+            ? (0, packageStock_1.deductPartialPackageSale)(currentStock, componentsSold)
+            : (0, packageStock_1.restorePartialPackageSale)(currentStock, componentsSold);
+        await tx.inventoryItem.update({
+            where: { id: invItem.id },
+            data: {
+                packageComponentStock: nextStock,
+                quantity: (0, packageStock_1.countCompletePackages)(components, nextStock),
+                version: { increment: 1 },
+            },
+        });
+    }
+}
+// ============================================================
+// CREATE SALE (the big one!)
+// ============================================================
+async function createSale(input, performedById, performedByEmail) {
+    if (!input.items || input.items.length === 0) {
+        throw new Error('Sale must have at least one item');
+    }
+    // Calculate total from items
+    let totalPrice = 0;
+    for (const item of input.items) {
+        if (item.quantitySold <= 0)
+            throw new Error('Quantity must be positive');
+        if (item.soldPrice < 0)
+            throw new Error('Price cannot be negative');
+        const lineDiscount = item.lineDiscount || 0;
+        totalPrice += item.soldPrice * item.quantitySold - lineDiscount;
+    }
+    const totalDiscount = input.discount || 0;
+    totalPrice -= totalDiscount;
+    if (totalPrice < 0) {
+        throw new Error('Total price cannot be negative after discounts');
+    }
+    // Run everything in a transaction
+    const sale = await prisma_1.prisma.$transaction(async (tx) => {
+        // Verify branch exists
+        const branch = await tx.branch.findUnique({ where: { id: input.branchId } });
+        if (!branch)
+            throw new Error('Branch not found');
+        // Verify employee exists
+        const employee = await tx.employee.findUnique({
+            where: { id: input.employeeId },
+        });
+        if (!employee)
+            throw new Error('Employee not found');
+        // Verify or link customer
+        let customerId = input.customerId;
+        if (!customerId && input.customerPhone) {
+            const existingCustomer = await tx.customer.findUnique({
+                where: { phone: input.customerPhone },
+            });
+            if (existingCustomer) {
+                customerId = existingCustomer.id;
+            }
+        }
+        // Create the sale
+        const createdSale = await tx.sale.create({
+            data: {
+                branchId: input.branchId,
+                employeeId: input.employeeId,
+                customerId: customerId || null,
+                customerName: input.customerName,
+                customerPhone: input.customerPhone,
+                totalPrice: new client_1.Prisma.Decimal(totalPrice.toFixed(2)),
+                discount: new client_1.Prisma.Decimal(totalDiscount.toFixed(2)),
+                paymentMethod: input.paymentMethod || 'CASH',
+                notes: input.notes || null,
+            },
+        });
+        // Process each item
+        for (const item of input.items) {
+            // If it has an inventoryItemId, deduct from inventory
+            if (item.inventoryItemId) {
+                const invItem = await tx.inventoryItem.findUnique({
+                    where: { id: item.inventoryItemId },
+                });
+                if (!invItem) {
+                    throw new Error(`Inventory item ${item.inventoryItemId} not found`);
+                }
+                if (invItem.isArchived) {
+                    throw new Error(`Inventory item ${item.inventoryItemId} is archived`);
+                }
+                // Check stock & deduct
+                if (item.soldAsUnit === 'METER') {
+                    const currentMeters = invItem.meters
+                        ? parseFloat(invItem.meters.toString())
+                        : 0;
+                    if (currentMeters < item.quantitySold) {
+                        throw new Error(`Not enough stock for ${item.inventoryItemId}. Available: ${currentMeters}m, Requested: ${item.quantitySold}m`);
+                    }
+                    await tx.inventoryItem.update({
+                        where: { id: item.inventoryItemId },
+                        data: {
+                            meters: new client_1.Prisma.Decimal((currentMeters - item.quantitySold).toFixed(2)),
+                            version: { increment: 1 },
+                        },
+                    });
+                }
+                else if (invItem.isPiecePackage && item.isPiecePackage) {
+                    await applyPackageSaleToInventory(tx, invItem, item, 'deduct');
+                }
+                else if (item.soldAsUnit === 'PIECE') {
+                    if (invItem.quantity < item.quantitySold) {
+                        throw new Error(`Not enough pieces for ${item.inventoryItemId}. Available: ${invItem.quantity}, Requested: ${item.quantitySold}`);
+                    }
+                    await tx.inventoryItem.update({
+                        where: { id: item.inventoryItemId },
+                        data: {
+                            quantity: { decrement: Math.floor(item.quantitySold) },
+                            version: { increment: 1 },
+                        },
+                    });
+                }
+            }
+            // Verify or create a plain cloth color placeholder when needed
+            let colorId = item.colorId;
+            if (item.isPlainCloth) {
+                const plainClothColor = await tx.color.upsert({
+                    where: { name: 'Plain Cloth' },
+                    update: {},
+                    create: {
+                        id: colorId || 'PLAIN',
+                        name: 'Plain Cloth',
+                        hexCode: '#CCCCCC',
+                    },
+                });
+                colorId = plainClothColor.id;
+            }
+            else {
+                const color = await tx.color.findUnique({ where: { id: item.colorId } });
+                if (!color)
+                    throw new Error(`Color ${item.colorId} not found`);
+            }
+            // Create the sale item
+            await tx.saleItem.create({
+                data: {
+                    saleId: createdSale.id,
+                    inventoryItemId: item.inventoryItemId || null,
+                    isPlainCloth: item.isPlainCloth || false,
+                    plainClothName: item.plainClothName || null,
+                    colorId,
+                    soldAsUnit: item.soldAsUnit,
+                    quantitySold: new client_1.Prisma.Decimal(item.quantitySold.toFixed(2)),
+                    soldPrice: new client_1.Prisma.Decimal(item.soldPrice.toFixed(2)),
+                    lineDiscount: new client_1.Prisma.Decimal((item.lineDiscount || 0).toFixed(2)),
+                    isPiecePackage: item.isPiecePackage || false,
+                    packageSaleMode: item.packageSaleMode || null,
+                    packagesSold: item.packagesSold ?? null,
+                    packageComponentsSold: item.packageComponentsSold
+                        ? item.packageComponentsSold
+                        : undefined,
+                },
+            });
+        }
+        // Audit log
+        await tx.auditLog.create({
+            data: {
+                entityType: 'Sale',
+                entityId: createdSale.id,
+                action: 'CREATE',
+                performedById: performedById || null,
+                performedByEmail: performedByEmail || null,
+                branchId: input.branchId,
+                changes: {
+                    totalPrice,
+                    itemCount: input.items.length,
+                    customer: input.customerName,
+                },
+            },
+        });
+        // Fetch the complete sale with items
+        return await tx.sale.findUnique({
+            where: { id: createdSale.id },
+            include: {
+                items: { include: { color: true, inventoryItem: true } },
+                branch: true,
+                employee: { select: { id: true, name: true, email: true } },
+                customer: true,
+            },
+        });
+    });
+    return sale;
+}
+// ============================================================
+// PROCESS EXCHANGE
+// ============================================================
+async function processExchange(input, performedById, performedByEmail) {
+    const returnedInventory = input.returnedInventory || [];
+    const returnedPlain = input.returnedPlain || [];
+    const replacementItems = input.replacementItems || [];
+    if (returnedInventory.length === 0 &&
+        returnedPlain.length === 0 &&
+        replacementItems.length === 0) {
+        throw new Error('Exchange must include returned items or replacement items');
+    }
+    const returnedInventoryTotal = returnedInventory.reduce((sum, item) => {
+        if (item.quantityReturned <= 0)
+            throw new Error('Returned quantity must be positive');
+        if (item.returnPrice < 0)
+            throw new Error('Returned price cannot be negative');
+        return sum + item.quantityReturned * item.returnPrice;
+    }, 0);
+    const returnedPlainTotal = returnedPlain.reduce((sum, item) => {
+        if (item.meters <= 0)
+            throw new Error('Returned plain cloth meters must be positive');
+        if (item.returnPricePerMeter < 0) {
+            throw new Error('Returned plain cloth price cannot be negative');
+        }
+        return sum + item.meters * item.returnPricePerMeter;
+    }, 0);
+    let replacementTotal = 0;
+    for (const item of replacementItems) {
+        if (item.quantitySold <= 0)
+            throw new Error('Quantity must be positive');
+        if (item.soldPrice < 0)
+            throw new Error('Price cannot be negative');
+        replacementTotal += item.soldPrice * item.quantitySold - (item.lineDiscount || 0);
+    }
+    const returnedTotal = returnedInventoryTotal + returnedPlainTotal;
+    const netDue = Number((replacementTotal - returnedTotal).toFixed(2));
+    const refundAmount = Math.max(0, Number((-netDue).toFixed(2)));
+    const saleTotal = Math.max(0, netDue);
+    const amountPaid = saleTotal > 0
+        ? input.paymentStatus === 'PARTIAL'
+            ? Number((input.amountPaid || 0).toFixed(2))
+            : saleTotal
+        : refundAmount > 0
+            ? -refundAmount
+            : 0;
+    if (saleTotal > 0 && input.paymentStatus === 'PARTIAL') {
+        if (amountPaid <= 0 || amountPaid >= saleTotal) {
+            throw new Error('Partial exchange payments must be greater than 0 and less than the net amount due');
+        }
+    }
+    const sale = await prisma_1.prisma.$transaction(async (tx) => {
+        const branch = await tx.branch.findUnique({ where: { id: input.branchId } });
+        if (!branch)
+            throw new Error('Branch not found');
+        const employee = await tx.employee.findUnique({ where: { id: input.employeeId } });
+        if (!employee)
+            throw new Error('Employee not found');
+        let customerId;
+        if (input.customerPhone) {
+            const existingCustomer = await tx.customer.findUnique({
+                where: { phone: input.customerPhone },
+            });
+            customerId = existingCustomer?.id;
+        }
+        for (const returned of returnedInventory) {
+            const invItem = await tx.inventoryItem.findUnique({
+                where: { id: returned.inventoryItemId },
+            });
+            if (!invItem)
+                throw new Error(`Inventory item ${returned.inventoryItemId} not found`);
+            if (invItem.isArchived) {
+                throw new Error(`Inventory item ${returned.inventoryItemId} is archived`);
+            }
+            if (returned.soldAsUnit === 'PIECE') {
+                await tx.inventoryItem.update({
+                    where: { id: returned.inventoryItemId },
+                    data: {
+                        quantity: { increment: Math.floor(returned.quantityReturned) },
+                        version: { increment: 1 },
+                    },
+                });
+            }
+            else {
+                const currentMeters = invItem.meters ? parseFloat(invItem.meters.toString()) : 0;
+                await tx.inventoryItem.update({
+                    where: { id: returned.inventoryItemId },
+                    data: {
+                        meters: new client_1.Prisma.Decimal((currentMeters + returned.quantityReturned).toFixed(2)),
+                        version: { increment: 1 },
+                    },
+                });
+            }
+        }
+        const paymentNote = saleTotal > 0
+            ? `Paid ${amountPaid.toFixed(2)} now, due ${(saleTotal - amountPaid).toFixed(2)}.`
+            : refundAmount > 0
+                ? `Refunded ${refundAmount.toFixed(2)} to customer.`
+                : 'Even exchange. Paid 0.00 now, due 0.00.';
+        const exchangeNotes = [
+            'EXCHANGE',
+            `Replacement ${replacementTotal.toFixed(2)}`,
+            `Returned ${returnedTotal.toFixed(2)}`,
+            `Net ${netDue.toFixed(2)}`,
+            paymentNote,
+            input.notes,
+        ]
+            .filter(Boolean)
+            .join(' | ');
+        const createdSale = await tx.sale.create({
+            data: {
+                branchId: input.branchId,
+                employeeId: input.employeeId,
+                customerId: customerId || null,
+                customerName: input.customerName,
+                customerPhone: input.customerPhone,
+                totalPrice: new client_1.Prisma.Decimal(saleTotal.toFixed(2)),
+                discount: new client_1.Prisma.Decimal(Math.min(returnedTotal, replacementTotal).toFixed(2)),
+                paymentMethod: saleTotal > 0 && input.paymentStatus === 'PARTIAL' ? 'CREDIT' : 'CASH',
+                notes: exchangeNotes,
+            },
+        });
+        for (const item of replacementItems) {
+            if (item.inventoryItemId) {
+                const invItem = await tx.inventoryItem.findUnique({
+                    where: { id: item.inventoryItemId },
+                });
+                if (!invItem)
+                    throw new Error(`Inventory item ${item.inventoryItemId} not found`);
+                if (invItem.isArchived)
+                    throw new Error(`Inventory item ${item.inventoryItemId} is archived`);
+                if (item.soldAsUnit === 'METER') {
+                    const currentMeters = invItem.meters ? parseFloat(invItem.meters.toString()) : 0;
+                    if (currentMeters < item.quantitySold) {
+                        throw new Error(`Not enough stock for ${item.inventoryItemId}. Available: ${currentMeters}m, Requested: ${item.quantitySold}m`);
+                    }
+                    await tx.inventoryItem.update({
+                        where: { id: item.inventoryItemId },
+                        data: {
+                            meters: new client_1.Prisma.Decimal((currentMeters - item.quantitySold).toFixed(2)),
+                            version: { increment: 1 },
+                        },
+                    });
+                }
+                else if (invItem.isPiecePackage && item.isPiecePackage) {
+                    await applyPackageSaleToInventory(tx, invItem, item, 'deduct');
+                }
+                else if (item.soldAsUnit === 'PIECE') {
+                    if (invItem.quantity < item.quantitySold) {
+                        throw new Error(`Not enough pieces for ${item.inventoryItemId}. Available: ${invItem.quantity}, Requested: ${item.quantitySold}`);
+                    }
+                    await tx.inventoryItem.update({
+                        where: { id: item.inventoryItemId },
+                        data: {
+                            quantity: { decrement: Math.floor(item.quantitySold) },
+                            version: { increment: 1 },
+                        },
+                    });
+                }
+            }
+            let colorId = item.colorId;
+            if (item.isPlainCloth) {
+                const plainClothColor = await tx.color.upsert({
+                    where: { name: 'Plain Cloth' },
+                    update: {},
+                    create: {
+                        id: colorId || 'PLAIN',
+                        name: 'Plain Cloth',
+                        hexCode: '#CCCCCC',
+                    },
+                });
+                colorId = plainClothColor.id;
+            }
+            else {
+                const color = await tx.color.findUnique({ where: { id: item.colorId } });
+                if (!color)
+                    throw new Error(`Color ${item.colorId} not found`);
+            }
+            await tx.saleItem.create({
+                data: {
+                    saleId: createdSale.id,
+                    inventoryItemId: item.inventoryItemId || null,
+                    isPlainCloth: item.isPlainCloth || false,
+                    plainClothName: item.plainClothName || null,
+                    colorId,
+                    soldAsUnit: item.soldAsUnit,
+                    quantitySold: new client_1.Prisma.Decimal(item.quantitySold.toFixed(2)),
+                    soldPrice: new client_1.Prisma.Decimal(item.soldPrice.toFixed(2)),
+                    lineDiscount: new client_1.Prisma.Decimal((item.lineDiscount || 0).toFixed(2)),
+                    isPiecePackage: item.isPiecePackage || false,
+                    packageSaleMode: item.packageSaleMode || null,
+                    packagesSold: item.packagesSold ?? null,
+                    packageComponentsSold: item.packageComponentsSold
+                        ? item.packageComponentsSold
+                        : undefined,
+                },
+            });
+        }
+        await tx.auditLog.create({
+            data: {
+                entityType: 'Exchange',
+                entityId: createdSale.id,
+                action: 'CREATE',
+                performedById: performedById || null,
+                performedByEmail: performedByEmail || null,
+                branchId: input.branchId,
+                changes: {
+                    replacementTotal,
+                    returnedTotal,
+                    netDue,
+                    amountPaid,
+                    refundAmount,
+                    returnedInventoryCount: returnedInventory.length,
+                    returnedPlainCount: returnedPlain.length,
+                    replacementCount: replacementItems.length,
+                },
+            },
+        });
+        return await tx.sale.findUnique({
+            where: { id: createdSale.id },
+            include: {
+                items: { include: { color: true, inventoryItem: true } },
+                branch: true,
+                employee: { select: { id: true, name: true, email: true } },
+                customer: true,
+            },
+        });
+    });
+    return {
+        sale,
+        summary: {
+            replacementTotal,
+            returnedTotal,
+            netDue,
+            amountPaid,
+            refundAmount,
+        },
+    };
+}
+// ============================================================
+// LIST SALES
+// ============================================================
+async function listSales(params) {
+    const { branchId, employeeId, customerPhone, fromDate, toDate, includeVoided = false, page = 1, pageSize = 50, } = params;
+    const where = {};
+    if (branchId)
+        where.branchId = branchId;
+    if (employeeId)
+        where.employeeId = employeeId;
+    if (customerPhone)
+        where.customerPhone = customerPhone;
+    if (!includeVoided)
+        where.isVoided = false;
+    if (fromDate || toDate) {
+        where.createdAt = {};
+        if (fromDate)
+            where.createdAt.gte = fromDate;
+        if (toDate)
+            where.createdAt.lte = toDate;
+    }
+    const skip = (page - 1) * pageSize;
+    const take = Math.min(pageSize, 200);
+    const [sales, total] = await Promise.all([
+        prisma_1.prisma.sale.findMany({
+            where,
+            skip,
+            take,
+            orderBy: { createdAt: 'desc' },
+            include: {
+                items: { include: { color: true } },
+                branch: { select: { id: true, name: true } },
+                employee: { select: { id: true, name: true } },
+                customer: { select: { id: true, name: true, phone: true } },
+            },
+        }),
+        prisma_1.prisma.sale.count({ where }),
+    ]);
+    return {
+        sales,
+        pagination: {
+            page,
+            pageSize: take,
+            total,
+            totalPages: Math.ceil(total / take),
+        },
+    };
+}
+// ============================================================
+// GET ONE SALE
+// ============================================================
+async function getSale(id) {
+    const sale = await prisma_1.prisma.sale.findUnique({
+        where: { id },
+        include: {
+            items: { include: { color: true, inventoryItem: true } },
+            branch: true,
+            employee: { select: { id: true, name: true, email: true } },
+            customer: true,
+            refunds: { include: { processedBy: { select: { name: true, email: true } } } },
+            voidedBy: { select: { id: true, name: true, email: true } },
+        },
+    });
+    if (!sale)
+        throw new Error('Sale not found');
+    return sale;
+}
+// ============================================================
+// VOID A SALE (restocks inventory)
+// ============================================================
+async function voidSale(saleId, reason, voidedById, performedByEmail) {
+    if (!reason || reason.trim().length === 0) {
+        throw new Error('Void reason is required');
+    }
+    return await prisma_1.prisma.$transaction(async (tx) => {
+        const sale = await tx.sale.findUnique({
+            where: { id: saleId },
+            include: { items: true },
+        });
+        if (!sale)
+            throw new Error('Sale not found');
+        if (sale.isVoided)
+            throw new Error('Sale is already voided');
+        // Restock each item back to inventory
+        for (const item of sale.items) {
+            if (item.inventoryItemId) {
+                const invItem = await tx.inventoryItem.findUnique({
+                    where: { id: item.inventoryItemId },
+                });
+                if (invItem && !invItem.isArchived) {
+                    if (item.soldAsUnit === 'METER') {
+                        const currentMeters = invItem.meters
+                            ? parseFloat(invItem.meters.toString())
+                            : 0;
+                        const qty = parseFloat(item.quantitySold.toString());
+                        await tx.inventoryItem.update({
+                            where: { id: item.inventoryItemId },
+                            data: {
+                                meters: new client_1.Prisma.Decimal((currentMeters + qty).toFixed(2)),
+                                version: { increment: 1 },
+                            },
+                        });
+                    }
+                    else if (item.isPiecePackage && item.packageSaleMode) {
+                        await applyPackageSaleToInventory(tx, invItem, {
+                            inventoryItemId: item.inventoryItemId,
+                            colorId: item.colorId,
+                            soldAsUnit: 'PIECE',
+                            quantitySold: parseFloat(item.quantitySold.toString()),
+                            soldPrice: parseFloat(item.soldPrice.toString()),
+                            isPiecePackage: true,
+                            packageSaleMode: item.packageSaleMode,
+                            packagesSold: item.packagesSold ?? undefined,
+                            packageComponentsSold: Array.isArray(item.packageComponentsSold)
+                                ? item.packageComponentsSold
+                                : undefined,
+                        }, 'restore');
+                    }
+                    else if (item.soldAsUnit === 'PIECE') {
+                        await tx.inventoryItem.update({
+                            where: { id: item.inventoryItemId },
+                            data: {
+                                quantity: { increment: Math.floor(parseFloat(item.quantitySold.toString())) },
+                                version: { increment: 1 },
+                            },
+                        });
+                    }
+                }
+            }
+        }
+        // Mark sale as voided
+        const voidedSale = await tx.sale.update({
+            where: { id: saleId },
+            data: {
+                isVoided: true,
+                voidedById,
+                voidedAt: new Date(),
+                voidedReason: reason,
+            },
+            include: { items: true },
+        });
+        // Audit log
+        await tx.auditLog.create({
+            data: {
+                entityType: 'Sale',
+                entityId: saleId,
+                action: 'VOID',
+                performedById: voidedById,
+                performedByEmail: performedByEmail || null,
+                branchId: sale.branchId,
+                changes: { reason },
+            },
+        });
+        return voidedSale;
+    });
+}
+// ============================================================
+// PROCESS REFUND
+// ============================================================
+async function processRefund(saleId, input, processedById, performedByEmail) {
+    if (input.amount <= 0)
+        throw new Error('Refund amount must be positive');
+    if (!input.reason || input.reason.trim().length === 0) {
+        throw new Error('Refund reason is required');
+    }
+    return await prisma_1.prisma.$transaction(async (tx) => {
+        const sale = await tx.sale.findUnique({
+            where: { id: saleId },
+            include: { refunds: true },
+        });
+        if (!sale)
+            throw new Error('Sale not found');
+        if (sale.isVoided)
+            throw new Error('Cannot refund a voided sale');
+        // Calculate already refunded amount
+        const alreadyRefunded = sale.refunds.reduce((sum, r) => sum + parseFloat(r.amount.toString()), 0);
+        const totalPrice = parseFloat(sale.totalPrice.toString());
+        if (alreadyRefunded + input.amount > totalPrice) {
+            throw new Error(`Refund exceeds remaining amount. Already refunded: ${alreadyRefunded}, Sale total: ${totalPrice}`);
+        }
+        const refund = await tx.refund.create({
+            data: {
+                saleId,
+                amount: new client_1.Prisma.Decimal(input.amount.toFixed(2)),
+                method: input.method,
+                reason: input.reason,
+                processedById,
+            },
+            include: { processedBy: { select: { name: true, email: true } } },
+        });
+        await tx.auditLog.create({
+            data: {
+                entityType: 'Sale',
+                entityId: saleId,
+                action: 'REFUND',
+                performedById: processedById,
+                performedByEmail: performedByEmail || null,
+                branchId: sale.branchId,
+                changes: {
+                    amount: input.amount,
+                    method: input.method,
+                    reason: input.reason,
+                },
+            },
+        });
+        return refund;
+    });
+}
+// ============================================================
+// SALES STATISTICS
+// ============================================================
+async function getSalesStats(params) {
+    const where = { isVoided: false };
+    if (params.branchId)
+        where.branchId = params.branchId;
+    if (params.fromDate || params.toDate) {
+        where.createdAt = {};
+        if (params.fromDate)
+            where.createdAt.gte = params.fromDate;
+        if (params.toDate)
+            where.createdAt.lte = params.toDate;
+    }
+    const [totalSales, aggregates, byPaymentMethod] = await Promise.all([
+        prisma_1.prisma.sale.count({ where }),
+        prisma_1.prisma.sale.aggregate({
+            where,
+            _sum: { totalPrice: true, discount: true },
+            _avg: { totalPrice: true },
+        }),
+        prisma_1.prisma.sale.groupBy({
+            by: ['paymentMethod'],
+            where,
+            _count: { _all: true },
+            _sum: { totalPrice: true },
+        }),
+    ]);
+    return {
+        totalSales,
+        totalRevenue: aggregates._sum.totalPrice?.toString() || '0',
+        totalDiscount: aggregates._sum.discount?.toString() || '0',
+        averageSale: aggregates._avg.totalPrice?.toString() || '0',
+        byPaymentMethod: byPaymentMethod.map((p) => ({
+            method: p.paymentMethod,
+            count: p._count._all,
+            revenue: p._sum.totalPrice?.toString() || '0',
+        })),
+    };
+}
+//# sourceMappingURL=sales.js.map

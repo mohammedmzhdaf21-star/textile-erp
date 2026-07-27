@@ -1,0 +1,305 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const prisma_1 = require("../lib/prisma");
+const inventory_1 = require("../lib/inventory");
+const authenticate_1 = require("../middleware/authenticate");
+const router = (0, express_1.Router)();
+const singleParam = (value) => Array.isArray(value) ? value[0] : value;
+// All inventory routes require authentication
+router.use(authenticate_1.authenticate);
+// ============================================================
+// GET /api/inventory
+// ============================================================
+router.get('/', async (req, res) => {
+    try {
+        const branchId = req.query.branchId;
+        const colorId = req.query.colorId;
+        const typeRaw = req.query.type;
+        const codeRaw = req.query.code;
+        const includeArchivedRaw = req.query.includeArchived;
+        const pageRaw = req.query.page;
+        const pageSizeRaw = req.query.pageSize;
+        let type;
+        if (typeRaw === 'ROLL' || typeRaw === 'PIECE' || typeRaw === 'REMANENT') {
+            type = typeRaw;
+        }
+        const code = codeRaw ? parseInt(codeRaw, 10) : undefined;
+        const includeArchived = includeArchivedRaw === 'true';
+        const page = pageRaw ? parseInt(pageRaw, 10) : 1;
+        const pageSize = pageSizeRaw ? parseInt(pageSizeRaw, 10) : 50;
+        const result = await (0, inventory_1.listInventory)({
+            branchId,
+            colorId,
+            type,
+            code,
+            includeArchived,
+            page,
+            pageSize,
+        });
+        return res.status(200).json(result);
+    }
+    catch (error) {
+        return res.status(500).json({
+            error: error.message || 'Failed to list inventory',
+        });
+    }
+});
+// ============================================================
+// GET /api/inventory/stats/summary
+// ============================================================
+router.get('/stats/summary', async (req, res) => {
+    try {
+        const branchId = req.query.branchId;
+        const stats = await (0, inventory_1.getInventoryStats)(branchId);
+        return res.status(200).json(stats);
+    }
+    catch (error) {
+        return res.status(500).json({
+            error: error.message || 'Failed to get stats',
+        });
+    }
+});
+// ============================================================
+// GET /api/inventory/branches
+// ============================================================
+router.get('/branches', async (_req, res) => {
+    try {
+        const branches = await prisma_1.prisma.branch.findMany({
+            where: { isActive: true },
+            select: { id: true, name: true },
+            orderBy: { name: 'asc' },
+        });
+        return res.status(200).json(branches);
+    }
+    catch (error) {
+        return res.status(500).json({
+            error: error.message || 'Failed to list branches',
+        });
+    }
+});
+// ============================================================
+// GET /api/inventory/colors
+// ============================================================
+router.get('/colors', async (_req, res) => {
+    try {
+        const colors = await prisma_1.prisma.color.findMany({
+            where: { isActive: true },
+            select: { id: true, name: true, hexCode: true },
+            orderBy: { name: 'asc' },
+        });
+        return res.status(200).json(colors);
+    }
+    catch (error) {
+        return res.status(500).json({
+            error: error.message || 'Failed to list colors',
+        });
+    }
+});
+// ============================================================
+// GET /api/inventory/:id
+// ============================================================
+router.get('/:id', async (req, res) => {
+    try {
+        const id = singleParam(req.params.id);
+        if (!id) {
+            return res.status(400).json({ error: 'Inventory item id is required' });
+        }
+        const item = await (0, inventory_1.getInventoryItem)(id);
+        return res.status(200).json(item);
+    }
+    catch (error) {
+        const msg = error.message || 'Failed to get item';
+        if (msg.includes('not found')) {
+            return res.status(404).json({ error: msg });
+        }
+        return res.status(500).json({ error: msg });
+    }
+});
+// ============================================================
+// POST /api/inventory (ADMIN, MANAGER only)
+// ============================================================
+router.post('/', (0, authenticate_1.requireRole)('ADMIN', 'MANAGER'), async (req, res) => {
+    try {
+        const { id, branchId, code, subCode, colorId, type, meters, pieceLength, quantity, costPrice, qrCodeValue, qrCodeDataUrl, pictureName, pictureDataUrl, description, isPiecePackage, packageKey, packageComponents, } = req.body;
+        if (!id || !branchId || code === undefined || subCode === undefined || !colorId || !type) {
+            return res.status(400).json({
+                error: 'Missing required fields: id, branchId, code, subCode, colorId, type',
+            });
+        }
+        const parsedSubCode = parseFloat(String(subCode));
+        if (!Number.isFinite(parsedSubCode) || parsedSubCode < 0) {
+            return res.status(400).json({
+                error: 'subCode must be a non-negative price value',
+            });
+        }
+        if (type !== 'ROLL' && type !== 'PIECE' && type !== 'REMANENT') {
+            return res.status(400).json({
+                error: 'type must be ROLL, PIECE, or REMANENT',
+            });
+        }
+        const item = await (0, inventory_1.createInventoryItem)({
+            id,
+            branchId,
+            code: parseInt(String(code), 10),
+            subCode: parsedSubCode,
+            colorId,
+            type,
+            meters: meters !== undefined ? parseFloat(String(meters)) : undefined,
+            pieceLength: pieceLength !== undefined ? parseFloat(String(pieceLength)) : undefined,
+            quantity: quantity !== undefined ? parseInt(String(quantity), 10) : undefined,
+            costPrice: costPrice !== undefined ? parseFloat(String(costPrice)) : undefined,
+            qrCodeValue: qrCodeValue !== undefined ? String(qrCodeValue) : String(id),
+            qrCodeDataUrl: qrCodeDataUrl !== undefined ? String(qrCodeDataUrl) : undefined,
+            pictureName: pictureName !== undefined ? String(pictureName) : undefined,
+            pictureDataUrl: pictureDataUrl !== undefined ? String(pictureDataUrl) : undefined,
+            description: description !== undefined ? String(description).trim() || undefined : undefined,
+            isPiecePackage: Boolean(isPiecePackage),
+            packageKey: packageKey !== undefined ? String(packageKey) : '',
+            packageComponents: Array.isArray(packageComponents) ? packageComponents : undefined,
+        }, req.user?.userId, req.user?.email);
+        return res.status(201).json({
+            message: 'Inventory item created',
+            item,
+        });
+    }
+    catch (error) {
+        const msg = error.message || 'Failed to create item';
+        if (msg.includes('not found')) {
+            return res.status(404).json({ error: msg });
+        }
+        if (msg.includes('require') || msg.includes('positive')) {
+            return res.status(400).json({ error: msg });
+        }
+        if (msg.includes('Unique constraint')) {
+            return res.status(409).json({
+                error: 'An item with this id or combination already exists',
+            });
+        }
+        return res.status(500).json({ error: msg });
+    }
+});
+// ============================================================
+// PATCH /api/inventory/:id (ADMIN, MANAGER only)
+// ============================================================
+router.patch('/:id', (0, authenticate_1.requireRole)('ADMIN', 'MANAGER'), async (req, res) => {
+    try {
+        const id = singleParam(req.params.id);
+        const { meters, pieceLength, quantity, costPrice, code, subCode, colorId, version } = req.body;
+        if (!id) {
+            return res.status(400).json({ error: 'Inventory item id is required' });
+        }
+        if (version === undefined || version === null) {
+            return res.status(400).json({
+                error: 'version field is required for updates (optimistic locking)',
+            });
+        }
+        const item = await (0, inventory_1.updateInventoryItem)(id, {
+            meters: meters !== undefined ? parseFloat(String(meters)) : undefined,
+            pieceLength: pieceLength !== undefined ? parseFloat(String(pieceLength)) : undefined,
+            quantity: quantity !== undefined ? parseInt(String(quantity), 10) : undefined,
+            costPrice: costPrice !== undefined ? parseFloat(String(costPrice)) : undefined,
+            code: code !== undefined ? parseInt(String(code), 10) : undefined,
+            subCode: subCode !== undefined ? parseFloat(String(subCode)) : undefined,
+            colorId: colorId !== undefined ? String(colorId) : undefined,
+            version: parseInt(String(version), 10),
+        }, req.user?.userId, req.user?.email);
+        return res.status(200).json({
+            message: 'Inventory item updated',
+            item,
+        });
+    }
+    catch (error) {
+        const msg = error.message || 'Failed to update item';
+        if (msg.includes('not found')) {
+            return res.status(404).json({ error: msg });
+        }
+        if (msg.includes('modified by another user')) {
+            return res.status(409).json({ error: msg });
+        }
+        if (msg.includes('archived')) {
+            return res.status(400).json({ error: msg });
+        }
+        if (msg.includes('already exists') || msg.includes('must be')) {
+            return res.status(400).json({ error: msg });
+        }
+        return res.status(500).json({ error: msg });
+    }
+});
+// ============================================================
+// POST /api/inventory/:id/archive (ADMIN, MANAGER only)
+// ============================================================
+router.post('/:id/archive', (0, authenticate_1.requireRole)('ADMIN', 'MANAGER'), async (req, res) => {
+    try {
+        const id = singleParam(req.params.id);
+        if (!id) {
+            return res.status(400).json({ error: 'Inventory item id is required' });
+        }
+        const item = await (0, inventory_1.archiveInventoryItem)(id, req.user?.userId, req.user?.email);
+        return res.status(200).json({
+            message: 'Inventory item archived',
+            item,
+        });
+    }
+    catch (error) {
+        const msg = error.message || 'Failed to archive item';
+        if (msg.includes('not found')) {
+            return res.status(404).json({ error: msg });
+        }
+        if (msg.includes('already archived')) {
+            return res.status(400).json({ error: msg });
+        }
+        return res.status(500).json({ error: msg });
+    }
+});
+// ============================================================
+// POST /api/inventory/:id/restore (ADMIN, MANAGER only)
+// ============================================================
+router.post('/:id/restore', (0, authenticate_1.requireRole)('ADMIN', 'MANAGER'), async (req, res) => {
+    try {
+        const id = singleParam(req.params.id);
+        if (!id) {
+            return res.status(400).json({ error: 'Inventory item id is required' });
+        }
+        const item = await (0, inventory_1.restoreInventoryItem)(id, req.user?.userId, req.user?.email);
+        return res.status(200).json({
+            message: 'Inventory item restored',
+            item,
+        });
+    }
+    catch (error) {
+        const msg = error.message || 'Failed to restore item';
+        if (msg.includes('not found')) {
+            return res.status(404).json({ error: msg });
+        }
+        if (msg.includes('not archived')) {
+            return res.status(400).json({ error: msg });
+        }
+        return res.status(500).json({ error: msg });
+    }
+});
+// ============================================================
+// DELETE /api/inventory/:id (ADMIN only - permanent!)
+// ============================================================
+router.delete('/:id', (0, authenticate_1.requireRole)('ADMIN'), async (req, res) => {
+    try {
+        const id = singleParam(req.params.id);
+        if (!id) {
+            return res.status(400).json({ error: 'Inventory item id is required' });
+        }
+        const result = await (0, inventory_1.deleteInventoryItem)(id, req.user?.userId, req.user?.email);
+        return res.status(200).json({
+            message: 'Inventory item permanently deleted',
+            ...result,
+        });
+    }
+    catch (error) {
+        const msg = error.message || 'Failed to delete item';
+        if (msg.includes('not found')) {
+            return res.status(404).json({ error: msg });
+        }
+        return res.status(500).json({ error: msg });
+    }
+});
+exports.default = router;
+//# sourceMappingURL=inventory.routes.js.map
