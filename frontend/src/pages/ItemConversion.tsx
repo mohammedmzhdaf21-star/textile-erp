@@ -5,6 +5,7 @@ import { completeCuttingTasksAfterRollToPiece } from '../lib/cuttingTasks';
 import { buildInventoryItemId } from '../lib/inventoryCodes';
 import { isBelowRemnantThreshold } from '../lib/inventoryRules';
 import { useTranslation } from 'react-i18next';
+import QrScanInput from '../components/QrScanInput';
 
 type BranchCode = 'A' | 'B' | 'C' | 'E' | 'F';
 type ItemType = 'ROLL' | 'PIECE' | 'REMANENT';
@@ -410,10 +411,13 @@ const ItemConversion: React.FC = () => {
           </p>
 
           <div className="mt-4 grid gap-3 md:grid-cols-[1fr_auto]">
-            <input
+            <QrScanInput
               value={transferSourceId}
-              onChange={(event) => setTransferSourceId(event.target.value)}
-              className="w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
+              onChange={setTransferSourceId}
+              onScan={(value) => {
+                setTransferSourceId(value);
+                void loadItem(value, setTransferSource);
+              }}
               placeholder={t('itemConversion.scanPlaceholder')}
             />
             <button type="button" onClick={() => loadItem(transferSourceId, setTransferSource)} className="btn-primary">
@@ -463,10 +467,13 @@ const ItemConversion: React.FC = () => {
           </p>
 
           <div className="mt-4 grid gap-3 md:grid-cols-[1fr_auto]">
-            <input
+            <QrScanInput
               value={rollSourceId}
-              onChange={(event) => setRollSourceId(event.target.value)}
-              className="w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
+              onChange={setRollSourceId}
+              onScan={(value) => {
+                setRollSourceId(value);
+                void loadItem(value, setRollSource);
+              }}
               placeholder={t('itemConversion.rollScanPlaceholder')}
             />
             <button type="button" onClick={() => loadItem(rollSourceId, setRollSource)} className="btn-primary">

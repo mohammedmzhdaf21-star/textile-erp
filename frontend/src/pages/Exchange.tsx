@@ -2,6 +2,8 @@ import React, { useMemo, useState } from 'react';
 import api from '../lib/api';
 import { getCurrentUser } from '../lib/auth';
 import { useTranslation } from 'react-i18next';
+import QrScanInput from '../components/QrScanInput';
+import { resolveInventoryItem } from '../lib/inventoryLookup';
 
 type BranchCode = 'A' | 'B' | 'C' | 'E' | 'F';
 
@@ -135,33 +137,8 @@ const ExchangePage: React.FC = () => {
     return Math.max(0, netDue - Number(amountPaid || 0));
   }, [amountPaid, netDue, paymentStatus]);
 
-  const resolveInventoryItem = async (rawCode: string, sourceBranch: BranchCode) => {
-    const code = rawCode.trim();
-    if (!code) return null;
-
-    try {
-      const response = await api.get(`/inventory/${encodeURIComponent(code)}`);
-      return response.data as InventoryLookupItem;
-    } catch (error: any) {
-      if (error?.response?.status !== 404 || !/^\d+$/.test(code)) {
-        throw error;
-      }
-    }
-
-    const response = await api.get('/inventory', {
-      params: {
-        branchId: BRANCH_MAP[sourceBranch],
-        code,
-        pageSize: 1,
-      },
-    });
-    const item = response.data?.items?.[0];
-    if (!item) throw new Error(`Inventory code ${code} was not found for branch ${sourceBranch}`);
-    return item as InventoryLookupItem;
-  };
-
-  const detectReturnedItem = async () => {
-    const item = await resolveInventoryItem(returnedScan.inventoryItemId, returnedScan.sourceBranch);
+  const detectReturnedItemForCode = async (inventoryItemId: string, sourceBranch: BranchCode) => {
+    const item = await resolveInventoryItem<InventoryLookupItem>(inventoryItemId, sourceBranch, BRANCH_MAP);
     setDetectedReturnedItem(item);
     if (item) {
       const unit = soldAsUnitForItem(item);
@@ -175,8 +152,8 @@ const ExchangePage: React.FC = () => {
     return item;
   };
 
-  const detectNewItem = async () => {
-    const item = await resolveInventoryItem(newScan.inventoryItemId, newScan.sourceBranch);
+  const detectNewItemForCode = async (inventoryItemId: string, sourceBranch: BranchCode) => {
+    const item = await resolveInventoryItem<InventoryLookupItem>(inventoryItemId, sourceBranch, BRANCH_MAP);
     setDetectedNewItem(item);
     if (item) {
       const unit = soldAsUnitForItem(item);
@@ -188,6 +165,35 @@ const ExchangePage: React.FC = () => {
       );
     }
     return item;
+  };
+
+  const detectReturnedItem = () =>
+    detectReturnedItemForCode(returnedScan.inventoryItemId, returnedScan.sourceBranch);
+
+  const detectNewItem = () => detectNewItemForCode(newScan.inventoryItemId, newScan.sourceBranch);
+
+  const handleReturnedScanLookupError = (error: unknown) => {
+    const apiError = error as { response?: { status?: number; data?: { error?: string; message?: string } }; message?: string };
+    const status = apiError?.response?.status;
+    const body = apiError?.response?.data;
+    setReturnedScanMessage(
+      t('common.notFound', {
+        status: status ? t('common.notFoundStatus', { status }) : '',
+        message: body?.error ?? body?.message ?? apiError?.message,
+      })
+    );
+  };
+
+  const handleNewScanLookupError = (error: unknown) => {
+    const apiError = error as { response?: { status?: number; data?: { error?: string; message?: string } }; message?: string };
+    const status = apiError?.response?.status;
+    const body = apiError?.response?.data;
+    setNewScanMessage(
+      t('common.notFound', {
+        status: status ? t('common.notFoundStatus', { status }) : '',
+        message: body?.error ?? body?.message ?? apiError?.message,
+      })
+    );
   };
 
   const addReturnedInventory = async () => {
@@ -488,28 +494,25 @@ const ExchangePage: React.FC = () => {
             <div className="grid gap-3 sm:grid-cols-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700">{t('exchange.scanQrItemId')}</label>
-                <input
+                <QrScanInput
+                  className="mt-1"
                   value={newScan.inventoryItemId}
                   onBlur={() => {
                     if (newScan.inventoryItemId.trim()) {
-                      detectNewItem().catch((error: any) => {
-                        const status = error?.response?.status;
-                        const body = error?.response?.data;
-                        setNewScanMessage(
-                          t('common.notFound', {
-                            status: status ? t('common.notFoundStatus', { status }) : '',
-                            message: body?.error ?? body?.message ?? error?.message,
-                          })
-                        );
-                      });
+                      detectNewItem().catch(handleNewScanLookupError);
                     }
                   }}
-                  onChange={(e) => {
+                  onChange={(value) => {
                     setDetectedNewItem(null);
                     setNewScanMessage(null);
-                    setNewScan((current) => ({ ...current, inventoryItemId: e.target.value }));
+                    setNewScan((current) => ({ ...current, inventoryItemId: value }));
                   }}
-                  className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
+                  onScan={(value) => {
+                    setDetectedNewItem(null);
+                    setNewScanMessage(null);
+                    setNewScan((current) => ({ ...current, inventoryItemId: value }));
+                    detectNewItemForCode(value, newScan.sourceBranch).catch(handleNewScanLookupError);
+                  }}
                   placeholder={t('exchange.itemIdPlaceholder')}
                 />
                 {newScanMessage && <p className="mt-2 text-xs text-gray-500">{newScanMessage}</p>}
@@ -636,28 +639,25 @@ const ExchangePage: React.FC = () => {
             <div className="grid gap-3 sm:grid-cols-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700">{t('exchange.returnedItemId')}</label>
-                <input
+                <QrScanInput
+                  className="mt-1"
                   value={returnedScan.inventoryItemId}
                   onBlur={() => {
                     if (returnedScan.inventoryItemId.trim()) {
-                      detectReturnedItem().catch((error: any) => {
-                        const status = error?.response?.status;
-                        const body = error?.response?.data;
-                        setReturnedScanMessage(
-                          t('common.notFound', {
-                            status: status ? t('common.notFoundStatus', { status }) : '',
-                            message: body?.error ?? body?.message ?? error?.message,
-                          })
-                        );
-                      });
+                      detectReturnedItem().catch(handleReturnedScanLookupError);
                     }
                   }}
-                  onChange={(e) => {
+                  onChange={(value) => {
                     setDetectedReturnedItem(null);
                     setReturnedScanMessage(null);
-                    setReturnedScan((current) => ({ ...current, inventoryItemId: e.target.value }));
+                    setReturnedScan((current) => ({ ...current, inventoryItemId: value }));
                   }}
-                  className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
+                  onScan={(value) => {
+                    setDetectedReturnedItem(null);
+                    setReturnedScanMessage(null);
+                    setReturnedScan((current) => ({ ...current, inventoryItemId: value }));
+                    detectReturnedItemForCode(value, returnedScan.sourceBranch).catch(handleReturnedScanLookupError);
+                  }}
                   placeholder={t('exchange.itemIdPlaceholder')}
                 />
                 {returnedScanMessage && <p className="mt-2 text-xs text-gray-500">{returnedScanMessage}</p>}

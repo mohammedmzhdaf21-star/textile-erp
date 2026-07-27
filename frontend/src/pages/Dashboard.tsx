@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
+import QrScanInput from "../components/QrScanInput";
 import api from "../lib/api";
 import {
   dashboardSections,
@@ -61,9 +62,13 @@ export default function Dashboard() {
     navigate("/login");
   }
 
-  async function loadItemForPrice() {
-    const itemId = priceItemId.trim();
+  async function loadItemForPrice(scannedItemId?: string) {
+    const itemId = (scannedItemId ?? priceItemId).trim();
     if (!itemId) return alert(t("dashboard.enterItemIdFirst"));
+
+    if (scannedItemId) {
+      setPriceItemId(scannedItemId);
+    }
 
     try {
       const response = await api.get(`/inventory/${encodeURIComponent(itemId)}`);
@@ -214,13 +219,17 @@ export default function Dashboard() {
               <h2 className="text-xl font-bold text-black">{t("dashboard.priceTitle")}</h2>
               <p className="mt-1 text-sm text-gray-600">{t("dashboard.priceDescription")}</p>
               <label className="mt-4 block text-sm font-medium text-gray-700">{t("dashboard.qrItemId")}</label>
-              <input
+              <QrScanInput
+                className="mt-1"
                 value={priceItemId}
-                onChange={(event) => setPriceItemId(event.target.value)}
-                className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
+                onChange={setPriceItemId}
+                onScan={(value) => {
+                  setPriceItemId(value);
+                  void loadItemForPrice(value);
+                }}
                 placeholder={t("dashboard.qrPlaceholder")}
               />
-              <button type="button" onClick={loadItemForPrice} className="btn-secondary mt-3 w-full">
+              <button type="button" onClick={() => void loadItemForPrice()} className="btn-secondary mt-3 w-full">
                 {t("common.detectItem")}
               </button>
 

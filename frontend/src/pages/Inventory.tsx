@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
+import QrScanInput from '../components/QrScanInput';
 import api from '../lib/api';
 import { getCurrentUser } from '../lib/auth';
 import {
@@ -459,10 +460,15 @@ const InventoryView: React.FC = () => {
             runQrSearch();
           }}
         >
-          <input
+          <QrScanInput
+            className="flex-1"
+            inputClassName="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm"
             value={scanQuery}
-            onChange={(event) => setScanQuery(event.target.value)}
-            className="flex-1 rounded-xl border border-gray-300 px-4 py-3 text-sm"
+            onChange={setScanQuery}
+            onScan={(value) => {
+              setScanQuery(value);
+              void runQrSearch(value);
+            }}
             placeholder={t('inventory.scanPlaceholder')}
             autoFocus
           />

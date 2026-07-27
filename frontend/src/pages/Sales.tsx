@@ -1,9 +1,11 @@
 import React, { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import QrScanInput from '../components/QrScanInput';
 import api from '../lib/api';
 import { getCurrentUser } from '../lib/auth';
 import { getItemMinimumPrice } from '../lib/dashboardSettings';
 import { maybeCreateCuttingTaskAfterPieceSale } from '../lib/cuttingTasks';
+import { resolveInventoryItem } from '../lib/inventoryLookup';
 import type { BranchCode } from '../lib/taskSettings';
 import {
   formatPackageComponentsSold,
@@ -178,33 +180,8 @@ const SalesView: React.FC = () => {
     ]);
   };
 
-  const resolveInventoryItem = async (rawCode: string, sourceBranch: string) => {
-    const code = rawCode.trim();
-    if (!code) return null;
-
-    try {
-      const response = await api.get(`/inventory/${encodeURIComponent(code)}`);
-      return response.data as InventoryLookupItem;
-    } catch (error: any) {
-      if (error?.response?.status !== 404 || !/^\d+$/.test(code)) {
-        throw error;
-      }
-    }
-
-    const response = await api.get('/inventory', {
-      params: {
-        branchId: BRANCH_MAP[sourceBranch] ?? sourceBranch,
-        code,
-        pageSize: 1,
-      },
-    });
-    const item = response.data?.items?.[0];
-    if (!item) throw new Error(`Inventory code ${code} was not found for branch ${sourceBranch}`);
-    return item as InventoryLookupItem;
-  };
-
-  const detectScanItem = async () => {
-    const item = await resolveInventoryItem(scanState.inventoryItemId, scanState.sourceBranch);
+  const detectScanItemForCode = async (inventoryItemId: string, sourceBranch: string) => {
+    const item = await resolveInventoryItem<InventoryLookupItem>(inventoryItemId, sourceBranch, BRANCH_MAP);
     setDetectedScanItem(item);
     if (item) {
       const unit = soldAsUnitForItem(item);
@@ -253,6 +230,21 @@ const SalesView: React.FC = () => {
       }
     }
     return item;
+  };
+
+  const detectScanItem = () =>
+    detectScanItemForCode(scanState.inventoryItemId, scanState.sourceBranch);
+
+  const handleScanLookupError = (error: unknown) => {
+    const apiError = error as { response?: { status?: number; data?: { error?: string; message?: string } }; message?: string };
+    const status = apiError?.response?.status;
+    const body = apiError?.response?.data;
+    setScanMessage(
+      t('common.notFound', {
+        status: status ? t('common.notFoundStatus', { status }) : '',
+        message: body?.error ?? body?.message ?? apiError?.message,
+      })
+    );
   };
 
   const updatePackagePieceSold = (name: string, quantity: number) => {
@@ -526,29 +518,27 @@ const SalesView: React.FC = () => {
             <div className="grid gap-3 sm:grid-cols-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700">{t('sales.itemId')}</label>
-                <input
+                <QrScanInput
+                  className="mt-1"
                   value={scanState.inventoryItemId}
                   onBlur={() => {
                     if (scanState.inventoryItemId.trim()) {
-                      detectScanItem().catch((error: any) => {
-                        const status = error?.response?.status;
-                        const body = error?.response?.data;
-                        setScanMessage(
-                          t('common.notFound', {
-                            status: status ? t('common.notFoundStatus', { status }) : '',
-                            message: body?.error ?? body?.message ?? error?.message,
-                          })
-                        );
-                      });
+                      detectScanItem().catch(handleScanLookupError);
                     }
                   }}
-                  onChange={(e) => {
+                  onChange={(value) => {
                     setDetectedScanItem(null);
                     setScanMessage(null);
                     setMinimumPriceMessage(null);
-                    setScanState((s) => ({ ...s, inventoryItemId: e.target.value }));
+                    setScanState((s) => ({ ...s, inventoryItemId: value }));
                   }}
-                  className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
+                  onScan={(value) => {
+                    setDetectedScanItem(null);
+                    setScanMessage(null);
+                    setMinimumPriceMessage(null);
+                    setScanState((s) => ({ ...s, inventoryItemId: value }));
+                    detectScanItemForCode(value, scanState.sourceBranch).catch(handleScanLookupError);
+                  }}
                   placeholder={t('sales.itemIdPlaceholder')}
                 />
                 {scanMessage && <p className="mt-2 text-xs text-gray-500">{scanMessage}</p>}

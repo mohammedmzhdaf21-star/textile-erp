@@ -808,6 +808,13 @@
     "WIPING_GLASS": "Wiping the glass",
     "CUTTING_FABRIC_ROLL": "Cutting the fabric roll for code {{code}}"
   },
+  "qrScanner": {
+    "title": "Scan QR code",
+    "hint": "Point your camera at the item QR label. The code fills in automatically.",
+    "startingCamera": "Starting camera...",
+    "cameraError": "Could not access the camera. Check browser permissions and try again.",
+    "scanWithCamera": "Scan with camera"
+  },
   "errors": {
     "somethingWentWrong": "Something went wrong",
     "renderError": "The app encountered an error while rendering. Check the browser console for details.",
