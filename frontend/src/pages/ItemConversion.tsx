@@ -3,6 +3,7 @@ import QRCode from 'qrcode';
 import api from '../lib/api';
 import { completeCuttingTasksAfterRollToPiece } from '../lib/cuttingTasks';
 import { buildInventoryItemId } from '../lib/inventoryCodes';
+import { isBelowRemnantThreshold } from '../lib/inventoryRules';
 import { useTranslation } from 'react-i18next';
 
 type BranchCode = 'A' | 'B' | 'C' | 'E' | 'F';
@@ -270,7 +271,9 @@ const ItemConversion: React.FC = () => {
     setMessage(null);
 
     try {
-      const existingPiece = await findExistingPieceForRollCut(rollSource, amount);
+      const createAsRemnant = isBelowRemnantThreshold(amount);
+      const existingPiece =
+        createAsRemnant ? null : await findExistingPieceForRollCut(rollSource, amount);
       let pieceItemId: string;
       let qrCodeDataUrl: string;
       let addedToExisting = false;
@@ -287,8 +290,8 @@ const ItemConversion: React.FC = () => {
           subCode: itemSubCode(rollSource),
           colorName: rollSource.color?.name || rollSource.colorId,
           colorId: rollSource.colorId,
-          type: 'PIECE',
-          pieceLength: amount,
+          type: createAsRemnant ? 'REMANENT' : 'PIECE',
+          pieceLength: createAsRemnant ? undefined : amount,
         });
         qrCodeDataUrl = await createQrDataUrl(pieceItemId);
       }
@@ -316,27 +319,34 @@ const ItemConversion: React.FC = () => {
           code: rollSource.code,
           subCode: itemSubCode(rollSource),
           colorId: rollSource.colorId,
-          type: 'PIECE',
-          pieceLength: amount,
-          quantity: 1,
+          type: createAsRemnant ? 'REMANENT' : 'PIECE',
+          meters: createAsRemnant ? amount : undefined,
+          pieceLength: createAsRemnant ? undefined : amount,
+          quantity: createAsRemnant ? 1 : 1,
           costPrice: rollSource.costPrice ? toNumber(rollSource.costPrice) : undefined,
           qrCodeValue: pieceItemId,
           qrCodeDataUrl,
           pictureName: rollSource.id,
           pictureDataUrl: rollSource.qrCodeDataUrl || undefined,
           sourceItemId: rollSource.id,
-          conversionType: 'ROLL_TO_PIECE',
+          conversionType: createAsRemnant ? 'ROLL_TO_REMANENT' : 'ROLL_TO_PIECE',
         });
       }
 
       setSummary({
-        title: addedToExisting ? t('itemConversion.summaryStockAdded') : t('itemConversion.summaryPieceCreated'),
+        title: addedToExisting
+          ? t('itemConversion.summaryStockAdded')
+          : createAsRemnant
+            ? t('itemConversion.summaryRemnantCreated')
+            : t('itemConversion.summaryPieceCreated'),
         sourceId: rollSource.id,
         newItemId: pieceItemId,
         qrCodeDataUrl,
         details: addedToExisting
           ? `Cut ${amount.toFixed(2)} meters and added 1 piece to existing item ${pieceItemId} (code ${rollSource.code}, color ${rollSource.color?.name || rollSource.colorId}).`
-          : `Cut ${amount.toFixed(2)} meters into one new piece with code ${rollSource.code} and color ${rollSource.color?.name || rollSource.colorId}.`,
+          : createAsRemnant
+            ? `Cut ${amount.toFixed(2)} meters into a remnant (under 2 m rule).`
+            : `Cut ${amount.toFixed(2)} meters into one new piece with code ${rollSource.code} and color ${rollSource.color?.name || rollSource.colorId}.`,
       });
       const completedTasks = completeCuttingTasksAfterRollToPiece({
         rollItemId: rollSource.id,
@@ -350,7 +360,9 @@ const ItemConversion: React.FC = () => {
           ? `Roll-to-piece conversion complete. ${completedTasks.length} cutting task(s) marked done automatically.`
           : addedToExisting
             ? t('itemConversion.rollToPieceAddedExisting')
-            : t('itemConversion.rollToPieceNewQr')
+            : createAsRemnant
+              ? t('itemConversion.rollToRemnantComplete')
+              : t('itemConversion.rollToPieceNewQr')
       );
       await loadItem(rollSource.id, setRollSource);
     } catch (err: any) {

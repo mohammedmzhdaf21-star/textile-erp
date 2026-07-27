@@ -25,6 +25,11 @@ import {
   validatePackageComponents,
   type PackageComponent,
 } from '../lib/piecePackages';
+import {
+  isBelowRemnantThreshold,
+  normalizeInventoryShape,
+  REMNANT_THRESHOLD_METERS,
+} from '../lib/inventoryRules';
 
 type Color = {
   id: string;
@@ -140,6 +145,13 @@ const ItemInputPage: React.FC = () => {
     }
     return t('itemInput.amountMeters', { meters });
   }, [isPiecePackage, meters, normalizedPackageComponents, pieceLength, quantity, t, type]);
+
+  const willSaveAsRemnant = useMemo(() => {
+    if (isPiecePackage) return false;
+    if (type === 'ROLL') return isBelowRemnantThreshold(Number(meters));
+    if (type === 'PIECE') return isBelowRemnantThreshold(Number(pieceLength));
+    return false;
+  }, [isPiecePackage, meters, pieceLength, type]);
 
   const familySubCodes = useMemo(() => {
     const unique = new Map<string, InventoryItemView>();
@@ -354,7 +366,30 @@ const ItemInputPage: React.FC = () => {
       );
     }
 
-    const id = generatedItemId;
+    const normalized = normalizeInventoryShape({
+      type,
+      meters: Number(meters),
+      pieceLength: Number(pieceLength),
+      quantity: Number(quantity),
+      isPiecePackage,
+    });
+    const effectiveType = normalized.type;
+
+    let id = '';
+    if (selectedColor) {
+      id = buildInventoryItemId({
+        branchId,
+        familyCode,
+        subCode,
+        colorName: selectedColor.name,
+        colorId: selectedColor.id,
+        type: effectiveType,
+        pieceLength:
+          effectiveType === 'PIECE' && !isPiecePackage ? normalized.pieceLength : undefined,
+        isPiecePackage,
+        packageComponents: normalizedPackageComponents,
+      });
+    }
     if (!id) {
       return alert(t('itemInput.couldNotBuildId'));
     }
@@ -371,7 +406,7 @@ const ItemInputPage: React.FC = () => {
       code: familyCode,
       subCode,
       colorId,
-      type,
+      type: effectiveType,
       costPrice: subCode,
       qrCodeValue: id,
       qrCodeDataUrl: createdQrDataUrl,
@@ -379,15 +414,17 @@ const ItemInputPage: React.FC = () => {
       pictureName: pictureName || undefined,
       pictureDataUrl: pictureDataUrl || undefined,
     };
-    if (type === 'ROLL' || type === 'REMANENT') payload.meters = Number(meters);
+    if (effectiveType === 'ROLL' || effectiveType === 'REMANENT') {
+      payload.meters = Number(normalized.meters ?? meters);
+    }
     if (type === 'PIECE' && isPiecePackage) {
       payload.isPiecePackage = true;
       payload.packageKey = packageKey;
       payload.packageComponents = normalizedPackageComponents;
       payload.quantity = Number(quantity);
-    } else if (type === 'PIECE') {
-      payload.pieceLength = Number(pieceLength);
-      payload.quantity = Number(quantity);
+    } else if (effectiveType === 'PIECE') {
+      payload.pieceLength = Number(normalized.pieceLength ?? pieceLength);
+      payload.quantity = Number(normalized.quantity ?? quantity);
     }
 
     setSuccessMessage(null);
@@ -631,6 +668,11 @@ const ItemInputPage: React.FC = () => {
                 />
               )}
             </div>
+            {willSaveAsRemnant && (
+              <p className="mt-2 text-sm font-medium text-amber-700">
+                {t('itemInput.savedAsRemnantHint', { threshold: REMNANT_THRESHOLD_METERS })}
+              </p>
+            )}
           </div>
 
           {type === 'PIECE' && (

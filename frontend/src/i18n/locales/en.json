@@ -333,6 +333,8 @@
     "rollToPieceWithTasks": "Roll-to-piece conversion complete. {{count}} cutting task(s) marked done automatically.",
     "rollToPieceAddedExisting": "Roll-to-piece conversion complete. Stock added to existing piece.",
     "rollToPieceNewQr": "Roll-to-piece conversion complete. New piece QR created.",
+    "rollToRemnantComplete": "Cut complete. Saved as remnant (less than 2 m).",
+    "summaryRemnantCreated": "Remnant created from roll",
     "summaryBranchTransfer": "Branch transfer created",
     "summaryStockAdded": "Stock added to existing piece",
     "summaryPieceCreated": "Piece created from roll",
@@ -752,7 +754,8 @@
     "amountMeters": "{{meters}} m",
     "subCodeChip": "${{price}} · {{color}} · {{type}}{{extra}} · {{branch}}",
     "subCodePackageExtra": " · pkg: {{summary}}",
-    "subCodePieceExtra": " · {{length}} m/pc"
+    "subCodePieceExtra": " · {{length}} m/pc",
+    "savedAsRemnantHint": "Less than {{threshold}} m is saved as a remnant, not a roll or piece."
   },
   "itemTypes": {
     "ROLL": "Roll",
