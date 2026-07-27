@@ -1,35 +1,27 @@
 import React, { useState } from 'react';
 import QRCode from 'qrcode';
 import api from '../lib/api';
+import { getCurrentUser } from '../lib/auth';
 import { completeCuttingTasksAfterRollToPiece } from '../lib/cuttingTasks';
-import { buildInventoryItemId } from '../lib/inventoryCodes';
+import { sellCutPiece } from '../lib/cutAndSell';
 import { getColorLabel } from '../lib/colorLabels';
+import { printPieceInventoryLabel } from '../lib/pieceLabel';
 import { isBelowRemnantThreshold } from '../lib/inventoryRules';
+import {
+  cutRollToPieceStock,
+  itemSubCode,
+  type RollInventoryItem,
+} from '../lib/rollToPiece';
 import { useTranslation } from 'react-i18next';
 
 type BranchCode = 'A' | 'B' | 'C' | 'E' | 'F';
 type ItemType = 'ROLL' | 'PIECE' | 'REMANENT';
 type SoldUnit = 'METER' | 'PIECE';
 
-type InventoryItem = {
-  id: string;
-  branchId: string;
-  code: number;
-  subCode?: number | string;
-  colorId: string;
-  color?: { id: string; name: string; hexCode?: string };
+type InventoryItem = RollInventoryItem & {
   branch?: { id: string; name: string };
-  type: ItemType;
-  meters?: string | number | null;
-  pieceLength?: string | number | null;
-  quantity: number;
-  costPrice?: string | number | null;
-  version: number;
-  qrCodeDataUrl?: string | null;
   sourceItemId?: string | null;
   conversionType?: string | null;
-  isPiecePackage?: boolean;
-  packageKey?: string;
 };
 
 type ConversionSummary = {
@@ -38,6 +30,8 @@ type ConversionSummary = {
   newItemId: string;
   qrCodeDataUrl: string;
   details: string;
+  saleCompleted?: boolean;
+  labelPrinted?: boolean;
 };
 
 const branches: BranchCode[] = ['A', 'B', 'C', 'E', 'F'];
@@ -65,9 +59,6 @@ const soldAsUnitForItem = (item: InventoryItem): SoldUnit =>
 
 const itemAvailableAmount = (item: InventoryItem) =>
   item.type === 'PIECE' ? item.quantity : toNumber(item.meters);
-
-const itemSubCode = (item: InventoryItem) =>
-  toNumber(item.subCode ?? item.costPrice ?? 0);
 
 const colorCodeForItem = (item: InventoryItem) =>
   (item.color?.name || item.colorId)
@@ -99,6 +90,10 @@ const ItemConversion: React.FC = () => {
   const [rollSourceId, setRollSourceId] = useState('');
   const [rollSource, setRollSource] = useState<InventoryItem | null>(null);
   const [cutMeters, setCutMeters] = useState('2.25');
+  const [sellImmediately, setSellImmediately] = useState(true);
+  const [salePrice, setSalePrice] = useState('15');
+  const [customerName, setCustomerName] = useState('Exchange Customer');
+  const [customerPhone, setCustomerPhone] = useState('0000000000');
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [summary, setSummary] = useState<ConversionSummary | null>(null);
@@ -118,6 +113,9 @@ const ItemConversion: React.FC = () => {
       const item = response.data as InventoryItem;
       setItem(item);
       const amount = itemAvailableAmount(item);
+      if (setItem === setRollSource) {
+        setSalePrice(String(itemSubCode(item)));
+      }
       if (setItem === setTransferSource) {
         setTransferAmount(String(item.type === 'PIECE' ? Math.max(1, Math.min(item.quantity, 1)) : Math.min(amount, 1)));
         const currentBranch = BRANCH_CODE_BY_ID[item.branchId];
@@ -141,28 +139,6 @@ const ItemConversion: React.FC = () => {
       if (err?.response?.status === 404) return baseId;
       throw err;
     }
-  };
-
-  const findExistingPieceForRollCut = async (rollSource: InventoryItem, pieceLength: number) => {
-    const response = await api.get('/inventory', {
-      params: {
-        branchId: rollSource.branchId,
-        colorId: rollSource.colorId,
-        type: 'PIECE',
-        code: rollSource.code,
-        pageSize: 200,
-      },
-    });
-    const items = (response.data?.items ?? []) as InventoryItem[];
-
-    const matches = items.filter((item) => {
-      if (item.isPiecePackage || (item.packageKey ?? '')) return false;
-      if (Math.abs(toNumber(item.pieceLength) - pieceLength) >= 0.001) return false;
-      return true;
-    });
-
-    // Prefer the sold-out piece (qty 0) — same family code, color, and cut length.
-    return matches.find((item) => item.quantity === 0) ?? matches[0] ?? null;
   };
 
   const patchSourceStock = async (item: InventoryItem, amount: number) => {
@@ -254,6 +230,26 @@ const ItemConversion: React.FC = () => {
     }
   };
 
+  const printCutPieceLabel = (result: {
+    pieceItemId: string;
+    qrCodeDataUrl: string;
+    createAsRemnant: boolean;
+    pieceLength?: number;
+  }, source: InventoryItem) => {
+    if (result.createAsRemnant) return false;
+    return printPieceInventoryLabel({
+      t,
+      itemId: result.pieceItemId,
+      qrDataUrl: result.qrCodeDataUrl,
+      familyCode: source.code,
+      subCode: itemSubCode(source),
+      type: 'PIECE',
+      pieceLength: result.pieceLength,
+      colorName: source.color?.name,
+      branchId: source.branchId,
+    });
+  };
+
   const cutRollToPiece = async () => {
     if (!rollSource) return alert(t('itemConversion.loadRollFirst'));
     const amount = Number(cutMeters);
@@ -266,38 +262,56 @@ const ItemConversion: React.FC = () => {
     if (amount > toNumber(rollSource.meters)) {
       return alert(t('itemConversion.cutExceedsRoll'));
     }
+    if (sellImmediately && isBelowRemnantThreshold(amount)) {
+      return alert(t('itemConversion.sellOnlyForPieces'));
+    }
+    if (sellImmediately) {
+      const price = Number(salePrice);
+      if (!Number.isFinite(price) || price <= 0) {
+        return alert(t('itemConversion.enterValidSalePrice'));
+      }
+      if (!customerName.trim() || !customerPhone.trim()) {
+        return alert(t('itemConversion.provideCustomerForSale'));
+      }
+      const currentUser = getCurrentUser();
+      if (!currentUser) {
+        return alert(t('sales.mustBeLoggedIn'));
+      }
+    }
 
     setIsProcessing(true);
     setError(null);
     setMessage(null);
 
     try {
-      const createAsRemnant = isBelowRemnantThreshold(amount);
-      const existingPiece =
-        createAsRemnant ? null : await findExistingPieceForRollCut(rollSource, amount);
-      let pieceItemId: string;
-      let qrCodeDataUrl: string;
-      let addedToExisting = false;
+      const result = await cutRollToPieceStock(rollSource, amount);
+      const colorLabel = getColorLabel(t, rollSource.color?.name) || rollSource.colorId;
+      let saleCompleted = false;
+      let labelPrinted = false;
 
-      if (existingPiece) {
-        pieceItemId = existingPiece.id;
-        qrCodeDataUrl =
-          existingPiece.qrCodeDataUrl || (await createQrDataUrl(existingPiece.id));
-        addedToExisting = true;
-      } else {
-        pieceItemId = buildInventoryItemId({
-          branchId: rollSource.branchId,
-          familyCode: rollSource.code,
-          subCode: itemSubCode(rollSource),
-          colorName: rollSource.color?.name || rollSource.colorId,
-          colorId: rollSource.colorId,
-          type: createAsRemnant ? 'REMANENT' : 'PIECE',
-          pieceLength: createAsRemnant ? undefined : amount,
-        });
-        qrCodeDataUrl = await createQrDataUrl(pieceItemId);
+      if (!result.createAsRemnant) {
+        labelPrinted = printCutPieceLabel(result, rollSource);
+        if (!labelPrinted) {
+          setError(t('errors.allowPopups'));
+        }
+
+        if (sellImmediately) {
+          const currentUser = getCurrentUser();
+          if (!currentUser) throw new Error(t('sales.mustBeLoggedIn'));
+          await sellCutPiece({
+            pieceItemId: result.pieceItemId,
+            colorId: rollSource.colorId,
+            branchId: rollSource.branchId,
+            employeeId: currentUser.id,
+            customerName: customerName.trim(),
+            customerPhone: customerPhone.trim(),
+            soldPrice: Number(salePrice),
+            rollSourceId: rollSource.id,
+          });
+          saleCompleted = true;
+        }
       }
 
-      await patchSourceStock(rollSource, amount);
       setRollSource((current) =>
         current
           ? {
@@ -308,70 +322,90 @@ const ItemConversion: React.FC = () => {
           : current
       );
 
-      if (addedToExisting && existingPiece) {
-        await api.patch(`/inventory/${encodeURIComponent(pieceItemId)}`, {
-          version: existingPiece.version,
-          quantity: existingPiece.quantity + 1,
-        });
-      } else {
-        await api.post('/inventory', {
-          id: pieceItemId,
-          branchId: rollSource.branchId,
-          code: rollSource.code,
-          subCode: itemSubCode(rollSource),
-          colorId: rollSource.colorId,
-          type: createAsRemnant ? 'REMANENT' : 'PIECE',
-          meters: createAsRemnant ? amount : undefined,
-          pieceLength: createAsRemnant ? undefined : amount,
-          quantity: createAsRemnant ? 1 : 1,
-          costPrice: rollSource.costPrice ? toNumber(rollSource.costPrice) : undefined,
-          qrCodeValue: pieceItemId,
-          qrCodeDataUrl,
-          pictureName: rollSource.id,
-          pictureDataUrl: rollSource.qrCodeDataUrl || undefined,
-          sourceItemId: rollSource.id,
-          conversionType: createAsRemnant ? 'ROLL_TO_REMANENT' : 'ROLL_TO_PIECE',
-        });
-      }
-
       setSummary({
-        title: addedToExisting
+        title: result.addedToExisting
           ? t('itemConversion.summaryStockAdded')
-          : createAsRemnant
+          : result.createAsRemnant
             ? t('itemConversion.summaryRemnantCreated')
             : t('itemConversion.summaryPieceCreated'),
         sourceId: rollSource.id,
-        newItemId: pieceItemId,
-        qrCodeDataUrl,
-        details: addedToExisting
-          ? `Cut ${amount.toFixed(2)} meters and added 1 piece to existing item ${pieceItemId} (code ${rollSource.code}, color ${rollSource.color?.name || rollSource.colorId}).`
-          : createAsRemnant
-            ? `Cut ${amount.toFixed(2)} meters into a remnant (under 2 m rule).`
-            : `Cut ${amount.toFixed(2)} meters into one new piece with code ${rollSource.code} and color ${rollSource.color?.name || rollSource.colorId}.`,
+        newItemId: result.pieceItemId,
+        qrCodeDataUrl: result.qrCodeDataUrl,
+        details: result.addedToExisting
+          ? t('itemConversion.summaryAddedExisting', {
+              meters: result.cutMeters.toFixed(2),
+              id: result.pieceItemId,
+              code: rollSource.code,
+              color: colorLabel,
+            })
+          : result.createAsRemnant
+            ? t('itemConversion.summaryRemnantDetails', { meters: result.cutMeters.toFixed(2) })
+            : t('itemConversion.summaryNewPiece', {
+                meters: result.cutMeters.toFixed(2),
+                code: rollSource.code,
+                color: colorLabel,
+              }),
+        saleCompleted,
+        labelPrinted,
       });
+
       const completedTasks = completeCuttingTasksAfterRollToPiece({
         rollItemId: rollSource.id,
         branchId: rollSource.branchId,
         code: rollSource.code,
         colorName: rollSource.color?.name,
-        newPieceId: pieceItemId,
+        newPieceId: result.pieceItemId,
       });
-      setMessage(
-        completedTasks.length > 0
-          ? `Roll-to-piece conversion complete. ${completedTasks.length} cutting task(s) marked done automatically.`
-          : addedToExisting
-            ? t('itemConversion.rollToPieceAddedExisting')
-            : createAsRemnant
-              ? t('itemConversion.rollToRemnantComplete')
-              : t('itemConversion.rollToPieceNewQr')
-      );
+
+      if (saleCompleted && labelPrinted) {
+        setMessage(t('itemConversion.cutSellPrintComplete'));
+      } else if (saleCompleted) {
+        setMessage(t('itemConversion.cutSellComplete'));
+      } else if (labelPrinted && !result.createAsRemnant) {
+        setMessage(t('itemConversion.cutPrintComplete'));
+      } else if (completedTasks.length > 0) {
+        setMessage(t('itemConversion.rollToPieceWithTasks', { count: completedTasks.length }));
+      } else if (result.addedToExisting) {
+        setMessage(t('itemConversion.rollToPieceAddedExisting'));
+      } else if (result.createAsRemnant) {
+        setMessage(t('itemConversion.rollToRemnantComplete'));
+      } else {
+        setMessage(t('itemConversion.rollToPieceNewQr'));
+      }
+
       await loadItem(rollSource.id, setRollSource);
     } catch (err: any) {
+      if (err?.message === 'ONLY_ROLLS') {
+        setError(t('itemConversion.onlyRollsRemnants'));
+        return;
+      }
+      if (err?.message === 'INVALID_CUT_AMOUNT') {
+        setError(t('itemConversion.enterValidMetersToCut'));
+        return;
+      }
+      if (err?.message === 'CUT_EXCEEDS_ROLL') {
+        setError(t('itemConversion.cutExceedsRoll'));
+        return;
+      }
       const body = err?.response?.data;
       setError(body?.error ?? body?.message ?? err?.message ?? t('itemConversion.failedToCut'));
     } finally {
       setIsProcessing(false);
     }
+  };
+
+  const handlePrintSummaryLabel = () => {
+    if (!summary || !rollSource) return;
+    const printed = printCutPieceLabel(
+      {
+        pieceItemId: summary.newItemId,
+        qrCodeDataUrl: summary.qrCodeDataUrl,
+        createAsRemnant: false,
+        pieceLength: Number(cutMeters),
+      },
+      rollSource
+    );
+    if (!printed) alert(t('errors.allowPopups'));
   };
 
   const renderItemSummary = (item: InventoryItem | null) => {
@@ -394,9 +428,7 @@ const ItemConversion: React.FC = () => {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h2 className="text-2xl font-bold text-black">{t('itemConversion.title')}</h2>
-          <p className="mt-1 max-w-2xl text-sm text-gray-600">
-            Transfer stock between branches or cut roll meters into new pieces. Converted items keep the same code/color link and receive a new QR code.
-          </p>
+          <p className="mt-1 max-w-2xl text-sm text-gray-600">{t('itemConversion.subtitle')}</p>
         </div>
       </div>
 
@@ -406,9 +438,7 @@ const ItemConversion: React.FC = () => {
       <div className="mt-6 grid gap-6 xl:grid-cols-2">
         <section className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
           <h3 className="text-xl font-semibold text-black">{t('itemConversion.branchTransferTitle')}</h3>
-          <p className="mt-1 text-sm text-gray-600">
-            Move meters or pieces from one branch to another, such as F to C or C to F.
-          </p>
+          <p className="mt-1 text-sm text-gray-600">{t('itemConversion.branchTransferDescription')}</p>
 
           <div className="mt-4 grid gap-3 md:grid-cols-[1fr_auto]">
             <input
@@ -418,7 +448,7 @@ const ItemConversion: React.FC = () => {
               placeholder={t('itemConversion.scanPlaceholder')}
             />
             <button type="button" onClick={() => loadItem(transferSourceId, setTransferSource)} className="btn-primary">
-              Load item
+              {t('common.loadItem')}
             </button>
           </div>
 
@@ -459,9 +489,7 @@ const ItemConversion: React.FC = () => {
 
         <section className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
           <h3 className="text-xl font-semibold text-black">{t('itemConversion.rollToPieceTitle')}</h3>
-          <p className="mt-1 text-sm text-gray-600">
-            Cut a length from a roll/remnant. If a piece already exists for the same family code, color, and cut length, stock is added to it instead of creating a new QR.
-          </p>
+          <p className="mt-1 text-sm text-gray-600">{t('itemConversion.rollToPieceDescription')}</p>
 
           <div className="mt-4 grid gap-3 md:grid-cols-[1fr_auto]">
             <input
@@ -471,7 +499,7 @@ const ItemConversion: React.FC = () => {
               placeholder={t('itemConversion.rollScanPlaceholder')}
             />
             <button type="button" onClick={() => loadItem(rollSourceId, setRollSource)} className="btn-primary">
-              Load roll
+              {t('common.loadRoll')}
             </button>
           </div>
 
@@ -487,8 +515,59 @@ const ItemConversion: React.FC = () => {
             className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
           />
 
+          <div className="mt-4 rounded-2xl border border-magenta-100 bg-magenta-50 p-4">
+            <label className="flex items-start gap-3">
+              <input
+                type="checkbox"
+                checked={sellImmediately}
+                onChange={(event) => setSellImmediately(event.target.checked)}
+                className="mt-1"
+              />
+              <span>
+                <span className="block text-sm font-semibold text-black">{t('itemConversion.sellImmediately')}</span>
+                <span className="mt-1 block text-xs text-gray-600">{t('itemConversion.sellImmediatelyHint')}</span>
+              </span>
+            </label>
+
+            {sellImmediately && (
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600">{t('itemConversion.salePrice')}</label>
+                  <input
+                    type="number"
+                    min="0.01"
+                    step="0.01"
+                    value={salePrice}
+                    onChange={(event) => setSalePrice(event.target.value)}
+                    className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600">{t('sales.customerName')}</label>
+                  <input
+                    value={customerName}
+                    onChange={(event) => setCustomerName(event.target.value)}
+                    className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-medium text-gray-600">{t('sales.customerPhone')}</label>
+                  <input
+                    value={customerPhone}
+                    onChange={(event) => setCustomerPhone(event.target.value)}
+                    className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+
           <button type="button" onClick={cutRollToPiece} disabled={isProcessing} className="btn-primary mt-4 w-full">
-            {isProcessing ? t('itemConversion.cutting') : t('itemConversion.cutRollToPiece')}
+            {isProcessing
+              ? t('itemConversion.cutting')
+              : sellImmediately
+                ? t('itemConversion.cutSellAndPrint')
+                : t('itemConversion.cutRollToPiece')}
           </button>
         </section>
       </div>
@@ -497,22 +576,37 @@ const ItemConversion: React.FC = () => {
         <section className="mt-6 rounded-3xl border border-green-200 bg-green-50 p-6 shadow-sm">
           <h3 className="text-xl font-semibold text-black">{summary.title}</h3>
           <p className="mt-2 text-sm text-gray-700">{summary.details}</p>
+          {summary.saleCompleted && (
+            <p className="mt-2 text-sm font-semibold text-green-800">{t('itemConversion.saleRecorded')}</p>
+          )}
+          {summary.labelPrinted && (
+            <p className="mt-1 text-sm font-semibold text-green-800">{t('itemConversion.labelSentToPrinter')}</p>
+          )}
           <div className="mt-4 grid gap-4 md:grid-cols-[220px_1fr]">
             <div className="rounded-2xl bg-white p-4">
-              <img src={summary.qrCodeDataUrl} alt={`QR code for ${summary.newItemId}`} className="h-44 w-44" />
+              <img src={summary.qrCodeDataUrl} alt={t('itemConversion.qrAlt', { id: summary.newItemId })} className="h-44 w-44" />
             </div>
             <div className="rounded-2xl bg-white p-4 text-sm">
               <div className="font-semibold text-black">{t('itemConversion.newQrItem')}</div>
               <div className="break-all text-gray-700">{summary.newItemId}</div>
               <div className="mt-3 font-semibold text-black">{t('itemConversion.linkedSourceLabel')}</div>
               <div className="break-all text-gray-700">{summary.sourceId}</div>
-              <a
-                className="mt-4 inline-flex rounded-xl bg-black px-4 py-2 text-sm font-semibold text-white"
-                href={summary.qrCodeDataUrl}
-                download={`${summary.newItemId}-qr.png`}
-              >
-                Download QR
-              </a>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={handlePrintSummaryLabel}
+                  className="inline-flex rounded-xl bg-black px-4 py-2 text-sm font-semibold text-white"
+                >
+                  {t('itemInput.printLabel')}
+                </button>
+                <a
+                  className="inline-flex rounded-xl border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700"
+                  href={summary.qrCodeDataUrl}
+                  download={`${summary.newItemId}-qr.png`}
+                >
+                  {t('itemConversion.downloadQr')}
+                </a>
+              </div>
             </div>
           </div>
         </section>
