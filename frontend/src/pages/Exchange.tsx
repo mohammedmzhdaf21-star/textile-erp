@@ -402,7 +402,7 @@ const ExchangePage: React.FC = () => {
     setSuccessMessage(null);
 
     try {
-      const result = await cutRollToPieceStock(rollCutSource, meters);
+      const result = await cutRollToPieceStock(rollCutSource, meters, { uniquePiece: true });
       const labelPrinted = printPieceInventoryLabel({
         t,
         itemId: result.pieceItemId,

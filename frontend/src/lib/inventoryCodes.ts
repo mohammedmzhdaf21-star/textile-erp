@@ -85,6 +85,61 @@ export const formatMeteredInstanceIdSuffix = (
   return `${letter}${match[1].padStart(2, '0')}`;
 };
 
+export const pieceInstanceKeyPrefix = () => 'piece';
+
+export const formatPieceInstanceIdSuffix = (instanceKey: string) => {
+  const match = instanceKey.match(/^piece-(\d+)$/);
+  if (!match) return '';
+  return `P${match[1].padStart(2, '0')}`;
+};
+
+export const resolvePieceInstanceKey = (input: {
+  items: Array<{
+    branchId: string;
+    code: number;
+    subCode?: number | string;
+    costPrice?: number | string;
+    colorId: string;
+    type: string;
+    pieceLength?: number | string | null;
+    packageKey?: string | null;
+    isPiecePackage?: boolean;
+  }>;
+  branchId: string;
+  familyCode: number;
+  subCode: number;
+  colorId: string;
+  pieceLength: number;
+}) => {
+  const matching = input.items.filter((item) => {
+    if (item.type !== 'PIECE' || item.isPiecePackage) return false;
+    const itemPrice = Number(item.subCode ?? item.costPrice ?? 0);
+    return (
+      item.branchId === input.branchId &&
+      Number(item.code) === Number(input.familyCode) &&
+      Math.abs(itemPrice - input.subCode) < 0.001 &&
+      item.colorId === input.colorId &&
+      Math.abs(Number(item.pieceLength ?? 0) - input.pieceLength) < 0.001
+    );
+  });
+
+  let maxInstance = 0;
+  for (const item of matching) {
+    const key = item.packageKey ?? '';
+    if (!key) {
+      maxInstance = Math.max(maxInstance, 1);
+      continue;
+    }
+    const match = key.match(/^piece-(\d+)$/);
+    if (match) {
+      maxInstance = Math.max(maxInstance, Number(match[1]));
+    }
+  }
+
+  const nextInstance = maxInstance + 1;
+  return `piece-${nextInstance}`;
+};
+
 export const resolveMeteredInstanceKey = (input: {
   type: 'ROLL' | 'REMANENT';
   items: Array<{
@@ -154,10 +209,13 @@ export const buildInventoryItemId = (input: {
     input.type === 'PIECE' && input.pieceLength && input.pieceLength > 0
       ? padLengthCode(input.pieceLength)
       : '';
-  const instanceSuffix =
-    (input.type === 'ROLL' || input.type === 'REMANENT') && input.instanceKey
-      ? `-${formatMeteredInstanceIdSuffix(input.instanceKey, input.type)}`
-      : '';
+  const instanceSuffix = input.instanceKey
+    ? input.type === 'PIECE'
+      ? `-${formatPieceInstanceIdSuffix(input.instanceKey)}`
+      : (input.type === 'ROLL' || input.type === 'REMANENT')
+        ? `-${formatMeteredInstanceIdSuffix(input.instanceKey, input.type)}`
+        : ''
+    : '';
   return `${input.branchId}-${padFamilyCode(input.familyCode)}-${padSubCode(input.subCode)}-${colorCode}${typeLetter}${lengthSuffix}${instanceSuffix}`;
 };
 
@@ -180,7 +238,7 @@ export const parseInventoryItemId = (raw: string): ParsedInventoryItemId => {
   const value = raw.trim();
   const result: ParsedInventoryItemId = { raw: value };
 
-  const modern = value.match(/^([A-Z]\d{3})-(\d{3})-(\d+)-([A-Z]{3})([RPM])(\d{4})?$/i);
+  const modern = value.match(/^([A-Z]\d{3})-(\d{3})-(\d+)-([A-Z]{3})([RPM])(\d{4})?(?:-P(\d{2}))?$/i);
   if (modern) {
     result.branchId = modern[1].toUpperCase();
     result.familyCode = Number(modern[2]);

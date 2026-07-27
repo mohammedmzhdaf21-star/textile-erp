@@ -1,6 +1,9 @@
 import QRCode from 'qrcode';
 import api from './api';
-import { buildInventoryItemId } from './inventoryCodes';
+import {
+  buildInventoryItemId,
+  resolvePieceInstanceKey,
+} from './inventoryCodes';
 import { isBelowRemnantThreshold } from './inventoryRules';
 
 export type RollInventoryItem = {
@@ -19,6 +22,11 @@ export type RollInventoryItem = {
   qrCodeDataUrl?: string | null;
   isPiecePackage?: boolean;
   packageKey?: string;
+};
+
+export type CutRollOptions = {
+  /** Create a dedicated piece row + QR for exchange / immediate sale */
+  uniquePiece?: boolean;
 };
 
 export type CutRollResult = {
@@ -59,15 +67,28 @@ export const findExistingPieceForRollCut = async (
       pageSize: 200,
     },
   });
-  const items = (response.data?.items ?? []) as RollInventoryItem[];
+  const items = (response.data?.items ?? response.data ?? []) as RollInventoryItem[];
 
   const matches = items.filter((item) => {
-    if (item.isPiecePackage || (item.packageKey ?? '')) return false;
+    if (item.isPiecePackage || (item.packageKey ?? '').startsWith('piece-')) return false;
     if (Math.abs(toNumber(item.pieceLength) - pieceLength) >= 0.001) return false;
     return true;
   });
 
   return matches.find((item) => item.quantity === 0) ?? matches[0] ?? null;
+};
+
+const listPiecesForFamily = async (rollSource: RollInventoryItem) => {
+  const response = await api.get('/inventory', {
+    params: {
+      branchId: rollSource.branchId,
+      colorId: rollSource.colorId,
+      type: 'PIECE',
+      code: rollSource.code,
+      pageSize: 200,
+    },
+  });
+  return (response.data?.items ?? response.data ?? []) as RollInventoryItem[];
 };
 
 const patchSourceStock = async (item: RollInventoryItem, amount: number) => {
@@ -87,8 +108,11 @@ const patchSourceStock = async (item: RollInventoryItem, amount: number) => {
 
 export const cutRollToPieceStock = async (
   rollSource: RollInventoryItem,
-  cutMeters: number
+  cutMeters: number,
+  options: CutRollOptions = {}
 ): Promise<CutRollResult> => {
+  const uniquePiece = options.uniquePiece ?? false;
+
   if (rollSource.type !== 'ROLL' && rollSource.type !== 'REMANENT') {
     throw new Error('ONLY_ROLLS');
   }
@@ -100,19 +124,36 @@ export const cutRollToPieceStock = async (
   }
 
   const createAsRemnant = isBelowRemnantThreshold(cutMeters);
-  const existingPiece = createAsRemnant
-    ? null
-    : await findExistingPieceForRollCut(rollSource, cutMeters);
+  const existingPiece =
+    createAsRemnant || uniquePiece
+      ? null
+      : await findExistingPieceForRollCut(rollSource, cutMeters);
 
   let pieceItemId: string;
   let qrCodeDataUrl: string;
   let addedToExisting = false;
+  let pieceInstanceKey: string | undefined;
 
   if (existingPiece) {
     pieceItemId = existingPiece.id;
     qrCodeDataUrl = existingPiece.qrCodeDataUrl || (await createQrDataUrl(existingPiece.id));
     addedToExisting = true;
   } else {
+    if (uniquePiece && !createAsRemnant) {
+      const familyPieces = await listPiecesForFamily(rollSource);
+      pieceInstanceKey = resolvePieceInstanceKey({
+        items: familyPieces.map((item) => ({
+          ...item,
+          costPrice: item.costPrice ?? undefined,
+        })),
+        branchId: rollSource.branchId,
+        familyCode: rollSource.code,
+        subCode: itemSubCode(rollSource),
+        colorId: rollSource.colorId,
+        pieceLength: cutMeters,
+      });
+    }
+
     pieceItemId = buildInventoryItemId({
       branchId: rollSource.branchId,
       familyCode: rollSource.code,
@@ -121,6 +162,7 @@ export const cutRollToPieceStock = async (
       colorId: rollSource.colorId,
       type: createAsRemnant ? 'REMANENT' : 'PIECE',
       pieceLength: createAsRemnant ? undefined : cutMeters,
+      instanceKey: pieceInstanceKey,
     });
     qrCodeDataUrl = await createQrDataUrl(pieceItemId);
   }
@@ -128,10 +170,15 @@ export const cutRollToPieceStock = async (
   await patchSourceStock(rollSource, cutMeters);
 
   if (addedToExisting && existingPiece) {
-    await api.patch(`/inventory/${encodeURIComponent(pieceItemId)}`, {
+    const patchBody: Record<string, unknown> = {
       version: existingPiece.version,
       quantity: existingPiece.quantity + 1,
-    });
+    };
+    if (!existingPiece.qrCodeDataUrl) {
+      patchBody.qrCodeValue = pieceItemId;
+      patchBody.qrCodeDataUrl = qrCodeDataUrl;
+    }
+    await api.patch(`/inventory/${encodeURIComponent(pieceItemId)}`, patchBody);
   } else {
     await api.post('/inventory', {
       id: pieceItemId,
@@ -150,6 +197,7 @@ export const cutRollToPieceStock = async (
       pictureDataUrl: rollSource.qrCodeDataUrl || undefined,
       sourceItemId: rollSource.id,
       conversionType: createAsRemnant ? 'ROLL_TO_REMANENT' : 'ROLL_TO_PIECE',
+      packageKey: pieceInstanceKey,
     });
   }
 

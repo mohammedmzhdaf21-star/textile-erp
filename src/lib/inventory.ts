@@ -55,6 +55,8 @@ export interface UpdateInventoryInput {
   code?: number;
   subCode?: number;
   colorId?: string;
+  qrCodeValue?: string;
+  qrCodeDataUrl?: string;
   version: number;
 }
 
@@ -168,11 +170,7 @@ export async function createInventoryItem(
     throw new Error('REMANENT items require positive meters value');
   }
 
-  let packageKey = input.isPiecePackage
-    ? input.packageKey ?? ''
-    : effectiveType === 'ROLL' || effectiveType === 'REMANENT'
-      ? input.packageKey ?? ''
-      : '';
+  let packageKey = input.packageKey ?? '';
   const packageComponents = input.isPiecePackage
     ? parsePackageComponents(input.packageComponents)
     : [];
@@ -471,7 +469,10 @@ export async function updateInventoryItem(
       meters: effectiveMeters,
       quantity: effectiveQuantity,
       costPrice: nextCostPrice,
-      qrCodeValue: nextId,
+      qrCodeValue: input.qrCodeValue ?? nextId,
+      ...(input.qrCodeDataUrl !== undefined
+        ? { qrCodeDataUrl: input.qrCodeDataUrl }
+        : {}),
       version: { increment: 1 },
     };
 

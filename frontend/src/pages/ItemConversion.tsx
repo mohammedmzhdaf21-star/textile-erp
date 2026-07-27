@@ -284,31 +284,33 @@ const ItemConversion: React.FC = () => {
     setMessage(null);
 
     try {
-      const result = await cutRollToPieceStock(rollSource, amount);
+      const result = await cutRollToPieceStock(rollSource, amount, {
+        uniquePiece: sellImmediately,
+      });
       const colorLabel = getColorLabel(t, rollSource.color?.name) || rollSource.colorId;
       let saleCompleted = false;
       let labelPrinted = false;
+
+      if (sellImmediately) {
+        const currentUser = getCurrentUser();
+        if (!currentUser) throw new Error(t('sales.mustBeLoggedIn'));
+        await sellCutPiece({
+          pieceItemId: result.pieceItemId,
+          colorId: rollSource.colorId,
+          branchId: rollSource.branchId,
+          employeeId: currentUser.id,
+          customerName: customerName.trim(),
+          customerPhone: customerPhone.trim(),
+          soldPrice: Number(salePrice),
+          rollSourceId: rollSource.id,
+        });
+        saleCompleted = true;
+      }
 
       if (!result.createAsRemnant) {
         labelPrinted = printCutPieceLabel(result, rollSource);
         if (!labelPrinted) {
           setError(t('errors.allowPopups'));
-        }
-
-        if (sellImmediately) {
-          const currentUser = getCurrentUser();
-          if (!currentUser) throw new Error(t('sales.mustBeLoggedIn'));
-          await sellCutPiece({
-            pieceItemId: result.pieceItemId,
-            colorId: rollSource.colorId,
-            branchId: rollSource.branchId,
-            employeeId: currentUser.id,
-            customerName: customerName.trim(),
-            customerPhone: customerPhone.trim(),
-            soldPrice: Number(salePrice),
-            rollSourceId: rollSource.id,
-          });
-          saleCompleted = true;
         }
       }
 
