@@ -31,6 +31,7 @@ import {
   normalizeInventoryShape,
   REMNANT_THRESHOLD_METERS,
 } from '../lib/inventoryRules';
+import { getColorLabel } from '../lib/colorLabels';
 
 type Color = {
   id: string;
@@ -87,10 +88,18 @@ const ItemInputPage: React.FC = () => {
     emptyPackageComponent(),
     emptyPackageComponent(),
   ]);
+  const [isAddingColor, setIsAddingColor] = useState(false);
+  const [newColorName, setNewColorName] = useState('');
+  const [newColorHex, setNewColorHex] = useState('#000000');
+  const [isSavingColor, setIsSavingColor] = useState(false);
+  const [colorFormError, setColorFormError] = useState<string | null>(null);
   const familyCodeRequestId = useRef(0);
 
   const branchId = BRANCH_ID_BY_CODE[destination];
   const selectedColor = colors.find((color) => color.id === colorId);
+  const currentUser = getCurrentUser();
+  const canManageColors =
+    currentUser?.role === 'ADMIN' || currentUser?.role === 'MANAGER';
   const branchLabel =
     BRANCH_DESTINATIONS.find((branch) => branch.code === destination)
       ? t(BRANCH_DESTINATIONS.find((branch) => branch.code === destination)!.labelKey)
@@ -209,23 +218,57 @@ const ItemInputPage: React.FC = () => {
     return false;
   });
 
+  const loadColors = async () => {
+    const colorRes = await api.get('/inventory/colors');
+    const colorData = Array.isArray(colorRes.data) ? colorRes.data : [];
+    setColors(colorData);
+    if (colorData.length > 0 && !colorId) {
+      setColorId(colorData[0].id);
+    }
+    return colorData as Color[];
+  };
+
   useEffect(() => {
     setLoadingDefaults(true);
-    api
-      .get('/inventory/colors')
-      .then((colorRes) => {
-        const colorData = Array.isArray(colorRes.data) ? colorRes.data : [];
-        setColors(colorData);
-        if (colorData.length > 0) {
-          setColorId(colorData[0].id);
-        }
-      })
+    loadColors()
       .catch((err) => {
         console.error('Failed to load colors', err);
         setErrorMessage(t('itemInput.failedToLoadColors'));
       })
       .finally(() => setLoadingDefaults(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const handleAddColor = async () => {
+    const name = newColorName.trim();
+    if (!name) {
+      setColorFormError(t('itemInput.colorNameRequired'));
+      return;
+    }
+
+    setIsSavingColor(true);
+    setColorFormError(null);
+
+    try {
+      const response = await api.post('/inventory/colors', {
+        name,
+        hexCode: newColorHex,
+      });
+      const created = response.data as Color;
+      const colorData = await loadColors();
+      const saved = colorData.find((color) => color.id === created.id) ?? created;
+      setColorId(saved.id);
+      setNewColorName('');
+      setNewColorHex('#000000');
+      setIsAddingColor(false);
+      setErrorMessage(null);
+    } catch (err: any) {
+      const body = err?.response?.data;
+      setColorFormError(body?.error ?? body?.message ?? err?.message ?? t('itemInput.failedToAddColor'));
+    } finally {
+      setIsSavingColor(false);
+    }
+  };
 
   useEffect(() => {
     if (!familyCode) {
@@ -607,7 +650,7 @@ const ItemInputPage: React.FC = () => {
                       className="rounded-full border border-gray-300 bg-white px-3 py-1 text-xs font-semibold text-gray-700 hover:border-black"
                     >
                       ${formatSubCode(Number(item.subCode ?? item.costPrice ?? 0))} ·{' '}
-                      {item.color?.name ?? t('common.color')} · {getItemTypeLabel(t, item.type)}
+                      {getColorLabel(t, item.color?.name) || t('common.color')} · {getItemTypeLabel(t, item.type)}
                       {item.isPiecePackage
                         ? ` · pkg: ${formatPackageSummary(parsePackageComponents(item.packageComponents))}`
                         : item.type === 'PIECE'
@@ -636,18 +679,82 @@ const ItemInputPage: React.FC = () => {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700">{t('itemInput.color')}</label>
-              <select
-                value={colorId}
-                onChange={(e) => setColorId(e.target.value)}
-                className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
-              >
-                {colors.map((color) => (
-                  <option key={color.id} value={color.id}>
-                    {color.name}
-                  </option>
-                ))}
-              </select>
+              <div className="flex items-center justify-between gap-2">
+                <label className="block text-sm font-medium text-gray-700">{t('itemInput.color')}</label>
+                {canManageColors && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsAddingColor((current) => !current);
+                      setColorFormError(null);
+                    }}
+                    className="text-xs font-semibold text-magenta-600 hover:text-magenta-700"
+                  >
+                    {isAddingColor ? t('itemInput.selectExistingColor') : t('itemInput.addNewColor')}
+                  </button>
+                )}
+              </div>
+              {isAddingColor ? (
+                <div className="mt-2 space-y-3 rounded-xl border border-gray-200 bg-gray-50 p-3">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600">{t('itemInput.newColorName')}</label>
+                    <input
+                      type="text"
+                      value={newColorName}
+                      onChange={(e) => setNewColorName(e.target.value)}
+                      placeholder={t('itemInput.newColorNamePlaceholder')}
+                      className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
+                    />
+                    <p className="mt-1 text-xs text-gray-500">{t('itemInput.newColorNameHint')}</p>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600">{t('itemInput.newColorHex')}</label>
+                    <input
+                      type="color"
+                      value={newColorHex}
+                      onChange={(e) => setNewColorHex(e.target.value)}
+                      className="mt-1 h-10 w-full cursor-pointer rounded-xl border border-gray-300 bg-white"
+                    />
+                  </div>
+                  {colorFormError && (
+                    <p className="text-sm text-red-600">{colorFormError}</p>
+                  )}
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={handleAddColor}
+                      disabled={isSavingColor}
+                      className="rounded-xl bg-black px-4 py-2 text-sm font-semibold text-white hover:bg-gray-800 disabled:opacity-60"
+                    >
+                      {isSavingColor ? t('common.saving') : t('itemInput.saveColor')}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsAddingColor(false);
+                        setColorFormError(null);
+                        setNewColorName('');
+                        setNewColorHex('#000000');
+                      }}
+                      className="rounded-xl border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-white"
+                    >
+                      {t('common.cancel')}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <select
+                  value={colorId}
+                  onChange={(e) => setColorId(e.target.value)}
+                  className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
+                >
+                  {colors.map((color) => (
+                    <option key={color.id} value={color.id}>
+                      {getColorLabel(t, color.name)}
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
 
             <div>
@@ -926,7 +1033,7 @@ const ItemInputPage: React.FC = () => {
                     )}
                     <div className="flex justify-between">
                       <span>{t('itemInput.color')}</span>
-                      <strong>{selectedColor?.name ?? t('common.dash')}</strong>
+                      <strong>{getColorLabel(t, selectedColor?.name) || t('common.dash')}</strong>
                     </div>
                     <div className="flex justify-between">
                       <span>{t('itemInput.destinationLabel')}</span>

@@ -22,6 +22,7 @@ import {
   type InventoryItemType,
   type InventoryStockItem,
 } from '../lib/inventoryCodes';
+import { getColorLabel } from '../lib/colorLabels';
 import {
   formatInventoryPackageAmount,
   formatPackageStockSummary,
@@ -491,7 +492,7 @@ const InventoryView: React.FC = () => {
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <p className="text-sm font-semibold text-black">
-                  {t('inventory.familyColor', { code: searchFamilyCode, color: searchColor.name })}
+                  {t('inventory.familyColor', { code: searchFamilyCode, color: getColorLabel(t, searchColor.name) })}
                   {searchSubCode !== null ? t('inventory.subCodePrice', { price: formatSubCode(searchSubCode) }) : ''}
                 </p>
                 {searchScannedId && (
@@ -653,7 +654,7 @@ const InventoryView: React.FC = () => {
                 {t('inventory.noStockFound', {
                   type: getItemTypeLabel(t, selectedType).toLowerCase(),
                   code: searchFamilyCode,
-                  color: searchColor.name,
+                  color: getColorLabel(t, searchColor.name),
                 })}
               </p>
             )}
@@ -785,7 +786,7 @@ const InventoryView: React.FC = () => {
                     {getItemTypeLabel(t, item.type as InventoryItemType) ?? item.type}
                     {item.isPiecePackage ? t('inventory.packageSuffix') : ''}
                   </td>
-                  <td className="px-4 py-2 text-sm text-gray-800">{item.color?.name ?? '-'}</td>
+                  <td className="px-4 py-2 text-sm text-gray-800">{getColorLabel(t, item.color?.name) || '-'}</td>
                   <td className="px-4 py-2 text-sm text-gray-800">{amount}</td>
                   <td className="px-4 py-2 text-sm text-gray-800">{packagePieces}</td>
                 </tr>
@@ -847,7 +848,7 @@ const InventoryView: React.FC = () => {
                 >
                   {colors.map((color) => (
                     <option key={color.id} value={color.id}>
-                      {color.name}
+                      {getColorLabel(t, color.name)}
                     </option>
                   ))}
                 </select>

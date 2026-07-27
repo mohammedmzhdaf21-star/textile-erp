@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import api from '../lib/api';
 import { formatPackageComponentsSold } from '../lib/piecePackages';
+import { getColorLabel } from '../lib/colorLabels';
 import { useTranslation } from 'react-i18next';
 
 type SaleItem = {
@@ -221,7 +222,7 @@ const SaleDetail: React.FC = () => {
                           : `Inventory Item ${item.inventoryItemId}`}
                       </div>
                       <div className="text-xs text-gray-500">
-                        {item.isPlainCloth ? t('common.plainClothLine') : t('saleDetail.colorLabel', { name: item.color?.name })}
+                        {item.isPlainCloth ? t('common.plainClothLine') : t('saleDetail.colorLabel', { name: getColorLabel(t, item.color?.name) })}
                       </div>
                     </div>
                     <div className="text-sm text-gray-700">

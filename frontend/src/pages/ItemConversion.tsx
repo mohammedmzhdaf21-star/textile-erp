@@ -3,6 +3,7 @@ import QRCode from 'qrcode';
 import api from '../lib/api';
 import { completeCuttingTasksAfterRollToPiece } from '../lib/cuttingTasks';
 import { buildInventoryItemId } from '../lib/inventoryCodes';
+import { getColorLabel } from '../lib/colorLabels';
 import { isBelowRemnantThreshold } from '../lib/inventoryRules';
 import { useTranslation } from 'react-i18next';
 
@@ -380,7 +381,7 @@ const ItemConversion: React.FC = () => {
         <div className="break-all font-semibold text-black">{item.id}</div>
         <div>{t('itemConversion.branch', { code: BRANCH_CODE_BY_ID[item.branchId] || item.branchId })}</div>
         <div>{t('itemConversion.code', { code: item.code })}</div>
-        <div>{t('itemConversion.color', { color: item.color?.name || item.colorId })}</div>
+        <div>{t('itemConversion.color', { color: getColorLabel(t, item.color?.name) || item.colorId })}</div>
         <div>{t('itemConversion.type', { type: item.type })}</div>
         <div>{t('itemConversion.available', { amount: itemAvailableAmount(item), unit: item.type === 'PIECE' ? t('common.pieces') : t('common.meters') })}</div>
         {item.sourceItemId && <div className="break-all">{t('itemConversion.linkedSource', { id: item.sourceItemId })}</div>}
