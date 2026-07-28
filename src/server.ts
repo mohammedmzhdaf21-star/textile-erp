@@ -9,6 +9,10 @@ import { prisma } from './lib/prisma';
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '3000', 10);
+const corsOrigins = process.env.CORS_ORIGIN
+  ?.split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
 
 // ============================================================
 // GLOBAL MIDDLEWARE
@@ -17,8 +21,8 @@ app.use(helmet());
 
 app.use(
   cors({
-    origin: '*',
-    credentials: true,
+    origin: corsOrigins && corsOrigins.length > 0 ? corsOrigins : '*',
+    credentials: Boolean(corsOrigins && corsOrigins.length > 0),
   })
 );
 
