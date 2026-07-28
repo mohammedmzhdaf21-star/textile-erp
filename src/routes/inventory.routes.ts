@@ -303,7 +303,7 @@ router.patch(
   async (req: Request, res: Response) => {
     try {
       const id = singleParam(req.params.id);
-      const { meters, pieceLength, quantity, costPrice, code, subCode, colorId, version } =
+      const { meters, pieceLength, quantity, costPrice, code, subCode, colorId, qrCodeValue, qrCodeDataUrl, version } =
         req.body;
 
       if (!id) {
@@ -328,6 +328,8 @@ router.patch(
           code: code !== undefined ? parseInt(String(code), 10) : undefined,
           subCode: subCode !== undefined ? parseFloat(String(subCode)) : undefined,
           colorId: colorId !== undefined ? String(colorId) : undefined,
+          qrCodeValue: qrCodeValue !== undefined ? String(qrCodeValue) : undefined,
+          qrCodeDataUrl: qrCodeDataUrl !== undefined ? String(qrCodeDataUrl) : undefined,
           version: parseInt(String(version), 10),
         },
         req.user?.userId,

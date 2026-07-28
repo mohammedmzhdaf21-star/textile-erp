@@ -15,6 +15,8 @@ type SaleItem = {
   quantitySold: string;
   soldPrice: string;
   lineDiscount: string;
+  qrCodeValue?: string | null;
+  qrCodeDataUrl?: string | null;
   isPiecePackage?: boolean;
   packageSaleMode?: string | null;
   packagesSold?: number | null;
@@ -214,8 +216,8 @@ const SaleDetail: React.FC = () => {
             <div className="mt-4 space-y-4">
               {sale.items.map((item) => (
                 <div key={item.id} className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="flex-1">
                       <div className="break-all text-sm font-semibold text-black">
                         {item.isPlainCloth
                           ? item.plainClothName || t('common.plainCloth')
@@ -224,14 +226,33 @@ const SaleDetail: React.FC = () => {
                       <div className="text-xs text-gray-500">
                         {item.isPlainCloth ? t('common.plainClothLine') : t('saleDetail.colorLabel', { name: getColorLabel(t, item.color?.name) })}
                       </div>
+                      <div className="mt-2 text-sm text-gray-700">
+                        {item.isPiecePackage && item.packageSaleMode === 'FULL'
+                          ? `${item.packagesSold ?? Number(item.quantitySold)} full package(s) @ ${formatCurrency(item.soldPrice)}`
+                          : item.isPiecePackage && item.packageSaleMode === 'PARTIAL'
+                            ? `${formatPackageComponentsSold(item.packageComponentsSold ?? [])} — ${formatCurrency(item.soldPrice)}`
+                            : `${item.soldAsUnit} · ${Number(item.quantitySold).toFixed(2)} @ ${formatCurrency(item.soldPrice)}`}
+                      </div>
                     </div>
-                    <div className="text-sm text-gray-700">
-                      {item.isPiecePackage && item.packageSaleMode === 'FULL'
-                        ? `${item.packagesSold ?? Number(item.quantitySold)} full package(s) @ ${formatCurrency(item.soldPrice)}`
-                        : item.isPiecePackage && item.packageSaleMode === 'PARTIAL'
-                          ? `${formatPackageComponentsSold(item.packageComponentsSold ?? [])} — ${formatCurrency(item.soldPrice)}`
-                          : `${item.soldAsUnit} · ${Number(item.quantitySold).toFixed(2)} @ ${formatCurrency(item.soldPrice)}`}
-                    </div>
+                    {item.qrCodeDataUrl && (
+                      <div className="rounded-2xl border border-gray-200 bg-white p-3 text-center">
+                        <img
+                          src={item.qrCodeDataUrl}
+                          alt={t('saleDetail.qrAlt', { id: item.qrCodeValue || item.inventoryItemId || item.id })}
+                          className="mx-auto h-28 w-28"
+                        />
+                        <div className="mt-2 break-all text-xs font-semibold text-gray-700">
+                          {item.qrCodeValue || item.inventoryItemId}
+                        </div>
+                        <a
+                          href={item.qrCodeDataUrl}
+                          download={`${item.qrCodeValue || item.inventoryItemId || item.id}-qr.png`}
+                          className="mt-2 inline-flex text-xs font-semibold text-magenta-600 hover:underline"
+                        >
+                          {t('saleDetail.downloadQr')}
+                        </a>
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}

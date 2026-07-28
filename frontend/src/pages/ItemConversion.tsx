@@ -395,9 +395,7 @@ const ItemConversion: React.FC = () => {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h2 className="text-2xl font-bold text-black">{t('itemConversion.title')}</h2>
-          <p className="mt-1 max-w-2xl text-sm text-gray-600">
-            Transfer stock between branches or cut roll meters into new pieces. Converted items keep the same code/color link and receive a new QR code.
-          </p>
+          <p className="mt-1 max-w-2xl text-sm text-gray-600">{t('itemConversion.subtitle')}</p>
         </div>
       </div>
 
@@ -407,9 +405,7 @@ const ItemConversion: React.FC = () => {
       <div className="mt-6 grid gap-6 xl:grid-cols-2">
         <section className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
           <h3 className="text-xl font-semibold text-black">{t('itemConversion.branchTransferTitle')}</h3>
-          <p className="mt-1 text-sm text-gray-600">
-            Move meters or pieces from one branch to another, such as F to C or C to F.
-          </p>
+          <p className="mt-1 text-sm text-gray-600">{t('itemConversion.branchTransferDescription')}</p>
 
           <div className="mt-4 grid gap-3 md:grid-cols-[1fr_auto]">
             <QrScanInput
@@ -422,7 +418,7 @@ const ItemConversion: React.FC = () => {
               placeholder={t('itemConversion.scanPlaceholder')}
             />
             <button type="button" onClick={() => loadItem(transferSourceId, setTransferSource)} className="btn-primary">
-              Load item
+              {t('common.loadItem')}
             </button>
           </div>
 
@@ -463,9 +459,7 @@ const ItemConversion: React.FC = () => {
 
         <section className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
           <h3 className="text-xl font-semibold text-black">{t('itemConversion.rollToPieceTitle')}</h3>
-          <p className="mt-1 text-sm text-gray-600">
-            Cut a length from a roll/remnant. If a piece already exists for the same family code, color, and cut length, stock is added to it instead of creating a new QR.
-          </p>
+          <p className="mt-1 text-sm text-gray-600">{t('itemConversion.rollToPieceDescription')}</p>
 
           <div className="mt-4 grid gap-3 md:grid-cols-[1fr_auto]">
             <QrScanInput
@@ -478,7 +472,7 @@ const ItemConversion: React.FC = () => {
               placeholder={t('itemConversion.rollScanPlaceholder')}
             />
             <button type="button" onClick={() => loadItem(rollSourceId, setRollSource)} className="btn-primary">
-              Load roll
+              {t('common.loadRoll')}
             </button>
           </div>
 
@@ -518,7 +512,7 @@ const ItemConversion: React.FC = () => {
                 href={summary.qrCodeDataUrl}
                 download={`${summary.newItemId}-qr.png`}
               >
-                Download QR
+                {t('itemConversion.downloadQr')}
               </a>
             </div>
           </div>

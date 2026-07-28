@@ -31,7 +31,28 @@ export interface SaleItemInput {
   packageSaleMode?: 'FULL' | 'PARTIAL';
   packagesSold?: number;
   packageComponentsSold?: Array<{ name: string; quantity: number }>;
+  qrCodeValue?: string;
+  qrCodeDataUrl?: string;
 }
+
+const resolveSaleItemQr = (
+  item: SaleItemInput,
+  invItem?: { id: string; qrCodeValue: string | null; qrCodeDataUrl: string | null } | null
+) => {
+  if (item.qrCodeDataUrl) {
+    return {
+      qrCodeValue: item.qrCodeValue ?? item.inventoryItemId ?? null,
+      qrCodeDataUrl: item.qrCodeDataUrl,
+    };
+  }
+  if (invItem?.qrCodeDataUrl) {
+    return {
+      qrCodeValue: invItem.qrCodeValue ?? invItem.id,
+      qrCodeDataUrl: invItem.qrCodeDataUrl,
+    };
+  }
+  return { qrCodeValue: null, qrCodeDataUrl: null };
+};
 
 export interface CreateSaleInput {
   branchId: string;
@@ -230,9 +251,22 @@ export async function createSale(
 
     // Process each item
     for (const item of input.items) {
+      let invItem: {
+        id: string;
+        type: string;
+        meters: Prisma.Decimal | null;
+        quantity: number;
+        isArchived: boolean;
+        isPiecePackage: boolean;
+        packageComponents: unknown;
+        packageComponentStock: unknown;
+        qrCodeValue: string | null;
+        qrCodeDataUrl: string | null;
+      } | null = null;
+
       // If it has an inventoryItemId, deduct from inventory
       if (item.inventoryItemId) {
-        const invItem = await tx.inventoryItem.findUnique({
+        invItem = await tx.inventoryItem.findUnique({
           where: { id: item.inventoryItemId },
         });
 
@@ -300,6 +334,8 @@ export async function createSale(
         if (!color) throw new Error(`Color ${item.colorId} not found`);
       }
 
+      const qrSnapshot = resolveSaleItemQr(item, invItem);
+
       // Create the sale item
       await tx.saleItem.create({
         data: {
@@ -318,6 +354,8 @@ export async function createSale(
           packageComponentsSold: item.packageComponentsSold
             ? (item.packageComponentsSold as Prisma.InputJsonValue)
             : undefined,
+          qrCodeValue: qrSnapshot.qrCodeValue,
+          qrCodeDataUrl: qrSnapshot.qrCodeDataUrl,
         },
       });
     }
@@ -495,8 +533,21 @@ export async function processExchange(
     });
 
     for (const item of replacementItems) {
+      let invItem: {
+        id: string;
+        type: string;
+        meters: Prisma.Decimal | null;
+        quantity: number;
+        isArchived: boolean;
+        isPiecePackage: boolean;
+        packageComponents: unknown;
+        packageComponentStock: unknown;
+        qrCodeValue: string | null;
+        qrCodeDataUrl: string | null;
+      } | null = null;
+
       if (item.inventoryItemId) {
-        const invItem = await tx.inventoryItem.findUnique({
+        invItem = await tx.inventoryItem.findUnique({
           where: { id: item.inventoryItemId },
         });
 
@@ -555,6 +606,8 @@ export async function processExchange(
         if (!color) throw new Error(`Color ${item.colorId} not found`);
       }
 
+      const qrSnapshot = resolveSaleItemQr(item, invItem);
+
       await tx.saleItem.create({
         data: {
           saleId: createdSale.id,
@@ -572,6 +625,8 @@ export async function processExchange(
           packageComponentsSold: item.packageComponentsSold
             ? (item.packageComponentsSold as Prisma.InputJsonValue)
             : undefined,
+          qrCodeValue: qrSnapshot.qrCodeValue,
+          qrCodeDataUrl: qrSnapshot.qrCodeDataUrl,
         },
       });
     }

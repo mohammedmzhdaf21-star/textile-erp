@@ -6,8 +6,8 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "seed": "tsx prisma/seed.ts",
-    "dev": "tsx watch src/server.ts",
-    "start": "tsx src/server.ts",
+    "dev": "prisma generate && tsx watch src/server.ts",
+    "start": "prisma generate && tsx src/server.ts",
     "build": "tsc",
     "studio": "prisma studio",
     "postinstall": "prisma generate"
