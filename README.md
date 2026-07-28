@@ -2,59 +2,57 @@
 
 Full-stack inventory and sales system for textile branches (rolls, pieces, remnants, packages).
 
-**Live stack:** Express + Prisma/PostgreSQL backend, React/Vite frontend.
+**Repository:** https://github.com/mohammedmzhdaf21-star/textile-erp  
+**Always use branch `main`** for deployments and new work so features are not lost.
+
+**Full feature checklist:** see [FEATURES.md](./FEATURES.md)
 
 ## Login (seed)
 
 - Email: `admin@textile.com`
 - Password: `admin123`
 
-## Features (saved on `main` as of v1.1.0-full-features)
+## Quick start
 
-### Inventory & New Item
-- Family code + sub-code (price) + color + branch QR labels
-- **Multiple rolls** per same family code, color, and price (unique instance keys + QR IDs)
-- **Under 2 m rule:** rolls or piece lengths below 2 meters save as **remnants**
-- Piece packages (multi-piece sets with component stock)
-- Inventory search by QR/family code with **per-roll and per-length breakdown** (click stock numbers)
-- Edit, archive/remove, and identity migration (code, color, price, length)
+```bash
+git clone https://github.com/mohammedmzhdaf21-star/textile-erp.git
+cd textile-erp
+git checkout main
+npm install
+cd frontend && npm install && cd ..
+npx prisma migrate deploy
+npx prisma generate
+npm run seed          # optional — fresh database only
+npm run dev           # backend :3000
+cd frontend && npm run dev   # frontend :5173
+```
 
-### Item Conversion
-- Branch transfer with new destination QR
-- Roll/remnant → piece cut; restocks existing sold-out piece (same family, color, length)
-- Cuts under 2 m create remnants, not pieces
-- Auto-complete cutting tasks on roll-to-piece
+## Highlights (saved on `main`)
 
-### Sales & Exchange
-- Roll/remnant sold by meter; pieces by count
-- Piece packages (full/partial)
-- Plain cloth lines
-- Exchange workflow with returns and replacements
+| Area | Features |
+|------|----------|
+| **Scanning** | Camera-only QR scan in Sales, Exchange, Inventory, Conversion, Dashboard |
+| **Sales** | Cut from roll & sell + print QR; QR saved on sale records |
+| **New Item** | Manual color add (Admin); Kurdish color names |
+| **Inventory** | Stock breakdown, Print QR, multiple rolls per family |
+| **History** | Search sales by phone or item QR code |
+| **i18n** | English + Kurdish Sorani |
 
-### Cutting tasks
-- Auto-create task when shelf pieces hit 0 but roll stock remains after piece sale
-- Task Employee page with open-task badge on sidebar
+See [FEATURES.md](./FEATURES.md) for the complete list.
 
-### Owed Money
-- Record payments with full vs partial balance preview
+## Release tags
 
-### i18n
-- English + Kurdish Sorani (RTL), language switcher on login and sidebar
-
-### Branches
-- A, B, C, E, F + Storage (S)
+| Tag | Contents |
+|-----|----------|
+| `v1.0.0-full-features` | Initial full feature set |
+| `v1.1.0-full-features` | Multiple rolls, stock breakdown, under-2m remnant rule |
+| `v1.2.0-full-features` | QR camera scan, cut-sell, manual colors, print QR, history search, sale QR snapshots |
 
 ## Development
 
 ```bash
-npm install
-npx prisma migrate deploy
-npm run seed
-npm run dev          # backend :3000
-cd frontend && npm run dev   # frontend :5173
+npm run dev          # backend (runs prisma generate first)
+cd frontend && npm run dev
 ```
 
-## Tags
-
-- `v1.0.0-full-features` — initial full feature set on main
-- `v1.1.0-full-features` — multiple rolls, inventory breakdown, under-2m remnant rule
+After any schema change: `npx prisma migrate deploy && npx prisma generate` then restart the backend.
