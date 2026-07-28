@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../lib/api';
+import { useTranslation } from 'react-i18next';
 
 type Sale = {
   id: string;
@@ -8,6 +9,8 @@ type Sale = {
   totalPrice?: number | string;
   createdAt: string;
   notes?: string;
+  customerName?: string;
+  customerPhone?: string;
   employee?: {
     id: string;
     name: string;
@@ -16,6 +19,11 @@ type Sale = {
   paymentStatus?: 'PAID' | 'PARTIAL' | 'UNPAID';
   paidAmount?: number;
   paymentMethod?: string;
+  items?: Array<{
+    inventoryItemId?: string | null;
+    qrCodeValue?: string | null;
+    qrCodeDataUrl?: string | null;
+  }>;
 };
 
 type EmployeeGroup = {
@@ -64,8 +72,15 @@ const formatDisplayDate = (date: Date) =>
     year: 'numeric',
   });
 
-const formatTime = (dateString: string) =>
-  new Date(dateString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+const formatDateTime = (dateString: string) =>
+  new Date(dateString).toLocaleString([], {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 
 const historyWindowForDate = (date: Date) => {
   const start = new Date(date);
@@ -153,11 +168,16 @@ const saleBorderClass = (sale: Sale) => {
 };
 
 const HistorySales: React.FC = () => {
+  const { t } = useTranslation();
   const [selectedBranch, setSelectedBranch] = useState<BranchId | null>(null);
   const [buckets, setBuckets] = useState<DateBucket[]>([]);
   const [selectedDateKey, setSelectedDateKey] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<Sale[] | null>(null);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
   const navigate = useNavigate();
 
   React.useEffect(() => {
@@ -171,7 +191,7 @@ const HistorySales: React.FC = () => {
     const sales = selectedBucket?.sales || [];
 
     sales.forEach((sale) => {
-      const employeeName = sale.employee?.name || sale.employeeName || 'Unknown Employee';
+      const employeeName = sale.employee?.name || sale.employeeName || t('common.unknownEmployee');
       const amount = saleCashAmount(sale);
 
       if (!groups[employeeName]) {
@@ -192,6 +212,8 @@ const HistorySales: React.FC = () => {
   const loadBranchHistory = async (branch: BranchId) => {
     setSelectedBranch(branch);
     setSelectedDateKey(null);
+    setSearchResults(null);
+    setSearchError(null);
     setLoading(true);
     setError(null);
 
@@ -223,7 +245,7 @@ const HistorySales: React.FC = () => {
       setBuckets([]);
       setError(
         `Request failed${status ? ` (status ${status})` : ''}: ${
-          body?.error ?? body?.message ?? err?.message ?? 'Failed to load history sales'
+          body?.error ?? body?.message ?? err?.message ?? t('historySales.failedToLoad')
         }`
       );
     } finally {
@@ -231,19 +253,163 @@ const HistorySales: React.FC = () => {
     }
   };
 
+  const runSaleSearch = async () => {
+    const query = searchQuery.trim();
+    if (!query) {
+      setSearchError(t('historySales.searchRequired'));
+      return;
+    }
+
+    setSearchLoading(true);
+    setSearchError(null);
+    setSearchResults(null);
+
+    try {
+      const response = await api.get('/sales', {
+        params: {
+          search: query,
+          branchId: selectedBranch ? BRANCH_MAP[selectedBranch] : undefined,
+          pageSize: 100,
+        },
+      });
+
+      const sales = extractSales(response.data).map(enrichedSale);
+      setSearchResults(sales);
+    } catch (err: any) {
+      const status = err?.response?.status;
+      const body = err?.response?.data;
+      setSearchError(
+        t('common.requestFailed', {
+          status: status ? t('common.requestFailedStatus', { status }) : '',
+          message: body?.error ?? body?.message ?? err?.message ?? t('historySales.searchFailed'),
+        })
+      );
+    } finally {
+      setSearchLoading(false);
+    }
+  };
+
+  const clearSearch = () => {
+    setSearchQuery('');
+    setSearchResults(null);
+    setSearchError(null);
+  };
+
+  const renderSaleButton = (sale: Sale) => {
+    const amount = saleCashAmount(sale);
+    const matchedItemId = sale.items?.find((item) => item.inventoryItemId)?.inventoryItemId;
+
+    return (
+      <button
+        key={sale.id}
+        type="button"
+        onClick={() =>
+          navigate(`/sales/${sale.id}`, {
+            state: { returnTo: '/sales/history' },
+          })
+        }
+        className={`w-full rounded-2xl border p-4 text-left transition hover:border-magenta-300 hover:bg-white ${saleBorderClass(sale)}`}
+      >
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <div className="break-all text-sm font-semibold text-black">
+              {t('historySales.saleIdLabel', { id: sale.id })}
+            </div>
+            <div className="mt-1 text-xs text-gray-500">{formatDateTime(sale.createdAt)}</div>
+            {(sale.customerName || sale.customerPhone) && (
+              <div className="mt-2 text-sm text-gray-700">
+                {sale.customerName}
+                {sale.customerPhone ? ` · ${sale.customerPhone}` : ''}
+              </div>
+            )}
+            {matchedItemId && (
+              <div className="mt-1 break-all font-mono text-xs text-gray-500">
+                {t('historySales.itemIdLabel', { id: matchedItemId })}
+              </div>
+            )}
+            {sale.items?.some((item) => item.qrCodeDataUrl) && (
+              <div className="mt-1 text-xs font-semibold text-gray-600">{t('historySales.qrSaved')}</div>
+            )}
+            <div className={`mt-2 text-sm font-bold ${amount < 0 ? 'text-red-600' : 'text-magenta-600'}`}>
+              {t('historySales.cashImpact', {
+                amount: `${amount < 0 ? '-' : ''}$${Math.abs(amount).toFixed(2)}`,
+              })}
+            </div>
+          </div>
+          <div className={`text-lg font-bold ${amount < 0 ? 'text-red-600' : 'text-magenta-600'}`}>
+            {`${amount < 0 ? '-' : ''}$${Math.abs(amount).toFixed(2)}`}
+          </div>
+        </div>
+      </button>
+    );
+  };
+
   return (
     <div className="max-w-full overflow-x-hidden p-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-black">History Sales</h2>
+          <h2 className="text-2xl font-bold text-black">{t('historySales.title')}</h2>
           <p className="mt-1 max-w-xl text-sm text-gray-600">
-            Select a branch, choose a past date, and review sales from 09:00 to 02:00 the next day.
+            {t('historySales.subtitle')}
           </p>
         </div>
         <div className="text-sm text-gray-500">
-          {selectedBranch ? `Branch ${selectedBranch}` : 'Select a branch'}
+          {selectedBranch ? t('historySales.branchSelected', { branch: selectedBranch }) : t('common.selectBranch')}
         </div>
       </div>
+
+      <section className="mt-6 rounded-3xl border border-gray-200 bg-white p-5 shadow-sm">
+        <h3 className="text-lg font-semibold text-black">{t('historySales.searchTitle')}</h3>
+        <p className="mt-1 text-sm text-gray-600">{t('historySales.searchDescription')}</p>
+        <form
+          className="mt-4 flex flex-col gap-3 sm:flex-row"
+          onSubmit={(event) => {
+            event.preventDefault();
+            runSaleSearch();
+          }}
+        >
+          <input
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            className="flex-1 rounded-xl border border-gray-300 px-4 py-3 text-sm"
+            placeholder={t('historySales.searchPlaceholder')}
+            autoFocus
+          />
+          <button type="submit" className="btn-primary" disabled={searchLoading}>
+            {searchLoading ? t('common.searching') : t('historySales.searchButton')}
+          </button>
+          {searchResults !== null && (
+            <button
+              type="button"
+              className="rounded-xl border border-gray-300 px-4 py-3 text-sm font-semibold text-gray-700"
+              onClick={clearSearch}
+            >
+              {t('common.clear')}
+            </button>
+          )}
+        </form>
+        {selectedBranch && (
+          <p className="mt-2 text-xs text-gray-500">{t('historySales.searchBranchHint', { branch: selectedBranch })}</p>
+        )}
+        {searchError && (
+          <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+            {searchError}
+          </div>
+        )}
+        {searchResults && searchResults.length === 0 && !searchLoading && !searchError && (
+          <div className="mt-4 rounded-2xl bg-gray-50 p-4 text-sm text-gray-600">
+            {t('historySales.searchNoResults')}
+          </div>
+        )}
+        {searchResults && searchResults.length > 0 && (
+          <div className="mt-4 space-y-3">
+            <p className="text-sm font-semibold text-black">
+              {t('historySales.searchResults', { count: searchResults.length })}
+            </p>
+            {searchResults.map((sale) => renderSaleButton(sale))}
+          </div>
+        )}
+      </section>
 
       <section className="mt-6 grid grid-cols-5 gap-3">
         {branches.map((branch) => {
@@ -268,13 +434,13 @@ const HistorySales: React.FC = () => {
       {selectedBranch && (
         <section className="mt-8 space-y-6">
           <div className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
-            <h3 className="text-xl font-semibold text-black">Past dates for Branch {selectedBranch}</h3>
+            <h3 className="text-xl font-semibold text-black">{t('historySales.pastDatesTitle', { branch: selectedBranch })}</h3>
             <p className="mt-1 text-sm text-gray-600">
-              Today is excluded. Each date covers 09:00 through 02:00 the next day.
+              {t('historySales.pastDatesDescription')}
             </p>
 
             {loading ? (
-              <div className="mt-4 rounded-2xl bg-gray-50 p-4 text-sm text-gray-600">Loading history...</div>
+              <div className="mt-4 rounded-2xl bg-gray-50 p-4 text-sm text-gray-600">{t('historySales.loadingHistory')}</div>
             ) : error ? (
               <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
                 {error}
@@ -288,8 +454,8 @@ const HistorySales: React.FC = () => {
                     onClick={() => setSelectedDateKey(bucket.key)}
                     className={`rounded-2xl border px-4 py-3 text-left text-sm transition ${
                       selectedDateKey === bucket.key
-                        ? 'border-black bg-black text-white'
-                        : 'border-gray-200 bg-white text-gray-700 hover:border-black'
+                        ? 'border-magenta-500 bg-magenta-50 text-magenta-700'
+                        : 'border-gray-200 bg-white text-gray-700 hover:border-magenta-300'
                     }`}
                   >
                     <span className="block font-semibold">{bucket.label}</span>
@@ -309,7 +475,7 @@ const HistorySales: React.FC = () => {
                   <div>
                     <h3 className="text-xl font-semibold text-black">{selectedBucket.label}</h3>
                     <p className="text-sm text-gray-600">
-                      Branch {selectedBranch} historical sales window.
+                      {t('historySales.historicalWindow', { branch: selectedBranch })}
                     </p>
                   </div>
                   <div className="rounded-full bg-black px-4 py-2 text-sm font-semibold text-white">
@@ -320,7 +486,7 @@ const HistorySales: React.FC = () => {
 
               {selectedBucket.sales.length === 0 ? (
                 <div className="rounded-3xl border border-gray-200 bg-white p-6 text-gray-600 shadow-sm">
-                  No sales found for this branch/date window.
+                  {t('historySales.noSalesForWindow')}
                 </div>
               ) : (
                 groupedByEmployee.map((group) => (
@@ -341,34 +507,7 @@ const HistorySales: React.FC = () => {
                     </div>
 
                     <div className="mt-5 space-y-3">
-                      {group.sales.map((sale) => {
-                        const amount = saleCashAmount(sale);
-                        return (
-                          <button
-                            key={sale.id}
-                            type="button"
-                            onClick={() =>
-                              navigate(`/sales/${sale.id}`, {
-                                state: { returnTo: '/sales/history' },
-                              })
-                            }
-                            className={`w-full rounded-2xl border p-4 text-left transition hover:border-black hover:bg-white ${saleBorderClass(sale)}`}
-                          >
-                            <div className="flex items-center justify-between gap-3">
-                              <div>
-                                <div className="break-all text-sm font-semibold text-black">Sale ID: {sale.id}</div>
-                                <div className="mt-1 text-xs text-gray-500">{formatTime(sale.createdAt)}</div>
-                                <div className={`mt-2 text-sm font-bold ${amount < 0 ? 'text-red-600' : 'text-magenta-600'}`}>
-                                  {`Cash impact: ${amount < 0 ? '-' : ''}$${Math.abs(amount).toFixed(2)}`}
-                                </div>
-                              </div>
-                              <div className={`text-lg font-bold ${amount < 0 ? 'text-red-600' : 'text-magenta-600'}`}>
-                                {`${amount < 0 ? '-' : ''}$${Math.abs(amount).toFixed(2)}`}
-                              </div>
-                            </div>
-                          </button>
-                        );
-                      })}
+                      {group.sales.map((sale) => renderSaleButton(sale))}
                     </div>
                   </div>
                 ))

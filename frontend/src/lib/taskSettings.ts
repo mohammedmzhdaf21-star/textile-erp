@@ -1,3 +1,5 @@
+import type { TFunction } from 'i18next';
+
 export type BranchCode = 'A' | 'B' | 'C' | 'E' | 'F';
 export type TaskStatus = 'TODO' | 'DONE';
 export type TaskSchedule = 'DAILY' | 'EVERY_2_DAYS' | 'WEEKLY' | 'MONTHLY' | 'YEARLY' | 'ON_DEMAND';
@@ -56,35 +58,85 @@ export const TASK_ASSIGNMENTS_KEY = 'textile-erp-branch-task-assignments';
 
 export const branches: BranchCode[] = ['A', 'B', 'C', 'E', 'F'];
 
+export const TASK_TEMPLATE_TITLE_KEYS: Record<TaskTemplateKey, string> = {
+  MOPPING: 'taskTemplates.MOPPING',
+  DUSTING: 'taskTemplates.DUSTING',
+  VACUUMING: 'taskTemplates.VACUUMING',
+  CHANGE_HANGING_FABRIC: 'taskTemplates.CHANGE_HANGING_FABRIC',
+  CHANGE_MANNEQUIN_FABRIC: 'taskTemplates.CHANGE_MANNEQUIN_FABRIC',
+  CHANGE_LEFT_WALL_FABRIC: 'taskTemplates.CHANGE_LEFT_WALL_FABRIC',
+  CHANGE_RIGHT_WALL_FABRIC: 'taskTemplates.CHANGE_RIGHT_WALL_FABRIC',
+  CHANGE_BACK_WALL_FABRIC: 'taskTemplates.CHANGE_BACK_WALL_FABRIC',
+  CHANGE_PILAR_SHELF_FABRIC: 'taskTemplates.CHANGE_PILAR_SHELF_FABRIC',
+  CHANGE_RIGHT_SHELF_FABRIC: 'taskTemplates.CHANGE_RIGHT_SHELF_FABRIC',
+  CHANGE_LEFT_SHELF_FABRIC: 'taskTemplates.CHANGE_LEFT_SHELF_FABRIC',
+  CHANGE_BACK_SHELF_FABRIC: 'taskTemplates.CHANGE_BACK_SHELF_FABRIC',
+  CHANGE_WINDOW_DISPLAY_MANNEQUINS: 'taskTemplates.CHANGE_WINDOW_DISPLAY_MANNEQUINS',
+  CHANGE_OUTDOOR_MANNEQUINS: 'taskTemplates.CHANGE_OUTDOOR_MANNEQUINS',
+  CHANGE_SHOP_MANNEQUINS: 'taskTemplates.CHANGE_SHOP_MANNEQUINS',
+  WIPING_GLASS: 'taskTemplates.WIPING_GLASS',
+  CUTTING_FABRIC_ROLL: 'taskTemplates.CUTTING_FABRIC_ROLL',
+};
+
+export const getTaskTemplateTitle = (
+  t: TFunction,
+  templateKey: TaskTemplateKey,
+  params?: { code?: string | number }
+) => {
+  const key = TASK_TEMPLATE_TITLE_KEYS[templateKey];
+  if (templateKey === 'CUTTING_FABRIC_ROLL') {
+    return t(key, { code: params?.code ?? 'unknown' });
+  }
+  return t(key);
+};
+
+export const getTaskDisplayTitle = (t: TFunction, task: Pick<BranchTask, 'templateKey' | 'title' | 'code'>) => {
+  if (task.templateKey in TASK_TEMPLATE_TITLE_KEYS) {
+    return getTaskTemplateTitle(t, task.templateKey, { code: task.code });
+  }
+  return task.title;
+};
+
 export const recurringTaskTemplates: Array<{
   key: TaskAssignment['templateKey'];
-  title: string;
+  titleKey: string;
 }> = [
-  { key: 'MOPPING', title: 'Mopping' },
-  { key: 'DUSTING', title: 'Dusting' },
-  { key: 'VACUUMING', title: 'Vacuuming' },
-  { key: 'CHANGE_HANGING_FABRIC', title: 'Changing the hanging fabric' },
-  { key: 'CHANGE_MANNEQUIN_FABRIC', title: "Changing the mannequin's fabric" },
-  { key: 'CHANGE_LEFT_WALL_FABRIC', title: 'Changing the left-side wall fabric' },
-  { key: 'CHANGE_RIGHT_WALL_FABRIC', title: 'Changing the right-side wall fabric' },
-  { key: 'CHANGE_BACK_WALL_FABRIC', title: 'Changing the back wall fabric' },
-  { key: 'CHANGE_PILAR_SHELF_FABRIC', title: 'Changing the pilar shelf fabric' },
-  { key: 'CHANGE_RIGHT_SHELF_FABRIC', title: 'Changing the right shelf fabric' },
-  { key: 'CHANGE_LEFT_SHELF_FABRIC', title: 'Changing the left shelf fabric' },
-  { key: 'CHANGE_BACK_SHELF_FABRIC', title: 'Changing the back shelf fabric' },
-  { key: 'CHANGE_WINDOW_DISPLAY_MANNEQUINS', title: 'Changing the fabric of the window display mannequins' },
-  { key: 'CHANGE_OUTDOOR_MANNEQUINS', title: 'Changing the fabric of the outdoor mannequins' },
-  { key: 'CHANGE_SHOP_MANNEQUINS', title: 'Changing the fabric of the mannequins inside the shop' },
-  { key: 'WIPING_GLASS', title: 'Wiping the glass' },
+  { key: 'MOPPING', titleKey: TASK_TEMPLATE_TITLE_KEYS.MOPPING },
+  { key: 'DUSTING', titleKey: TASK_TEMPLATE_TITLE_KEYS.DUSTING },
+  { key: 'VACUUMING', titleKey: TASK_TEMPLATE_TITLE_KEYS.VACUUMING },
+  { key: 'CHANGE_HANGING_FABRIC', titleKey: TASK_TEMPLATE_TITLE_KEYS.CHANGE_HANGING_FABRIC },
+  { key: 'CHANGE_MANNEQUIN_FABRIC', titleKey: TASK_TEMPLATE_TITLE_KEYS.CHANGE_MANNEQUIN_FABRIC },
+  { key: 'CHANGE_LEFT_WALL_FABRIC', titleKey: TASK_TEMPLATE_TITLE_KEYS.CHANGE_LEFT_WALL_FABRIC },
+  { key: 'CHANGE_RIGHT_WALL_FABRIC', titleKey: TASK_TEMPLATE_TITLE_KEYS.CHANGE_RIGHT_WALL_FABRIC },
+  { key: 'CHANGE_BACK_WALL_FABRIC', titleKey: TASK_TEMPLATE_TITLE_KEYS.CHANGE_BACK_WALL_FABRIC },
+  { key: 'CHANGE_PILAR_SHELF_FABRIC', titleKey: TASK_TEMPLATE_TITLE_KEYS.CHANGE_PILAR_SHELF_FABRIC },
+  { key: 'CHANGE_RIGHT_SHELF_FABRIC', titleKey: TASK_TEMPLATE_TITLE_KEYS.CHANGE_RIGHT_SHELF_FABRIC },
+  { key: 'CHANGE_LEFT_SHELF_FABRIC', titleKey: TASK_TEMPLATE_TITLE_KEYS.CHANGE_LEFT_SHELF_FABRIC },
+  { key: 'CHANGE_BACK_SHELF_FABRIC', titleKey: TASK_TEMPLATE_TITLE_KEYS.CHANGE_BACK_SHELF_FABRIC },
+  { key: 'CHANGE_WINDOW_DISPLAY_MANNEQUINS', titleKey: TASK_TEMPLATE_TITLE_KEYS.CHANGE_WINDOW_DISPLAY_MANNEQUINS },
+  { key: 'CHANGE_OUTDOOR_MANNEQUINS', titleKey: TASK_TEMPLATE_TITLE_KEYS.CHANGE_OUTDOOR_MANNEQUINS },
+  { key: 'CHANGE_SHOP_MANNEQUINS', titleKey: TASK_TEMPLATE_TITLE_KEYS.CHANGE_SHOP_MANNEQUINS },
+  { key: 'WIPING_GLASS', titleKey: TASK_TEMPLATE_TITLE_KEYS.WIPING_GLASS },
 ];
 
-export const scheduleOptions: Array<{ value: Exclude<TaskSchedule, 'ON_DEMAND'>; label: string; days: number }> = [
-  { value: 'DAILY', label: 'Every day', days: 1 },
-  { value: 'EVERY_2_DAYS', label: 'Every two days', days: 2 },
-  { value: 'WEEKLY', label: 'Every week', days: 7 },
-  { value: 'MONTHLY', label: 'Every month', days: 30 },
-  { value: 'YEARLY', label: 'Every year', days: 365 },
+export const scheduleOptions: Array<{
+  value: Exclude<TaskSchedule, 'ON_DEMAND'>;
+  labelKey: string;
+  days: number;
+}> = [
+  { value: 'DAILY', labelKey: 'schedules.DAILY', days: 1 },
+  { value: 'EVERY_2_DAYS', labelKey: 'schedules.EVERY_2_DAYS', days: 2 },
+  { value: 'WEEKLY', labelKey: 'schedules.WEEKLY', days: 7 },
+  { value: 'MONTHLY', labelKey: 'schedules.MONTHLY', days: 30 },
+  { value: 'YEARLY', labelKey: 'schedules.YEARLY', days: 365 },
 ];
+
+export const getScheduleLabel = (t: TFunction, value: TaskSchedule | string) => {
+  const option = scheduleOptions.find((entry) => entry.value === value);
+  if (option) return t(option.labelKey);
+  if (value === 'ON_DEMAND') return t('schedules.ON_DEMAND');
+  return t('common.onDemand');
+};
 
 const readJson = <T,>(key: string, fallback: T): T => {
   try {
@@ -114,6 +166,9 @@ export const nextDueAt = (schedule: TaskAssignment['schedule'], from = new Date(
 
 export const isTaskComplete = (task: BranchTask) =>
   task.status === 'DONE' || Boolean(task.checkedAt);
+
+export const countOpenTasks = () =>
+  readTasks().filter((task) => !isTaskComplete(task)).length;
 
 export const createTask = (task: Omit<BranchTask, 'id' | 'createdAt' | 'status'>) => {
   const nextTask: BranchTask = {
@@ -191,14 +246,25 @@ export const createCuttingTaskFromSale = (input: {
   soldItemId: string;
   saleId?: string;
   assignedTo?: string;
+  t?: TFunction;
 }) => {
   const codeText = input.code !== undefined ? String(input.code) : 'unknown';
+  const title = input.t
+    ? getTaskTemplateTitle(input.t, 'CUTTING_FABRIC_ROLL', { code: codeText })
+    : `Cutting the fabric roll for code ${codeText}`;
+  const note = input.t
+    ? input.t('tasks.cuttingNote', {
+        soldItemId: input.soldItemId,
+        sourceItemId: input.sourceItemId,
+        color: input.colorName,
+      })
+    : `Piece ${input.soldItemId} was sold. Cut another shelf piece from roll ${input.sourceItemId}${input.colorName ? ` (${input.colorName})` : ''}.`;
   return createTask({
     branch: input.branch,
     templateKey: 'CUTTING_FABRIC_ROLL',
-    title: `Cutting the fabric roll for code ${codeText}`,
+    title,
     assignedTo: input.assignedTo || 'Inventory team',
-    note: `Piece ${input.soldItemId} was sold. Cut another shelf piece from roll ${input.sourceItemId}${input.colorName ? ` (${input.colorName})` : ''}.`,
+    note,
     schedule: 'ON_DEMAND',
     sourceSaleId: input.saleId,
     sourceItemId: input.sourceItemId,
