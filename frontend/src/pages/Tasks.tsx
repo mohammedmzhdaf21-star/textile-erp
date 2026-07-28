@@ -1,9 +1,13 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { getCurrentUser } from '../lib/auth';
 import {
   branches,
   completeTask,
   createTask,
+  getScheduleLabel,
+  getTaskDisplayTitle,
+  getTaskTemplateTitle,
   isTaskComplete,
   nextDueAt,
   readTaskAssignments,
@@ -19,13 +23,8 @@ import {
 } from '../lib/taskSettings';
 import { isAutoManagedCuttingTask } from '../lib/cuttingTasks';
 
-const formatDateTime = (dateString?: string) =>
-  dateString ? new Date(dateString).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : 'Not scheduled';
-
-const scheduleLabel = (value: string) =>
-  scheduleOptions.find((option) => option.value === value)?.label || 'On demand';
-
 const Tasks: React.FC = () => {
+  const { t } = useTranslation();
   const user = getCurrentUser();
   const [selectedBranch, setSelectedBranch] = useState<BranchCode>('A');
   const [assignments, setAssignments] = useState<TaskAssignment[]>(() => readTaskAssignments());
@@ -36,6 +35,22 @@ const Tasks: React.FC = () => {
   const [note, setNote] = useState('');
   const [schedule, setSchedule] = useState<TaskAssignment['schedule']>('DAILY');
   const [message, setMessage] = useState<string | null>(null);
+
+  const formatDateTime = (dateString?: string) =>
+    dateString
+      ? new Date(dateString).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })
+      : t('common.notScheduled');
+
+  const refreshTasks = () => {
+    setTasks(readTasks());
+    setAssignments(readTaskAssignments());
+  };
+
+  useEffect(() => {
+    const onTasksUpdated = () => refreshTasks();
+    window.addEventListener('branch-tasks-updated', onTasksUpdated);
+    return () => window.removeEventListener('branch-tasks-updated', onTasksUpdated);
+  }, []);
 
   const branchAssignments = useMemo(
     () => assignments.filter((assignment) => assignment.branch === selectedBranch),
@@ -57,39 +72,47 @@ const Tasks: React.FC = () => {
   };
 
   const assignRecurringTask = () => {
+    const title = t(selectedTemplate.titleKey);
     const assignment = upsertTaskAssignment({
       branch: selectedBranch,
       templateKey,
-      title: selectedTemplate.title,
-      assignedTo: assignedTo.trim() || 'Unassigned',
+      title,
+      assignedTo: assignedTo.trim() || t('common.unassigned'),
       note,
       schedule,
     });
     refresh();
-    setMessage(`Assigned "${assignment.title}" to Branch ${selectedBranch} (${scheduleLabel(assignment.schedule)}).`);
+    setMessage(
+      t('tasks.assignedMessage', {
+        title: getTaskDisplayTitle(t, { templateKey: assignment.templateKey, title: assignment.title, code: undefined }),
+        branch: selectedBranch,
+        schedule: getScheduleLabel(t, assignment.schedule),
+      })
+    );
   };
 
   const addManualCuttingTask = () => {
-    const code = window.prompt('Enter fabric roll code to cut');
+    const code = window.prompt(t('tasks.cuttingPrompt'));
     if (!code) return;
+    const title = getTaskTemplateTitle(t, 'CUTTING_FABRIC_ROLL', { code });
     const task = createTask({
       branch: selectedBranch,
       templateKey: 'CUTTING_FABRIC_ROLL',
-      title: `Cutting the fabric roll for code ${code}`,
-      assignedTo: assignedTo.trim() || 'Inventory team',
-      note: 'Manual cutting task created by admin/owner.',
+      title,
+      assignedTo: assignedTo.trim() || t('common.inventoryTeam'),
+      note: t('tasks.manualCuttingNote'),
       schedule: 'ON_DEMAND',
       code: Number(code),
     });
     refresh();
-    setMessage(`Created ${task.title} for Branch ${selectedBranch}.`);
+    setMessage(t('tasks.createdTask', { title: getTaskDisplayTitle(t, task), branch: selectedBranch }));
   };
 
   const toggleTask = (taskId: string) => {
     const task = tasks.find((item) => item.id === taskId);
     if (!task) return;
     if (!isTaskComplete(task)) {
-      completeTask(taskId, `${user?.name || 'Admin'} (${user?.email || 'admin'})`);
+      completeTask(taskId, `${user?.name || t('common.admin')} (${user?.email || 'admin'})`);
     } else {
       reopenTask(taskId);
     }
@@ -119,12 +142,10 @@ const Tasks: React.FC = () => {
     <div className="max-w-full overflow-x-hidden p-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-black">Tasks</h2>
-          <p className="mt-1 max-w-2xl text-sm text-gray-600">
-            Admin/owner task schedule by branch. Cutting tasks are created when shelf pieces sell out and are marked done automatically in Item Conversion.
-          </p>
+          <h2 className="text-2xl font-bold text-black">{t('tasks.title')}</h2>
+          <p className="mt-1 max-w-2xl text-sm text-gray-600">{t('tasks.subtitle')}</p>
         </div>
-        <div className="text-sm text-gray-500">Branch {selectedBranch}</div>
+        <div className="text-sm text-gray-500">{t('tasks.currentBranch', { branch: selectedBranch })}</div>
       </div>
 
       <section className="mt-6 grid grid-cols-5 gap-3">
@@ -139,7 +160,7 @@ const Tasks: React.FC = () => {
                 : 'border-gray-200 bg-white text-gray-800 hover:border-magenta-300 hover:bg-magenta-50'
             }`}
           >
-            Branch {branch}
+            {t('branches.label', { code: branch })}
           </button>
         ))}
       </section>
@@ -148,90 +169,93 @@ const Tasks: React.FC = () => {
 
       <div className="mt-8 grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
         <section className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
-          <h3 className="text-xl font-semibold text-black">Assign recurring task</h3>
-          <label className="mt-4 block text-sm font-medium text-gray-700">Task</label>
+          <h3 className="text-xl font-semibold text-black">{t('tasks.assignRecurring')}</h3>
+          <label className="mt-4 block text-sm font-medium text-gray-700">{t('tasks.task')}</label>
           <select
             value={templateKey}
             onChange={(event) => setTemplateKey(event.target.value as TaskAssignment['templateKey'])}
             className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
           >
             {recurringTaskTemplates.map((template) => (
-              <option key={template.key} value={template.key}>{template.title}</option>
+              <option key={template.key} value={template.key}>{t(template.titleKey)}</option>
             ))}
           </select>
 
-          <label className="mt-4 block text-sm font-medium text-gray-700">Schedule</label>
+          <label className="mt-4 block text-sm font-medium text-gray-700">{t('tasks.schedule')}</label>
           <select
             value={schedule}
             onChange={(event) => setSchedule(event.target.value as TaskAssignment['schedule'])}
             className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
           >
             {scheduleOptions.map((option) => (
-              <option key={option.value} value={option.value}>{option.label}</option>
+              <option key={option.value} value={option.value}>{t(option.labelKey)}</option>
             ))}
           </select>
 
-          <label className="mt-4 block text-sm font-medium text-gray-700">Employee email</label>
+          <label className="mt-4 block text-sm font-medium text-gray-700">{t('tasks.employeeEmail')}</label>
           <input
             value={assignedTo}
             onChange={(event) => setAssignedTo(event.target.value)}
             className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
-            placeholder="employee@textile.com"
+            placeholder={t('tasks.employeeEmailPlaceholder')}
           />
 
-          <label className="mt-4 block text-sm font-medium text-gray-700">Notes</label>
+          <label className="mt-4 block text-sm font-medium text-gray-700">{t('tasks.notes')}</label>
           <textarea
             value={note}
             onChange={(event) => setNote(event.target.value)}
             className="mt-1 min-h-24 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
-            placeholder="Optional task details..."
+            placeholder={t('tasks.notesPlaceholder')}
           />
 
           <button type="button" onClick={assignRecurringTask} className="btn-primary mt-4 w-full">
-            Assign task to Branch {selectedBranch}
+            {t('tasks.assignToBranch', { branch: selectedBranch })}
           </button>
 
           <button type="button" onClick={addManualCuttingTask} className="btn-secondary mt-3 w-full">
-            Add cutting task manually
+            {t('tasks.addCuttingManually')}
           </button>
         </section>
 
         <section className="space-y-5">
           <div className="grid gap-4 sm:grid-cols-3">
             <div className="rounded-3xl border border-red-200 bg-red-50 p-5">
-              <div className="text-sm text-red-700">Open tasks</div>
+              <div className="text-sm text-red-700">{t('tasks.openTasks')}</div>
               <div className="mt-1 text-3xl font-bold text-black">{openTasks.length}</div>
             </div>
             <div className="rounded-3xl border border-amber-200 bg-amber-50 p-5">
-              <div className="text-sm text-amber-700">Cutting alerts</div>
+              <div className="text-sm text-amber-700">{t('tasks.cuttingAlerts')}</div>
               <div className="mt-1 text-3xl font-bold text-black">{cuttingTasks.length}</div>
             </div>
             <div className="rounded-3xl border border-green-200 bg-green-50 p-5">
-              <div className="text-sm text-green-700">Done tasks</div>
+              <div className="text-sm text-green-700">{t('tasks.doneTasks')}</div>
               <div className="mt-1 text-3xl font-bold text-black">{doneTasks.length}</div>
             </div>
           </div>
 
           <div className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
-            <h3 className="text-xl font-semibold text-black">Assigned schedule for Branch {selectedBranch}</h3>
+            <h3 className="text-xl font-semibold text-black">{t('tasks.assignedSchedule', { branch: selectedBranch })}</h3>
             {branchAssignments.length === 0 ? (
-              <div className="mt-4 rounded-2xl bg-gray-50 p-4 text-sm text-gray-600">
-                No recurring task assignments yet.
-              </div>
+              <div className="mt-4 rounded-2xl bg-gray-50 p-4 text-sm text-gray-600">{t('tasks.noAssignments')}</div>
             ) : (
               <div className="mt-4 space-y-3">
                 {branchAssignments.map((assignment) => (
                   <div key={assignment.id} className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                       <div>
-                        <div className="font-semibold text-black">{assignment.title}</div>
+                        <div className="font-semibold text-black">
+                          {getTaskDisplayTitle(t, { templateKey: assignment.templateKey, title: assignment.title, code: undefined })}
+                        </div>
                         <div className="mt-1 text-sm text-gray-600">
-                          {scheduleLabel(assignment.schedule)} · Assigned to {assignment.assignedTo}
+                          {t('tasks.assignedTo', {
+                            schedule: getScheduleLabel(t, assignment.schedule),
+                            name: assignment.assignedTo,
+                          })}
                         </div>
                         {assignment.note && <div className="mt-2 text-sm text-gray-700">{assignment.note}</div>}
                       </div>
                       <button type="button" onClick={() => createNextTask(assignment)} className="rounded-xl bg-black px-3 py-2 text-xs font-semibold text-white">
-                        Create next
+                        {t('common.createNext')}
                       </button>
                     </div>
                   </div>
@@ -241,11 +265,9 @@ const Tasks: React.FC = () => {
           </div>
 
           <div className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
-            <h3 className="text-xl font-semibold text-black">Branch {selectedBranch} task list</h3>
+            <h3 className="text-xl font-semibold text-black">{t('tasks.branchTaskList', { branch: selectedBranch })}</h3>
             {branchTasks.length === 0 ? (
-              <div className="mt-4 rounded-2xl bg-gray-50 p-4 text-sm text-gray-600">
-                No tasks yet for this branch.
-              </div>
+              <div className="mt-4 rounded-2xl bg-gray-50 p-4 text-sm text-gray-600">{t('tasks.noTasks')}</div>
             ) : (
               <div className="mt-4 space-y-3">
                 {branchTasks.map((task) => (
@@ -262,31 +284,37 @@ const Tasks: React.FC = () => {
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                       <div>
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className="font-semibold text-black">{task.title}</span>
+                          <span className="font-semibold text-black">{getTaskDisplayTitle(t, task)}</span>
                           {isTaskComplete(task) && (
                             <span className="rounded-full bg-green-600 px-2 py-1 text-xs font-semibold text-white">
-                              Done
+                              {t('common.done')}
                             </span>
                           )}
                         </div>
                         <div className="mt-1 text-sm text-gray-600">
-                          {scheduleLabel(task.schedule)} · Assigned to {task.assignedTo}
-                          {task.dueAt ? ` · Due ${formatDateTime(task.dueAt)}` : ''}
+                          {t('tasks.assignedTo', {
+                            schedule: getScheduleLabel(t, task.schedule),
+                            name: task.assignedTo,
+                          })}
+                          {task.dueAt ? t('tasks.dueAt', { date: formatDateTime(task.dueAt) }) : ''}
                         </div>
                         {task.note && <div className="mt-2 text-sm text-gray-700">{task.note}</div>}
                         {isTaskComplete(task) && (
                           <div className="mt-2 rounded-xl bg-white px-3 py-2 text-sm text-green-700">
-                            Checked by {task.checkedBy || 'Unknown employee'} at {formatDateTime(task.checkedAt)}
+                            {t('tasks.checkedBy', {
+                              name: task.checkedBy || t('common.unknownEmployee'),
+                              date: formatDateTime(task.checkedAt),
+                            })}
                           </div>
                         )}
                         {task.sourceItemId && (
                           <div className="mt-2 break-all text-xs text-gray-500">
-                            Source roll: {task.sourceItemId}
+                            {t('tasks.sourceRoll', { id: task.sourceItemId })}
                           </div>
                         )}
                         {isAutoManagedCuttingTask(task) && !isTaskComplete(task) && (
                           <div className="mt-2 rounded-xl bg-white px-3 py-2 text-xs text-amber-800">
-                            Auto-completes when this roll is cut to a piece in Item Conversion.
+                            {t('tasks.autoCompleteHint')}
                           </div>
                         )}
                       </div>
@@ -297,7 +325,7 @@ const Tasks: React.FC = () => {
                             onClick={() => toggleTask(task.id)}
                             className="rounded-xl bg-black px-3 py-2 text-xs font-semibold text-white"
                           >
-                            {isTaskComplete(task) ? 'Reopen' : 'Done'}
+                            {isTaskComplete(task) ? t('common.reopen') : t('common.done')}
                           </button>
                         )}
                         {isAutoManagedCuttingTask(task) && isTaskComplete(task) && (
@@ -306,7 +334,7 @@ const Tasks: React.FC = () => {
                             onClick={() => toggleTask(task.id)}
                             className="rounded-xl border border-gray-300 px-3 py-2 text-xs font-semibold text-gray-700"
                           >
-                            Reopen
+                            {t('common.reopen')}
                           </button>
                         )}
                         <button
@@ -314,7 +342,7 @@ const Tasks: React.FC = () => {
                           onClick={() => deleteTask(task.id)}
                           className="rounded-xl border border-red-300 px-3 py-2 text-xs font-semibold text-red-600"
                         >
-                          Delete
+                          {t('common.delete')}
                         </button>
                       </div>
                     </div>

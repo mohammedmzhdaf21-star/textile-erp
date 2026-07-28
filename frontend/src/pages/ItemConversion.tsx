@@ -3,6 +3,10 @@ import QRCode from 'qrcode';
 import api from '../lib/api';
 import { completeCuttingTasksAfterRollToPiece } from '../lib/cuttingTasks';
 import { buildInventoryItemId } from '../lib/inventoryCodes';
+import { getColorLabel } from '../lib/colorLabels';
+import { isBelowRemnantThreshold } from '../lib/inventoryRules';
+import { useTranslation } from 'react-i18next';
+import QrScanInput from '../components/QrScanInput';
 
 type BranchCode = 'A' | 'B' | 'C' | 'E' | 'F';
 type ItemType = 'ROLL' | 'PIECE' | 'REMANENT';
@@ -88,6 +92,7 @@ const createQrDataUrl = (itemId: string) =>
   });
 
 const ItemConversion: React.FC = () => {
+  const { t } = useTranslation();
   const [transferSourceId, setTransferSourceId] = useState('');
   const [transferSource, setTransferSource] = useState<InventoryItem | null>(null);
   const [transferToBranch, setTransferToBranch] = useState<BranchCode>('C');
@@ -103,7 +108,7 @@ const ItemConversion: React.FC = () => {
   const loadItem = async (itemId: string, setItem: (item: InventoryItem) => void) => {
     const id = itemId.trim();
     if (!id) {
-      setError('Enter or scan an item ID first.');
+      setError(t('itemConversion.enterItemIdFirst'));
       return;
     }
     setError(null);
@@ -121,10 +126,10 @@ const ItemConversion: React.FC = () => {
           setTransferToBranch(currentBranch === 'C' ? 'F' : 'C');
         }
       }
-      setMessage(`Loaded ${item.id}: ${item.type}, ${amount} ${item.type === 'PIECE' ? 'piece(s)' : 'meter(s)'}.`);
+      setMessage(t('itemConversion.loadedItem', { id: item.id, type: item.type, amount, unit: item.type === 'PIECE' ? t('common.pieces') : t('common.meters') }));
     } catch (err: any) {
       const body = err?.response?.data;
-      setError(body?.error ?? body?.message ?? err?.message ?? 'Failed to load item.');
+      setError(body?.error ?? body?.message ?? err?.message ?? t('itemConversion.failedToLoad'));
     }
   };
 
@@ -177,22 +182,22 @@ const ItemConversion: React.FC = () => {
   };
 
   const transferItem = async () => {
-    if (!transferSource) return alert('Load the item to transfer first.');
+    if (!transferSource) return alert(t('itemConversion.loadTransferFirst'));
     const amount = Number(transferAmount);
     const destinationBranchId = BRANCH_MAP[transferToBranch];
     const currentBranch = BRANCH_CODE_BY_ID[transferSource.branchId];
 
     if (destinationBranchId === transferSource.branchId) {
-      return alert('Choose a different destination branch.');
+      return alert(t('itemConversion.chooseDifferentBranch'));
     }
     if (!Number.isFinite(amount) || amount <= 0) {
-      return alert('Enter a valid transfer amount.');
+      return alert(t('itemConversion.enterValidTransferAmount'));
     }
     if (transferSource.type === 'PIECE' && !Number.isInteger(amount)) {
-      return alert('Piece transfers must use a whole quantity.');
+      return alert(t('itemConversion.pieceWholeQuantity'));
     }
     if (amount > itemAvailableAmount(transferSource)) {
-      return alert('Transfer amount cannot exceed available stock.');
+      return alert(t('itemConversion.transferExceedsStock'));
     }
 
     setIsProcessing(true);
@@ -234,33 +239,33 @@ const ItemConversion: React.FC = () => {
       });
 
       setSummary({
-        title: 'Branch transfer created',
+        title: t('itemConversion.summaryBranchTransfer'),
         sourceId: transferSource.id,
         newItemId,
         qrCodeDataUrl,
-        details: `Moved ${amount} ${transferSource.type === 'PIECE' ? 'piece(s)' : 'meter(s)'} from Branch ${currentBranch || transferSource.branchId} to Branch ${transferToBranch}.`,
+        details: t('itemConversion.summaryTransferDetails', { amount, unit: transferSource.type === 'PIECE' ? t('common.pieces') : t('common.meters'), from: currentBranch || transferSource.branchId, to: transferToBranch }),
       });
-      setMessage('Branch conversion complete. New QR created for destination item.');
+      setMessage(t('itemConversion.branchTransferComplete'));
       await loadItem(transferSource.id, setTransferSource);
     } catch (err: any) {
       const body = err?.response?.data;
-      setError(body?.error ?? body?.message ?? err?.message ?? 'Failed to transfer item.');
+      setError(body?.error ?? body?.message ?? err?.message ?? t('itemConversion.failedToTransfer'));
     } finally {
       setIsProcessing(false);
     }
   };
 
   const cutRollToPiece = async () => {
-    if (!rollSource) return alert('Load the roll first.');
+    if (!rollSource) return alert(t('itemConversion.loadRollFirst'));
     const amount = Number(cutMeters);
     if (rollSource.type !== 'ROLL' && rollSource.type !== 'REMANENT') {
-      return alert('Only rolls or remnants can be cut into pieces.');
+      return alert(t('itemConversion.onlyRollsRemnants'));
     }
     if (!Number.isFinite(amount) || amount <= 0) {
-      return alert('Enter valid meters to cut.');
+      return alert(t('itemConversion.enterValidMetersToCut'));
     }
     if (amount > toNumber(rollSource.meters)) {
-      return alert('Cut meters cannot exceed roll meters.');
+      return alert(t('itemConversion.cutExceedsRoll'));
     }
 
     setIsProcessing(true);
@@ -268,7 +273,9 @@ const ItemConversion: React.FC = () => {
     setMessage(null);
 
     try {
-      const existingPiece = await findExistingPieceForRollCut(rollSource, amount);
+      const createAsRemnant = isBelowRemnantThreshold(amount);
+      const existingPiece =
+        createAsRemnant ? null : await findExistingPieceForRollCut(rollSource, amount);
       let pieceItemId: string;
       let qrCodeDataUrl: string;
       let addedToExisting = false;
@@ -285,8 +292,8 @@ const ItemConversion: React.FC = () => {
           subCode: itemSubCode(rollSource),
           colorName: rollSource.color?.name || rollSource.colorId,
           colorId: rollSource.colorId,
-          type: 'PIECE',
-          pieceLength: amount,
+          type: createAsRemnant ? 'REMANENT' : 'PIECE',
+          pieceLength: createAsRemnant ? undefined : amount,
         });
         qrCodeDataUrl = await createQrDataUrl(pieceItemId);
       }
@@ -314,27 +321,34 @@ const ItemConversion: React.FC = () => {
           code: rollSource.code,
           subCode: itemSubCode(rollSource),
           colorId: rollSource.colorId,
-          type: 'PIECE',
-          pieceLength: amount,
-          quantity: 1,
+          type: createAsRemnant ? 'REMANENT' : 'PIECE',
+          meters: createAsRemnant ? amount : undefined,
+          pieceLength: createAsRemnant ? undefined : amount,
+          quantity: createAsRemnant ? 1 : 1,
           costPrice: rollSource.costPrice ? toNumber(rollSource.costPrice) : undefined,
           qrCodeValue: pieceItemId,
           qrCodeDataUrl,
           pictureName: rollSource.id,
           pictureDataUrl: rollSource.qrCodeDataUrl || undefined,
           sourceItemId: rollSource.id,
-          conversionType: 'ROLL_TO_PIECE',
+          conversionType: createAsRemnant ? 'ROLL_TO_REMANENT' : 'ROLL_TO_PIECE',
         });
       }
 
       setSummary({
-        title: addedToExisting ? 'Stock added to existing piece' : 'Piece created from roll',
+        title: addedToExisting
+          ? t('itemConversion.summaryStockAdded')
+          : createAsRemnant
+            ? t('itemConversion.summaryRemnantCreated')
+            : t('itemConversion.summaryPieceCreated'),
         sourceId: rollSource.id,
         newItemId: pieceItemId,
         qrCodeDataUrl,
         details: addedToExisting
           ? `Cut ${amount.toFixed(2)} meters and added 1 piece to existing item ${pieceItemId} (code ${rollSource.code}, color ${rollSource.color?.name || rollSource.colorId}).`
-          : `Cut ${amount.toFixed(2)} meters into one new piece with code ${rollSource.code} and color ${rollSource.color?.name || rollSource.colorId}.`,
+          : createAsRemnant
+            ? `Cut ${amount.toFixed(2)} meters into a remnant (under 2 m rule).`
+            : `Cut ${amount.toFixed(2)} meters into one new piece with code ${rollSource.code} and color ${rollSource.color?.name || rollSource.colorId}.`,
       });
       const completedTasks = completeCuttingTasksAfterRollToPiece({
         rollItemId: rollSource.id,
@@ -347,29 +361,31 @@ const ItemConversion: React.FC = () => {
         completedTasks.length > 0
           ? `Roll-to-piece conversion complete. ${completedTasks.length} cutting task(s) marked done automatically.`
           : addedToExisting
-            ? 'Roll-to-piece conversion complete. Stock added to existing piece.'
-            : 'Roll-to-piece conversion complete. New piece QR created.'
+            ? t('itemConversion.rollToPieceAddedExisting')
+            : createAsRemnant
+              ? t('itemConversion.rollToRemnantComplete')
+              : t('itemConversion.rollToPieceNewQr')
       );
       await loadItem(rollSource.id, setRollSource);
     } catch (err: any) {
       const body = err?.response?.data;
-      setError(body?.error ?? body?.message ?? err?.message ?? 'Failed to cut roll.');
+      setError(body?.error ?? body?.message ?? err?.message ?? t('itemConversion.failedToCut'));
     } finally {
       setIsProcessing(false);
     }
   };
 
   const renderItemSummary = (item: InventoryItem | null) => {
-    if (!item) return <p className="text-sm text-gray-500">No item loaded yet.</p>;
+    if (!item) return <p className="text-sm text-gray-500">{t('itemConversion.noItemLoaded')}</p>;
     return (
       <div className="rounded-2xl bg-gray-50 p-4 text-sm text-gray-700">
         <div className="break-all font-semibold text-black">{item.id}</div>
-        <div>Branch: {BRANCH_CODE_BY_ID[item.branchId] || item.branchId}</div>
-        <div>Code: {item.code}</div>
-        <div>Color: {item.color?.name || item.colorId}</div>
-        <div>Type: {item.type}</div>
-        <div>Available: {itemAvailableAmount(item)} {item.type === 'PIECE' ? 'piece(s)' : 'meter(s)'}</div>
-        {item.sourceItemId && <div className="break-all">Linked source: {item.sourceItemId}</div>}
+        <div>{t('itemConversion.branch', { code: BRANCH_CODE_BY_ID[item.branchId] || item.branchId })}</div>
+        <div>{t('itemConversion.code', { code: item.code })}</div>
+        <div>{t('itemConversion.color', { color: getColorLabel(t, item.color?.name) || item.colorId })}</div>
+        <div>{t('itemConversion.type', { type: item.type })}</div>
+        <div>{t('itemConversion.available', { amount: itemAvailableAmount(item), unit: item.type === 'PIECE' ? t('common.pieces') : t('common.meters') })}</div>
+        {item.sourceItemId && <div className="break-all">{t('itemConversion.linkedSource', { id: item.sourceItemId })}</div>}
       </div>
     );
   };
@@ -378,10 +394,8 @@ const ItemConversion: React.FC = () => {
     <div className="max-w-full overflow-x-hidden p-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-black">Item Conversion</h2>
-          <p className="mt-1 max-w-2xl text-sm text-gray-600">
-            Transfer stock between branches or cut roll meters into new pieces. Converted items keep the same code/color link and receive a new QR code.
-          </p>
+          <h2 className="text-2xl font-bold text-black">{t('itemConversion.title')}</h2>
+          <p className="mt-1 max-w-2xl text-sm text-gray-600">{t('itemConversion.subtitle')}</p>
         </div>
       </div>
 
@@ -390,20 +404,21 @@ const ItemConversion: React.FC = () => {
 
       <div className="mt-6 grid gap-6 xl:grid-cols-2">
         <section className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
-          <h3 className="text-xl font-semibold text-black">Branch transfer</h3>
-          <p className="mt-1 text-sm text-gray-600">
-            Move meters or pieces from one branch to another, such as F to C or C to F.
-          </p>
+          <h3 className="text-xl font-semibold text-black">{t('itemConversion.branchTransferTitle')}</h3>
+          <p className="mt-1 text-sm text-gray-600">{t('itemConversion.branchTransferDescription')}</p>
 
           <div className="mt-4 grid gap-3 md:grid-cols-[1fr_auto]">
-            <input
+            <QrScanInput
               value={transferSourceId}
-              onChange={(event) => setTransferSourceId(event.target.value)}
-              className="w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
-              placeholder="Scan or enter item ID"
+              onChange={setTransferSourceId}
+              onScan={(value) => {
+                setTransferSourceId(value);
+                void loadItem(value, setTransferSource);
+              }}
+              placeholder={t('itemConversion.scanPlaceholder')}
             />
             <button type="button" onClick={() => loadItem(transferSourceId, setTransferSource)} className="btn-primary">
-              Load item
+              {t('common.loadItem')}
             </button>
           </div>
 
@@ -411,20 +426,20 @@ const ItemConversion: React.FC = () => {
 
           <div className="mt-4 grid gap-4 md:grid-cols-2">
             <div>
-              <label className="block text-sm font-medium text-gray-700">Destination branch</label>
+              <label className="block text-sm font-medium text-gray-700">{t('itemConversion.destinationBranch')}</label>
               <select
                 value={transferToBranch}
                 onChange={(event) => setTransferToBranch(event.target.value as BranchCode)}
                 className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
               >
                 {branches.map((branch) => (
-                  <option key={branch} value={branch}>Branch {branch}</option>
+                  <option key={branch} value={branch}>{t('common.branchLabel', { code: branch })}</option>
                 ))}
               </select>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700">
-                Amount ({transferSource ? (soldAsUnitForItem(transferSource) === 'PIECE' ? 'pieces' : 'meters') : 'meters/pieces'})
+                {transferSource ? t('itemConversion.amountLabel', { unit: soldAsUnitForItem(transferSource) === 'PIECE' ? t('common.pieces') : t('common.meters') }) : t('itemConversion.amountLabelDefault')}
               </label>
               <input
                 type="number"
@@ -438,31 +453,32 @@ const ItemConversion: React.FC = () => {
           </div>
 
           <button type="button" onClick={transferItem} disabled={isProcessing} className="btn-primary mt-4 w-full">
-            {isProcessing ? 'Converting...' : 'Create branch conversion QR'}
+            {isProcessing ? t('itemConversion.converting') : t('itemConversion.createBranchQr')}
           </button>
         </section>
 
         <section className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
-          <h3 className="text-xl font-semibold text-black">Roll to piece</h3>
-          <p className="mt-1 text-sm text-gray-600">
-            Cut a length from a roll/remnant. If a piece already exists for the same family code, color, and cut length, stock is added to it instead of creating a new QR.
-          </p>
+          <h3 className="text-xl font-semibold text-black">{t('itemConversion.rollToPieceTitle')}</h3>
+          <p className="mt-1 text-sm text-gray-600">{t('itemConversion.rollToPieceDescription')}</p>
 
           <div className="mt-4 grid gap-3 md:grid-cols-[1fr_auto]">
-            <input
+            <QrScanInput
               value={rollSourceId}
-              onChange={(event) => setRollSourceId(event.target.value)}
-              className="w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
-              placeholder="Scan or enter roll ID"
+              onChange={setRollSourceId}
+              onScan={(value) => {
+                setRollSourceId(value);
+                void loadItem(value, setRollSource);
+              }}
+              placeholder={t('itemConversion.rollScanPlaceholder')}
             />
             <button type="button" onClick={() => loadItem(rollSourceId, setRollSource)} className="btn-primary">
-              Load roll
+              {t('common.loadRoll')}
             </button>
           </div>
 
           <div className="mt-4">{renderItemSummary(rollSource)}</div>
 
-          <label className="mt-4 block text-sm font-medium text-gray-700">Meters to cut</label>
+          <label className="mt-4 block text-sm font-medium text-gray-700">{t('itemConversion.metersToCut')}</label>
           <input
             type="number"
             min="0.01"
@@ -473,7 +489,7 @@ const ItemConversion: React.FC = () => {
           />
 
           <button type="button" onClick={cutRollToPiece} disabled={isProcessing} className="btn-primary mt-4 w-full">
-            {isProcessing ? 'Cutting...' : 'Cut roll to piece'}
+            {isProcessing ? t('itemConversion.cutting') : t('itemConversion.cutRollToPiece')}
           </button>
         </section>
       </div>
@@ -487,16 +503,16 @@ const ItemConversion: React.FC = () => {
               <img src={summary.qrCodeDataUrl} alt={`QR code for ${summary.newItemId}`} className="h-44 w-44" />
             </div>
             <div className="rounded-2xl bg-white p-4 text-sm">
-              <div className="font-semibold text-black">New QR item</div>
+              <div className="font-semibold text-black">{t('itemConversion.newQrItem')}</div>
               <div className="break-all text-gray-700">{summary.newItemId}</div>
-              <div className="mt-3 font-semibold text-black">Linked source</div>
+              <div className="mt-3 font-semibold text-black">{t('itemConversion.linkedSourceLabel')}</div>
               <div className="break-all text-gray-700">{summary.sourceId}</div>
               <a
                 className="mt-4 inline-flex rounded-xl bg-black px-4 py-2 text-sm font-semibold text-white"
                 href={summary.qrCodeDataUrl}
                 download={`${summary.newItemId}-qr.png`}
               >
-                Download QR
+                {t('itemConversion.downloadQr')}
               </a>
             </div>
           </div>
