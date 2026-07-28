@@ -36,20 +36,20 @@ const EMPLOYEE_ACCESS_KEY = 'textile-erp-employee-access-rules';
 const COMMISSION_SETTINGS_KEY = 'textile-erp-commission-settings';
 const ALWAYS_VISIBLE_ROUTES = new Set(['/task-employee']);
 
-export const dashboardSections: Array<{ key: DashboardSectionKey; label: string; route: string }> = [
-  { key: 'dashboard', label: 'Dashboard', route: '/dashboard' },
-  { key: 'inventory', label: 'Inventory', route: '/inventory' },
-  { key: 'itemConversion', label: 'Item Conversion', route: '/inventory/convert' },
-  { key: 'sales', label: 'Sales', route: '/sales' },
-  { key: 'dailySales', label: 'Daily Sales', route: '/sales/daily' },
-  { key: 'historySales', label: 'History Sales', route: '/sales/history' },
-  { key: 'owedMoney', label: 'Owed Money', route: '/sales/owed' },
-  { key: 'tasks', label: 'Tasks', route: '/tasks' },
-  { key: 'taskEmployee', label: 'Task Employee', route: '/task-employee' },
-  { key: 'dataAnalysis', label: 'Data Analysis', route: '/analytics' },
-  { key: 'trusteeCommission', label: 'Trustee Commission', route: '/trustee-commission' },
-  { key: 'exchange', label: 'Exchange', route: '/exchange' },
-  { key: 'itemInput', label: 'New Item', route: '/item-input' },
+export const dashboardSections: Array<{ key: DashboardSectionKey; labelKey: string; route: string }> = [
+  { key: 'dashboard', labelKey: 'nav.dashboard', route: '/dashboard' },
+  { key: 'inventory', labelKey: 'nav.inventory', route: '/inventory' },
+  { key: 'itemConversion', labelKey: 'nav.itemConversion', route: '/inventory/convert' },
+  { key: 'sales', labelKey: 'nav.sales', route: '/sales' },
+  { key: 'dailySales', labelKey: 'nav.dailySales', route: '/sales/daily' },
+  { key: 'historySales', labelKey: 'nav.historySales', route: '/sales/history' },
+  { key: 'owedMoney', labelKey: 'nav.owedMoney', route: '/sales/owed' },
+  { key: 'tasks', labelKey: 'nav.tasks', route: '/tasks' },
+  { key: 'taskEmployee', labelKey: 'nav.taskEmployee', route: '/task-employee' },
+  { key: 'dataAnalysis', labelKey: 'nav.dataAnalysis', route: '/analytics' },
+  { key: 'trusteeCommission', labelKey: 'nav.trusteeCommission', route: '/trustee-commission' },
+  { key: 'exchange', labelKey: 'nav.exchange', route: '/exchange' },
+  { key: 'itemInput', labelKey: 'nav.newItem', route: '/item-input' },
 ];
 
 const readJson = <T,>(key: string, fallback: T): T => {

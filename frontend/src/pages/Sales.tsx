@@ -1,8 +1,21 @@
 import React, { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import QrScanInput from '../components/QrScanInput';
 import api from '../lib/api';
 import { getCurrentUser } from '../lib/auth';
 import { getItemMinimumPrice } from '../lib/dashboardSettings';
-import { createCuttingTaskFromSale, type BranchCode } from '../lib/taskSettings';
+import { completeCuttingTasksAfterRollToPiece, maybeCreateCuttingTaskAfterPieceSale } from '../lib/cuttingTasks';
+import { sellCutPiece } from '../lib/cutAndSell';
+import { getColorLabel } from '../lib/colorLabels';
+import { resolveInventoryItem } from '../lib/inventoryLookup';
+import { isBelowRemnantThreshold } from '../lib/inventoryRules';
+import { printPieceInventoryLabel } from '../lib/pieceLabel';
+import {
+  cutRollToPieceStock,
+  itemSubCode,
+  type RollInventoryItem,
+} from '../lib/rollToPiece';
+import type { BranchCode } from '../lib/taskSettings';
 import {
   formatPackageComponentsSold,
   formatPackageStockSummary,
@@ -60,10 +73,12 @@ type InventoryLookupItem = {
   packageComponentStock?: Record<string, number>;
 };
 
-const packagePriceLabel = (isPiecePackage?: boolean, mode?: PackageSaleMode) => {
-  if (isPiecePackage && mode === 'FULL') return 'Price per package';
-  if (isPiecePackage && mode === 'PARTIAL') return 'Sale price (total for selected pieces)';
-  return 'Unit price';
+import type { TFunction } from 'i18next';
+
+const packagePriceLabel = (t: TFunction, isPiecePackage?: boolean, mode?: PackageSaleMode) => {
+  if (isPiecePackage && mode === 'FULL') return t('sales.pricePerPackage');
+  if (isPiecePackage && mode === 'PARTIAL') return t('sales.salePriceTotal');
+  return t('sales.unitPrice');
 };
 
 const branchOptions = ['A', 'B', 'C', 'E', 'F'];
@@ -80,16 +95,22 @@ const clothOptions = ['Silk', 'Velvet', 'Cotton', 'Linen'];
 const soldAsUnitForItem = (item: InventoryLookupItem): 'METER' | 'PIECE' =>
   item.type === 'PIECE' ? 'PIECE' : 'METER';
 
-const amountLabelForUnit = (unit?: 'METER' | 'PIECE', isPiecePackage?: boolean, mode?: PackageSaleMode) => {
-  if (isPiecePackage && mode === 'FULL') return 'Packages';
-  if (isPiecePackage && mode === 'PARTIAL') return 'Selected pieces';
-  return unit === 'PIECE' ? 'Quantity (pieces)' : 'Meters';
+const amountLabelForUnit = (
+  t: TFunction,
+  unit?: 'METER' | 'PIECE',
+  isPiecePackage?: boolean,
+  mode?: PackageSaleMode
+) => {
+  if (isPiecePackage && mode === 'FULL') return t('sales.packages');
+  if (isPiecePackage && mode === 'PARTIAL') return t('sales.selectedPieces');
+  return unit === 'PIECE' ? t('sales.quantityPieces') : t('common.meters');
 };
 
 const buildInitialPackageSelection = (components: PackageComponent[]): PackageComponentSold[] =>
   components.map((component) => ({ name: component.name, quantity: 0 }));
 
 const SalesView: React.FC = () => {
+  const { t } = useTranslation();
   const [branch, setBranch] = useState<string>('A');
   const [cart, setCart] = useState<SaleLine[]>([]);
   const [customerName, setCustomerName] = useState('Walk-in');
@@ -105,6 +126,15 @@ const SalesView: React.FC = () => {
   const [minimumPriceMessage, setMinimumPriceMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [rollCutScan, setRollCutScan] = useState({ rollId: '', cutMeters: 2.25, price: 15 });
+  const [rollCutSource, setRollCutSource] = useState<RollInventoryItem | null>(null);
+  const [isCuttingRoll, setIsCuttingRoll] = useState(false);
+  const [cutSaleSummary, setCutSaleSummary] = useState<{
+    pieceItemId: string;
+    qrCodeDataUrl: string;
+    rollSourceId: string;
+    labelPrinted: boolean;
+  } | null>(null);
 
   const detectedPackageComponents = useMemo(
     () => parsePackageComponents(detectedScanItem?.packageComponents),
@@ -168,33 +198,8 @@ const SalesView: React.FC = () => {
     ]);
   };
 
-  const resolveInventoryItem = async (rawCode: string, sourceBranch: string) => {
-    const code = rawCode.trim();
-    if (!code) return null;
-
-    try {
-      const response = await api.get(`/inventory/${encodeURIComponent(code)}`);
-      return response.data as InventoryLookupItem;
-    } catch (error: any) {
-      if (error?.response?.status !== 404 || !/^\d+$/.test(code)) {
-        throw error;
-      }
-    }
-
-    const response = await api.get('/inventory', {
-      params: {
-        branchId: BRANCH_MAP[sourceBranch] ?? sourceBranch,
-        code,
-        pageSize: 1,
-      },
-    });
-    const item = response.data?.items?.[0];
-    if (!item) throw new Error(`Inventory code ${code} was not found for branch ${sourceBranch}`);
-    return item as InventoryLookupItem;
-  };
-
-  const detectScanItem = async () => {
-    const item = await resolveInventoryItem(scanState.inventoryItemId, scanState.sourceBranch);
+  const detectScanItemForCode = async (inventoryItemId: string, sourceBranch: string) => {
+    const item = await resolveInventoryItem<InventoryLookupItem>(inventoryItemId, sourceBranch, BRANCH_MAP);
     setDetectedScanItem(item);
     if (item) {
       const unit = soldAsUnitForItem(item);
@@ -206,9 +211,11 @@ const SalesView: React.FC = () => {
           price: Math.max(current.price, savedPrice.minimumPrice),
         }));
         setMinimumPriceMessage(
-          `Minimum price for ${item.id}: $${savedPrice.minimumPrice.toFixed(2)} per ${
-            savedPrice.unit === 'PIECE' ? 'piece' : 'meter'
-          }.`
+          t('sales.minimumPriceFor', {
+            id: item.id,
+            price: savedPrice.minimumPrice.toFixed(2),
+            unit: savedPrice.unit === 'PIECE' ? t('common.piece') : t('common.meter'),
+          })
         );
       } else {
         setMinimumPriceMessage(null);
@@ -223,17 +230,42 @@ const SalesView: React.FC = () => {
           quantity: item.quantity,
         });
         setScanMessage(
-          `Piece package detected: ${formatPackageSummary(components)}. Enter the sale price manually. In stock: ${formatPackageStockSummary(stock)}.`
+          t('sales.piecePackageDetected', {
+            summary: formatPackageSummary(components),
+            stock: formatPackageStockSummary(stock),
+          })
         );
       } else {
         setPackageSaleMode('FULL');
         setPackageComponentsSold([]);
         setScanMessage(
-          `${item.type} detected: enter ${unit === 'PIECE' ? 'piece quantity' : 'decimal meters'}.`
+          t('sales.itemDetected', {
+            type: item.type,
+            unit:
+              unit === 'PIECE' ? t('sales.pieceQuantity') : t('sales.decimalMeters'),
+          })
         );
       }
     }
     return item;
+  };
+
+  const detectScanItem = () =>
+    detectScanItemForCode(scanState.inventoryItemId, scanState.sourceBranch);
+
+  const handleScanLookupError = (error: unknown, scannedCode?: string) => {
+    const apiError = error as { response?: { status?: number; data?: { error?: string; message?: string } }; message?: string };
+    const status = apiError?.response?.status;
+    const body = apiError?.response?.data;
+    const baseMessage = body?.error ?? body?.message ?? apiError?.message;
+    setScanMessage(
+      scannedCode
+        ? t('qrScanner.lookupFailedWithCode', { code: scannedCode, message: baseMessage ?? t('qrScanner.itemNotFound') })
+        : t('common.notFound', {
+            status: status ? t('common.notFoundStatus', { status }) : '',
+            message: baseMessage,
+          })
+    );
   };
 
   const updatePackagePieceSold = (name: string, quantity: number) => {
@@ -249,10 +281,10 @@ const SalesView: React.FC = () => {
   const addInventoryLine = async () => {
     const inventoryItemId = scanState.inventoryItemId.trim();
     if (!inventoryItemId) {
-      return alert('Enter an item ID to simulate a scanned inventory line.');
+      return alert(t('sales.enterItemId'));
     }
     if (scanState.price <= 0) {
-      return alert('Enter a valid price for the scanned item.');
+      return alert(t('sales.enterValidPrice'));
     }
 
     try {
@@ -265,7 +297,7 @@ const SalesView: React.FC = () => {
 
       let quantity = soldAsUnit === 'PIECE' ? Math.floor(scanState.amount) : scanState.amount;
       const price = scanState.price;
-      let description = `${item.type} from Branch ${scanState.sourceBranch}`;
+      let description = t('sales.descriptionInventory', { type: item.type, branch: scanState.sourceBranch });
       let packageSummary = '';
       let linePackageMode: PackageSaleMode | undefined;
       let packagesSold: number | undefined;
@@ -274,27 +306,27 @@ const SalesView: React.FC = () => {
       if (isPiecePackage) {
         if (packageSaleMode === 'FULL') {
           packagesSold = Math.floor(scanState.amount);
-          if (packagesSold <= 0) return alert('Enter at least one package to sell.');
+          if (packagesSold <= 0) return alert(t('sales.enterOnePackage'));
           quantity = packagesSold;
           linePackageMode = 'FULL';
-          packageSummary = `${packagesSold} full package(s): ${formatPackageSummary(components)}`;
-          description = `Piece package from Branch ${scanState.sourceBranch}`;
+          packageSummary = t('sales.fullPackagesSummary', { count: packagesSold, summary: formatPackageSummary(components) });
+          description = t('sales.descriptionPackage', { branch: scanState.sourceBranch });
         } else {
           componentsSold = packageComponentsSold.filter((component) => component.quantity > 0);
           if (componentsSold.length === 0) {
-            return alert('Select at least one package piece to sell.');
+            return alert(t('sales.selectPackagePiece'));
           }
           quantity = 1;
           linePackageMode = 'PARTIAL';
           packageSummary = formatPackageComponentsSold(componentsSold);
-          description = `Partial package from Branch ${scanState.sourceBranch}`;
+          description = t('sales.descriptionPartial', { branch: scanState.sourceBranch });
         }
       } else if (quantity <= 0) {
-        return alert('Enter at least one piece or more than 0 meters.');
+        return alert(t('sales.enterQuantityOrMeters'));
       }
 
       if (savedPrice && price < savedPrice.minimumPrice) {
-        return alert(`Minimum price for this item is $${savedPrice.minimumPrice.toFixed(2)}.`);
+        return alert(t('sales.minimumPriceAlert', { price: savedPrice.minimumPrice.toFixed(2) }));
       }
 
       setCart((current) => [
@@ -328,9 +360,10 @@ const SalesView: React.FC = () => {
       const status = error?.response?.status;
       const body = error?.response?.data;
       alert(
-        `Unable to load scanned item${status ? ` (status ${status})` : ''}: ${
-          body?.error ?? body?.message ?? error?.message
-        }`
+        t('sales.unableToLoadItem', {
+          status: status ? t('common.requestFailedStatus', { status }) : '',
+          message: body?.error ?? body?.message ?? error?.message,
+        })
       );
     }
   };
@@ -339,11 +372,151 @@ const SalesView: React.FC = () => {
     setCart((current) => current.filter((_, idx) => idx !== index));
   };
 
+  const loadRollForSaleCut = async (scannedRollId?: string) => {
+    const rollId = (scannedRollId ?? rollCutScan.rollId).trim();
+    if (!rollId) {
+      return alert(t('itemConversion.enterItemIdFirst'));
+    }
+
+    if (scannedRollId) {
+      setRollCutScan((current) => ({ ...current, rollId: scannedRollId }));
+    }
+
+    try {
+      const response = await api.get(`/inventory/${encodeURIComponent(rollId)}`);
+      const item = response.data as RollInventoryItem;
+      if (item.type !== 'ROLL' && item.type !== 'REMANENT') {
+        return alert(t('itemConversion.onlyRollsRemnants'));
+      }
+      setRollCutSource(item);
+      setRollCutScan((current) => ({
+        ...current,
+        price: itemSubCode(item),
+      }));
+      setCutSaleSummary(null);
+    } catch (error: any) {
+      const status = error?.response?.status;
+      const body = error?.response?.data;
+      alert(
+        t('sales.unableToLoadItem', {
+          status: status ? t('common.requestFailedStatus', { status }) : '',
+          message: body?.error ?? body?.message ?? error?.message,
+        })
+      );
+    }
+  };
+
+  const cutRollSellAndPrint = async () => {
+    if (!rollCutSource) {
+      return alert(t('itemConversion.loadRollFirst'));
+    }
+    const meters = Number(rollCutScan.cutMeters);
+    const price = Number(rollCutScan.price);
+    if (!Number.isFinite(meters) || meters <= 0) {
+      return alert(t('itemConversion.enterValidMetersToCut'));
+    }
+    if (isBelowRemnantThreshold(meters)) {
+      return alert(t('sales.cutOnlyPieces'));
+    }
+    if (!Number.isFinite(price) || price <= 0) {
+      return alert(t('sales.enterValidPrice'));
+    }
+    if (!customerName.trim() || !customerPhone.trim()) {
+      return alert(t('sales.provideCustomer'));
+    }
+    const currentUser = getCurrentUser();
+    if (!currentUser) {
+      return alert(t('sales.mustBeLoggedIn'));
+    }
+    if (meters > Number(rollCutSource.meters ?? 0)) {
+      return alert(t('itemConversion.cutExceedsRoll'));
+    }
+
+    setIsCuttingRoll(true);
+    setSuccessMessage(null);
+    setCutSaleSummary(null);
+
+    try {
+      const result = await cutRollToPieceStock(rollCutSource, meters, { uniquePiece: true });
+      await sellCutPiece({
+        pieceItemId: result.pieceItemId,
+        colorId: rollCutSource.colorId,
+        branchId: rollCutSource.branchId,
+        employeeId: currentUser.id,
+        customerName: customerName.trim(),
+        customerPhone: customerPhone.trim(),
+        soldPrice: price,
+        rollSourceId: rollCutSource.id,
+        qrCodeValue: result.pieceItemId,
+        qrCodeDataUrl: result.qrCodeDataUrl,
+      });
+
+      const labelPrinted = printPieceInventoryLabel({
+        t,
+        itemId: result.pieceItemId,
+        qrDataUrl: result.qrCodeDataUrl,
+        familyCode: rollCutSource.code,
+        subCode: itemSubCode(rollCutSource),
+        type: 'PIECE',
+        pieceLength: result.pieceLength,
+        colorName: rollCutSource.color?.name,
+        branchId: rollCutSource.branchId,
+      });
+
+      completeCuttingTasksAfterRollToPiece({
+        rollItemId: rollCutSource.id,
+        branchId: rollCutSource.branchId,
+        code: rollCutSource.code,
+        colorName: rollCutSource.color?.name,
+        newPieceId: result.pieceItemId,
+      });
+
+      const refreshed = await api.get(`/inventory/${encodeURIComponent(rollCutSource.id)}`);
+      setRollCutSource(refreshed.data as RollInventoryItem);
+      setCutSaleSummary({
+        pieceItemId: result.pieceItemId,
+        qrCodeDataUrl: result.qrCodeDataUrl,
+        rollSourceId: rollCutSource.id,
+        labelPrinted,
+      });
+      setSuccessMessage(
+        labelPrinted ? t('sales.cutSellPrintComplete') : t('sales.cutSellComplete')
+      );
+    } catch (error: any) {
+      const status = error?.response?.status;
+      const body = error?.response?.data;
+      alert(
+        t('sales.cutSellFailed', {
+          status: status ? t('common.requestFailedStatus', { status }) : '',
+          message: body?.error ?? body?.message ?? error?.message ?? t('itemConversion.failedToCut'),
+        })
+      );
+    } finally {
+      setIsCuttingRoll(false);
+    }
+  };
+
+  const reprintCutSaleLabel = () => {
+    if (!cutSaleSummary || !rollCutSource) return;
+    const printed = printPieceInventoryLabel({
+      t,
+      itemId: cutSaleSummary.pieceItemId,
+      qrDataUrl: cutSaleSummary.qrCodeDataUrl,
+      familyCode: rollCutSource.code,
+      subCode: itemSubCode(rollCutSource),
+      type: 'PIECE',
+      pieceLength: Number(rollCutScan.cutMeters),
+      colorName: rollCutSource.color?.name,
+      branchId: rollCutSource.branchId,
+    });
+    if (!printed) alert(t('errors.allowPopups'));
+  };
+
   const createSale = async () => {
-    if (!branch) return alert('Select a branch');
-    if (cart.length === 0) return alert('Add at least one line to the sale');
-    if (!customerName.trim() || !customerPhone.trim()) return alert('Provide customer name and phone');
-    if (paymentStatus === 'PARTIAL' && Number(amountPaid) <= 0) return alert('Enter a partial payment amount');
+    if (!branch) return alert(t('sales.selectBranch'));
+    if (cart.length === 0) return alert(t('sales.addLine'));
+    if (!customerName.trim() || !customerPhone.trim()) return alert(t('sales.provideCustomer'));
+    if (paymentStatus === 'PARTIAL' && Number(amountPaid) <= 0) return alert(t('sales.enterPartialPayment'));
 
     setIsSubmitting(true);
     setSuccessMessage(null);
@@ -351,7 +524,7 @@ const SalesView: React.FC = () => {
     const currentUser = getCurrentUser();
     if (!currentUser) {
       setIsSubmitting(false);
-      return alert('You must be logged in to create a sale');
+      return alert(t('sales.mustBeLoggedIn'));
     }
 
     try {
@@ -425,27 +598,34 @@ const SalesView: React.FC = () => {
           throw postErr;
         }
       }
-      cart.forEach((line) => {
-        if (line.type !== 'inventory' || line.soldAsUnit !== 'PIECE' || !line.sourceItemId) return;
-        createCuttingTaskFromSale({
-          branch: (line.sourceBranch as BranchCode) || (branch as BranchCode),
-          code: line.code,
-          colorName: line.colorName,
-          sourceItemId: line.sourceItemId,
-          soldItemId: line.inventoryItemId,
-          saleId,
-          assignedTo: 'Inventory team',
-        });
-      });
-      setSuccessMessage(`Sale created for branch ${branch}. Total ${saleTotal.toFixed(2)}`);
+      let cuttingTasksCreated = 0;
+      for (const line of cart) {
+        if (line.type !== 'inventory' || line.soldAsUnit !== 'PIECE') continue;
+        try {
+          const task = await maybeCreateCuttingTaskAfterPieceSale({
+            soldItemId: line.inventoryItemId,
+            saleId,
+            branchCode: (line.sourceBranch as BranchCode) || (branch as BranchCode),
+            assignedTo: 'Inventory team',
+          });
+          if (task) cuttingTasksCreated += 1;
+        } catch (taskError) {
+          console.warn('Failed to evaluate cutting task after piece sale', taskError);
+        }
+      }
+      setSuccessMessage(
+        cuttingTasksCreated > 0
+          ? t('sales.saleCreatedWithTasks', { branch, total: saleTotal.toFixed(2), count: cuttingTasksCreated })
+          : t('sales.saleCreated', { branch, total: saleTotal.toFixed(2) })
+      );
       setCart([]);
       setAmountPaid('0');
       setPaymentStatus('FULL');
     } catch (err: any) {
       const status = err?.response?.status;
       const body = err?.response?.data;
-      const msg = body?.error ?? body?.message ?? err?.message ?? 'Failed to create sale';
-      alert(`Request failed${status ? ` (status ${status})` : ''}: ${msg}`);
+      const msg = body?.error ?? body?.message ?? err?.message ?? t('sales.failedToCreate');
+      alert(t('common.requestFailed', { status: status ? t('common.requestFailedStatus', { status }) : '', message: msg }));
       console.error('Create sale error:', err);
     } finally {
       setIsSubmitting(false);
@@ -456,12 +636,12 @@ const SalesView: React.FC = () => {
     <div className="p-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-black">Sales</h2>
+          <h2 className="text-2xl font-bold text-black">{t('sales.title')}</h2>
           <p className="text-sm text-gray-600 max-w-xl">
-            Select a branch, add inventory or plain cloth lines, and create a sale.
+            {t('sales.subtitle')}
           </p>
         </div>
-        <div className="text-sm text-gray-500">Branch: {branch}</div>
+        <div className="text-sm text-gray-500">{t('sales.currentBranch', { branch })}</div>
       </div>
 
       <section className="mt-6 grid grid-cols-2 sm:grid-cols-5 gap-3">
@@ -492,36 +672,32 @@ const SalesView: React.FC = () => {
       <div className="mt-8 grid gap-6 lg:grid-cols-[1.4fr_1fr]">
         <div className="space-y-6">
           <section className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
-            <h3 className="text-lg font-semibold text-black">Inventory Item Scan</h3>
+            <h3 className="text-lg font-semibold text-black">{t('sales.inventoryScanTitle')}</h3>
             <p className="text-sm text-gray-500 mb-4">
-              Simulate scanning a QR inventory item. This line will include a source branch and inventoryItemId.
+              {t('sales.inventoryScanDescription')}
             </p>
             <div className="grid gap-3 sm:grid-cols-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700">Item ID</label>
-                <input
+                <label className="block text-sm font-medium text-gray-700">{t('sales.itemId')}</label>
+                <QrScanInput
+                  className="mt-1"
                   value={scanState.inventoryItemId}
-                  onBlur={() => {
-                    if (scanState.inventoryItemId.trim()) {
-                      detectScanItem().catch((error: any) => {
-                        const status = error?.response?.status;
-                        const body = error?.response?.data;
-                        setScanMessage(
-                          `Not found${status ? ` (${status})` : ''}: ${
-                            body?.error ?? body?.message ?? error?.message
-                          }`
-                        );
-                      });
-                    }
-                  }}
-                  onChange={(e) => {
+                  onChange={(value) => {
                     setDetectedScanItem(null);
                     setScanMessage(null);
                     setMinimumPriceMessage(null);
-                    setScanState((s) => ({ ...s, inventoryItemId: e.target.value }));
+                    setScanState((s) => ({ ...s, inventoryItemId: value }));
                   }}
-                  className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
-                  placeholder="Item ID or numeric code"
+                  onScan={(value) => {
+                    setDetectedScanItem(null);
+                    setScanMessage(null);
+                    setMinimumPriceMessage(null);
+                    setScanState((s) => ({ ...s, inventoryItemId: value }));
+                    detectScanItemForCode(value, scanState.sourceBranch).catch((error) =>
+                      handleScanLookupError(error, value)
+                    );
+                  }}
+                  placeholder={t('sales.itemIdPlaceholder')}
                 />
                 {scanMessage && <p className="mt-2 text-xs text-gray-500">{scanMessage}</p>}
                 {minimumPriceMessage && (
@@ -529,7 +705,7 @@ const SalesView: React.FC = () => {
                 )}
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700">Source Branch</label>
+                <label className="block text-sm font-medium text-gray-700">{t('sales.sourceBranch')}</label>
                 <select
                   value={scanState.sourceBranch}
                   onChange={(e) => {
@@ -541,13 +717,14 @@ const SalesView: React.FC = () => {
                   className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
                 >
                   {branchOptions.map((option) => (
-                    <option key={option} value={option}>Branch {option}</option>
+                    <option key={option} value={option}>{t('common.branchLabel', { code: option })}</option>
                   ))}
                 </select>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">
                   {amountLabelForUnit(
+                    t,
                     detectedScanItem ? soldAsUnitForItem(detectedScanItem) : undefined,
                     detectedScanItem?.isPiecePackage,
                     packageSaleMode
@@ -555,7 +732,7 @@ const SalesView: React.FC = () => {
                 </label>
                 {detectedScanItem?.isPiecePackage && packageSaleMode === 'PARTIAL' ? (
                   <div className="mt-1 rounded-xl border border-gray-300 bg-gray-50 px-3 py-2 text-sm text-gray-700">
-                    {selectedPackagePieces} piece(s) selected
+                    {t('sales.piecesSelected', { count: selectedPackagePieces })}
                   </div>
                 ) : (
                   <input
@@ -570,7 +747,7 @@ const SalesView: React.FC = () => {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">
-                  {packagePriceLabel(detectedScanItem?.isPiecePackage, packageSaleMode)}
+                  {packagePriceLabel(t, detectedScanItem?.isPiecePackage, packageSaleMode)}
                 </label>
                 <input
                   type="number"
@@ -585,12 +762,12 @@ const SalesView: React.FC = () => {
 
             {detectedScanItem?.isPiecePackage && detectedPackageComponents.length > 0 && (
               <section className="mt-5 rounded-2xl border border-magenta-200 bg-magenta-50 p-4">
-                <p className="text-sm font-semibold text-black">Piece package sale</p>
+                <p className="text-sm font-semibold text-black">{t('sales.piecePackageSale')}</p>
                 <p className="mt-1 text-sm text-gray-600">
-                  Package set: {formatPackageSummary(detectedPackageComponents)}
+                  {t('sales.packageSet', { summary: formatPackageSummary(detectedPackageComponents) })}
                 </p>
                 <p className="mt-1 text-sm text-gray-600">
-                  Available stock: {formatPackageStockSummary(detectedPackageStock)}
+                  {t('sales.availableStock', { stock: formatPackageStockSummary(detectedPackageStock) })}
                 </p>
 
                 <div className="mt-4 flex flex-wrap gap-2">
@@ -621,7 +798,7 @@ const SalesView: React.FC = () => {
                 {packageSaleMode === 'PARTIAL' && (
                   <div className="mt-4 space-y-2">
                     <p className="text-sm font-semibold text-gray-800">
-                      Choose which package pieces are sold
+                      {t('sales.choosePackagePieces')}
                     </p>
                     {packageComponentsSold.map((component) => (
                       <div
@@ -630,7 +807,7 @@ const SalesView: React.FC = () => {
                       >
                         <span className="text-sm font-medium text-gray-800">{component.name}</span>
                         <span className="text-xs text-gray-500">
-                          In stock: {detectedPackageStock[component.name] ?? 0}
+                          {t('sales.inStock', { count: detectedPackageStock[component.name] ?? 0 })}
                         </span>
                         <input
                           type="number"
@@ -646,11 +823,11 @@ const SalesView: React.FC = () => {
                     ))}
                     {remainingPackagePreview && (
                       <p className="text-sm text-gray-700">
-                        Leftover package pieces after sale:{' '}
+                        {t('sales.leftoverPieces')}{' '}
                         <strong>
                           {Object.keys(remainingPackagePreview).length > 0
                             ? formatPackageStockSummary(remainingPackagePreview)
-                            : 'none'}
+                            : t('common.none')}
                         </strong>
                       </p>
                     )}
@@ -664,18 +841,126 @@ const SalesView: React.FC = () => {
               className="btn-primary mt-4"
               onClick={addInventoryLine}
             >
-              Add scanned item
+              {t('sales.addScannedItem')}
             </button>
           </section>
 
+          <section className="rounded-3xl border border-magenta-200 bg-magenta-50 p-6 shadow-sm">
+            <h3 className="text-lg font-semibold text-black">{t('sales.cutFromRollTitle')}</h3>
+            <p className="mb-4 text-sm text-gray-600">{t('sales.cutFromRollDescription')}</p>
+            <div className="grid gap-3 sm:grid-cols-4">
+              <div className="sm:col-span-2">
+                <label className="block text-sm font-medium text-gray-700">{t('sales.rollId')}</label>
+                <div className="mt-1 grid gap-2 sm:grid-cols-[1fr_auto]">
+                  <QrScanInput
+                    value={rollCutScan.rollId}
+                    onChange={(value) => {
+                      setRollCutScan((current) => ({ ...current, rollId: value }));
+                      setRollCutSource(null);
+                    }}
+                    onScan={(value) => {
+                      setRollCutScan((current) => ({ ...current, rollId: value }));
+                      setRollCutSource(null);
+                      void loadRollForSaleCut(value);
+                    }}
+                    placeholder={t('sales.rollIdPlaceholder')}
+                  />
+                  <button type="button" className="btn-secondary" onClick={() => void loadRollForSaleCut()}>
+                    {t('sales.loadRoll')}
+                  </button>
+                </div>
+                {rollCutSource && (
+                  <p className="mt-2 break-all text-xs text-gray-600">
+                    {rollCutSource.id} · {rollCutSource.type} ·{' '}
+                    {getColorLabel(t, rollCutSource.color?.name) || rollCutSource.colorId}
+                  </p>
+                )}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">{t('sales.metersToCut')}</label>
+                <input
+                  type="number"
+                  min="2"
+                  step="0.01"
+                  value={rollCutScan.cutMeters}
+                  onChange={(e) =>
+                    setRollCutScan((current) => ({ ...current, cutMeters: Number(e.target.value) }))
+                  }
+                  className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">{t('sales.unitPrice')}</label>
+                <input
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  value={rollCutScan.price}
+                  onChange={(e) =>
+                    setRollCutScan((current) => ({ ...current, price: Number(e.target.value) }))
+                  }
+                  className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
+                />
+              </div>
+            </div>
+            <button
+              type="button"
+              className="btn-primary mt-4"
+              onClick={cutRollSellAndPrint}
+              disabled={isCuttingRoll}
+            >
+              {isCuttingRoll ? t('sales.cuttingRoll') : t('sales.cutSellAndPrint')}
+            </button>
+
+            {cutSaleSummary && (
+              <div className="mt-5 rounded-2xl border border-green-200 bg-white p-4">
+                <p className="text-sm font-semibold text-green-800">{t('sales.saleRecordedForPiece')}</p>
+                {cutSaleSummary.labelPrinted && (
+                  <p className="mt-1 text-sm text-green-700">{t('sales.labelSentToPrinter')}</p>
+                )}
+                <div className="mt-4 grid gap-4 md:grid-cols-[220px_1fr]">
+                  <div className="rounded-2xl bg-gray-50 p-3">
+                    <img
+                      src={cutSaleSummary.qrCodeDataUrl}
+                      alt={t('itemConversion.qrAlt', { id: cutSaleSummary.pieceItemId })}
+                      className="h-44 w-44"
+                    />
+                  </div>
+                  <div className="text-sm">
+                    <div className="font-semibold text-black">{t('itemConversion.newQrItem')}</div>
+                    <div className="break-all text-gray-700">{cutSaleSummary.pieceItemId}</div>
+                    <div className="mt-3 font-semibold text-black">{t('itemConversion.linkedSourceLabel')}</div>
+                    <div className="break-all text-gray-700">{cutSaleSummary.rollSourceId}</div>
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={reprintCutSaleLabel}
+                        className="rounded-xl bg-black px-4 py-2 text-sm font-semibold text-white"
+                      >
+                        {t('itemInput.printLabel')}
+                      </button>
+                      <a
+                        className="inline-flex rounded-xl border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700"
+                        href={cutSaleSummary.qrCodeDataUrl}
+                        download={`${cutSaleSummary.pieceItemId}-qr.png`}
+                      >
+                        {t('itemConversion.downloadQr')}
+                      </a>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </section>
+
           <section className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
-            <h3 className="text-lg font-semibold text-black">Plain Cloth Line</h3>
+            <h3 className="text-lg font-semibold text-black">{t('sales.plainClothTitle')}</h3>
             <p className="text-sm text-gray-500 mb-4">
-              Add a plain cloth line item with meters and a per-meter price.
+              {t('sales.plainClothDescription')}
             </p>
             <div className="grid gap-3 sm:grid-cols-3">
               <div>
-                <label className="block text-sm font-medium text-gray-700">Fabric</label>
+                <label className="block text-sm font-medium text-gray-700">{t('common.fabric')}</label>
                 <select
                   value={plainCloth.clothName}
                   onChange={(e) => setPlainCloth((current) => ({ ...current, clothName: e.target.value }))}
@@ -687,7 +972,7 @@ const SalesView: React.FC = () => {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700">Meters</label>
+                <label className="block text-sm font-medium text-gray-700">{t('common.meters')}</label>
                 <input
                   type="number"
                   min="0.1"
@@ -698,7 +983,7 @@ const SalesView: React.FC = () => {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700">Price / meter</label>
+                <label className="block text-sm font-medium text-gray-700">{t('sales.pricePerMeter')}</label>
                 <input
                   type="number"
                   min="1"
@@ -721,32 +1006,32 @@ const SalesView: React.FC = () => {
 
         <aside className="space-y-6">
           <div className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
-            <h3 className="text-lg font-semibold text-black">Sale Summary</h3>
+            <h3 className="text-lg font-semibold text-black">{t('sales.saleSummary')}</h3>
             <div className="mt-4 space-y-3 text-sm text-gray-700">
               <div className="flex justify-between">
-                <span>Date</span>
+                <span>{t('common.date')}</span>
                 <span>{new Date().toLocaleString()}</span>
               </div>
               <div className="flex justify-between">
-                <span>Branch</span>
+                <span>{t('common.branch')}</span>
                 <span>{branch}</span>
               </div>
               <div className="flex justify-between">
-                <span>Lines</span>
+                <span>{t('common.lines')}</span>
                 <span className="font-semibold text-black">{String(cart.length)}</span>
               </div>
               <div className="flex justify-between font-semibold">
-                <span>Total</span>
+                <span>{t('common.total')}</span>
                 <span>{`$${saleTotal.toFixed(2)}`}</span>
               </div>
             </div>
           </div>
 
           <div className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
-            <h3 className="text-lg font-semibold text-black">Customer & Payment</h3>
+            <h3 className="text-lg font-semibold text-black">{t('sales.customerAndPayment')}</h3>
             <div className="space-y-3 mt-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700">Customer Name</label>
+                <label className="block text-sm font-medium text-gray-700">{t('sales.customerName')}</label>
                 <input
                   className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
                   value={customerName}
@@ -754,7 +1039,7 @@ const SalesView: React.FC = () => {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700">Customer Phone</label>
+                <label className="block text-sm font-medium text-gray-700">{t('sales.customerPhone')}</label>
                 <input
                   className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
                   value={customerPhone}
@@ -762,19 +1047,19 @@ const SalesView: React.FC = () => {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700">Payment Status</label>
+                <label className="block text-sm font-medium text-gray-700">{t('sales.paymentStatus')}</label>
                 <select
                   value={paymentStatus}
                   onChange={(e) => setPaymentStatus(e.target.value as 'FULL' | 'PARTIAL')}
                   className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
                 >
-                  <option value="FULL">Fully paid</option>
-                  <option value="PARTIAL">Partially paid</option>
+                  <option value="FULL">{t('paymentStatus.fullyPaid')}</option>
+                  <option value="PARTIAL">{t('paymentStatus.partiallyPaid')}</option>
                 </select>
               </div>
               {paymentStatus === 'PARTIAL' && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">Amount paid now</label>
+                  <label className="block text-sm font-medium text-gray-700">{t('sales.amountPaidNow')}</label>
                   <input
                     type="number"
                     min="0"
@@ -783,7 +1068,7 @@ const SalesView: React.FC = () => {
                     onChange={(e) => setAmountPaid(e.target.value)}
                     className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
                   />
-                  <p className="mt-2 text-sm text-gray-500">{`Remaining due: $${dueAmount.toFixed(2)}`}</p>
+                  <p className="mt-2 text-sm text-gray-500">{t('sales.remainingDue', { amount: dueAmount.toFixed(2) })}</p>
                 </div>
               )}
             </div>
@@ -796,7 +1081,7 @@ const SalesView: React.FC = () => {
               onClick={createSale}
               disabled={isSubmitting}
             >
-              {isSubmitting ? 'Creating sale...' : 'Confirm Sale'}
+              {isSubmitting ? t('common.creatingSale') : t('common.confirmSale')}
             </button>
             {successMessage && (
               <p className="mt-4 text-sm text-green-600">{successMessage}</p>
@@ -806,9 +1091,9 @@ const SalesView: React.FC = () => {
       </div>
 
       <section className="mt-8 rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
-        <h3 className="text-lg font-semibold text-black">Cart details</h3>
+        <h3 className="text-lg font-semibold text-black">{t('sales.cartDetails')}</h3>
         {cart.length === 0 ? (
-          <div className="mt-4 text-sm text-gray-500">No line items added yet.</div>
+          <div className="mt-4 text-sm text-gray-500">{t('sales.noLineItems')}</div>
         ) : (
           <div className="mt-4 space-y-3">
             {cart.map((line, index) => (
@@ -820,8 +1105,8 @@ const SalesView: React.FC = () => {
                   <div>
                     <p className="font-semibold text-black">
                       {line.type === 'inventory'
-                        ? `Inventory item ${line.inventoryItemId}`
-                        : `${line.clothName} (Plain cloth)`}
+                        ? t('sales.inventoryItemLine', { id: line.inventoryItemId })
+                        : t('sales.plainClothParen', { name: line.clothName })}
                     </p>
                     <p className="text-sm text-gray-500">
                       {line.type === 'inventory'
@@ -840,7 +1125,7 @@ const SalesView: React.FC = () => {
                   </button>
                 </div>
                 <div className="flex items-center justify-between text-sm text-gray-700">
-                  <span>Line total</span>
+                  <span>{t('common.lineTotal')}</span>
                   <span>{`$${lineTotal(line).toFixed(2)}`}</span>
                 </div>
               </div>

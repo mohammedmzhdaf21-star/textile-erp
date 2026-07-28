@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import api from '../lib/api';
+import { useTranslation } from 'react-i18next';
 
 type BranchCode = 'A' | 'B' | 'C' | 'E' | 'F';
 
@@ -128,6 +129,7 @@ const writeTrusteeRules = (rules: TrusteeRule[]) => {
 };
 
 const TrusteeCommission: React.FC = () => {
+  const { t } = useTranslation();
   const today = new Date();
   const weekAgo = new Date();
   weekAgo.setDate(today.getDate() - 7);
@@ -197,10 +199,10 @@ const TrusteeCommission: React.FC = () => {
 
   const saveRule = () => {
     const parsedPercentage = Number(percentage);
-    if (!trusteeName.trim()) return alert('Enter a trustee employee name.');
-    if (assignedBranches.length === 0) return alert('Choose at least one branch for this trustee.');
+    if (!trusteeName.trim()) return alert(t('trusteeCommission.enterTrusteeName'));
+    if (assignedBranches.length === 0) return alert(t('trusteeCommission.chooseBranch'));
     if (!Number.isFinite(parsedPercentage) || parsedPercentage < 0) {
-      return alert('Enter a valid trustee commission percent.');
+      return alert(t('trusteeCommission.enterValidPercent'));
     }
 
     const normalizedBranches = uniqueBranches(assignedBranches);
@@ -237,7 +239,7 @@ const TrusteeCommission: React.FC = () => {
 
       if (start > end) {
         setSalesByBranch({ A: [], B: [], C: [], E: [], F: [] });
-        setError('From date must be before or equal to To date.');
+        setError(t('trusteeCommission.invalidDateRange'));
         setLoading(false);
         return;
       }
@@ -275,7 +277,7 @@ const TrusteeCommission: React.FC = () => {
       setSalesByBranch({ A: [], B: [], C: [], E: [], F: [] });
       setError(
         `Request failed${status ? ` (status ${status})` : ''}: ${
-          body?.error ?? body?.message ?? err?.message ?? 'Failed to load trustee commission'
+          body?.error ?? body?.message ?? err?.message ?? t('trusteeCommission.failedToLoad')
         }`
       );
     } finally {
@@ -287,9 +289,9 @@ const TrusteeCommission: React.FC = () => {
     <div className="max-w-full overflow-x-hidden p-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-black">Trustee Commission</h2>
+          <h2 className="text-2xl font-bold text-black">{t('trusteeCommission.title')}</h2>
           <p className="mt-1 max-w-xl text-sm text-gray-600">
-            Link a trustee employee to multiple branches and calculate commission from the combined branch sales.
+            {t('trusteeCommission.subtitle')}
           </p>
         </div>
         <button type="button" onClick={loadCommissions} className="btn-primary">
@@ -299,29 +301,29 @@ const TrusteeCommission: React.FC = () => {
 
       <div className="mt-8 grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
         <section className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
-          <h3 className="text-xl font-semibold text-black">Trustee employee rule</h3>
+          <h3 className="text-xl font-semibold text-black">{t('trusteeCommission.ruleTitle')}</h3>
           <p className="mt-1 text-sm text-gray-600">
-            Assign branches such as A, C, and E to one trustee employee.
+            {t('trusteeCommission.ruleDescription')}
           </p>
 
-          <label className="mt-4 block text-sm font-medium text-gray-700">Trustee employee</label>
+          <label className="mt-4 block text-sm font-medium text-gray-700">{t('trusteeCommission.trusteeEmployee')}</label>
           <input
             value={trusteeName}
             onChange={(event) => setTrusteeName(event.target.value)}
             className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
-            placeholder="Trustee employee name"
+            placeholder={t('trusteeCommission.trusteeNamePlaceholder')}
           />
 
-          <label className="mt-4 block text-sm font-medium text-gray-700">Contact / email</label>
+          <label className="mt-4 block text-sm font-medium text-gray-700">{t('trusteeCommission.contactEmail')}</label>
           <input
             value={contactInfo}
             onChange={(event) => setContactInfo(event.target.value)}
             className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
-            placeholder="trustee@example.com"
+            placeholder={t('trusteeCommission.contactPlaceholder')}
           />
 
           <div className="mt-4">
-            <div className="text-sm font-medium text-gray-700">Linked branches</div>
+            <div className="text-sm font-medium text-gray-700">{t('trusteeCommission.linkedBranches')}</div>
             <div className="mt-2 grid grid-cols-5 gap-2">
               {branches.map((branch) => (
                 <button
@@ -340,7 +342,7 @@ const TrusteeCommission: React.FC = () => {
             </div>
           </div>
 
-          <label className="mt-4 block text-sm font-medium text-gray-700">Commission percent</label>
+          <label className="mt-4 block text-sm font-medium text-gray-700">{t('trusteeCommission.commissionPercent')}</label>
           <input
             type="number"
             min="0"
@@ -366,9 +368,9 @@ const TrusteeCommission: React.FC = () => {
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <div className="font-semibold text-black">{rule.trusteeName}</div>
-                      <div className="text-sm text-gray-600">{rule.contactInfo || 'No contact'}</div>
+                      <div className="text-sm text-gray-600">{rule.contactInfo || t('common.noContact')}</div>
                       <div className="mt-1 text-sm font-semibold text-magenta-600">
-                        Trustee rate: {rule.percentage}% for Branches {rule.branches.join(', ')}
+                        {t('trusteeCommission.trusteeRate', { rate: rule.percentage, branches: rule.branches.join(', ') })}
                       </div>
                     </div>
                     <span className="rounded-xl bg-black px-3 py-2 text-xs font-semibold text-white">
@@ -385,7 +387,7 @@ const TrusteeCommission: React.FC = () => {
           <div className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
             <div className="grid gap-4 md:grid-cols-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700">From</label>
+                <label className="block text-sm font-medium text-gray-700">{t('trusteeCommission.from')}</label>
                 <input
                   type="date"
                   value={fromDate}
@@ -394,7 +396,7 @@ const TrusteeCommission: React.FC = () => {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700">To</label>
+                <label className="block text-sm font-medium text-gray-700">{t('trusteeCommission.to')}</label>
                 <input
                   type="date"
                   value={toDate}
@@ -403,11 +405,11 @@ const TrusteeCommission: React.FC = () => {
                 />
               </div>
               <div className="rounded-2xl bg-magenta-500 p-4 text-white">
-                <div className="text-sm opacity-80">Linked branch revenue</div>
+                <div className="text-sm opacity-80">{t('trusteeCommission.linkedBranchRevenue')}</div>
                 <div className="mt-1 text-2xl font-bold">${totalBranchRevenue.toFixed(2)}</div>
               </div>
               <div className="rounded-2xl bg-black p-4 text-white">
-                <div className="text-sm opacity-80">Trustee commission</div>
+                <div className="text-sm opacity-80">{t('trusteeCommission.trusteeCommission')}</div>
                 <div className="mt-1 text-2xl font-bold">${totalTrusteeCommission.toFixed(2)}</div>
               </div>
             </div>
@@ -423,7 +425,7 @@ const TrusteeCommission: React.FC = () => {
             </div>
           ) : (
             <div className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
-              <h3 className="text-xl font-semibold text-black">Trustee commission results</h3>
+              <h3 className="text-xl font-semibold text-black">{t('trusteeCommission.resultsTitle')}</h3>
               {trusteeResults.length === 0 ? (
                 <div className="mt-4 rounded-2xl bg-gray-50 p-4 text-sm text-gray-600">
                   Add a trustee rule, then load commission.
@@ -436,16 +438,16 @@ const TrusteeCommission: React.FC = () => {
                         <div>
                           <div className="font-semibold text-black">{result.trusteeName}</div>
                           <div className="text-sm text-gray-600">
-                            Branches {result.branches.join(', ')} · Sales counted: {result.salesCount} · Trustee rate: {result.percentage}%
+                            {t('trusteeCommission.resultSummary', { branches: result.branches.join(', '), count: result.salesCount, rate: result.percentage })}
                           </div>
                         </div>
                         <div className="grid gap-2 sm:grid-cols-2">
                           <div className="rounded-xl bg-white px-3 py-2">
-                            <div className="text-xs text-gray-500">Linked branch sales</div>
+                            <div className="text-xs text-gray-500">{t('trusteeCommission.linkedBranchSales')}</div>
                             <div className="text-lg font-bold text-black">${result.branchRevenue.toFixed(2)}</div>
                           </div>
                           <div className="rounded-xl bg-white px-3 py-2">
-                            <div className="text-xs text-gray-500">Trustee commission</div>
+                            <div className="text-xs text-gray-500">{t('trusteeCommission.trusteeCommission')}</div>
                             <div className="text-lg font-bold text-magenta-600">${result.commissionAmount.toFixed(2)}</div>
                           </div>
                         </div>

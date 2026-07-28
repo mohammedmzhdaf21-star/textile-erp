@@ -29,6 +29,7 @@ router.get('/', async (req: Request, res: Response) => {
     const colorId = req.query.colorId as string | undefined;
     const typeRaw = req.query.type as string | undefined;
     const codeRaw = req.query.code as string | undefined;
+    const itemIdRaw = req.query.itemId as string | undefined;
     const includeArchivedRaw = req.query.includeArchived as string | undefined;
     const pageRaw = req.query.page as string | undefined;
     const pageSizeRaw = req.query.pageSize as string | undefined;
@@ -48,6 +49,7 @@ router.get('/', async (req: Request, res: Response) => {
       colorId,
       type,
       code,
+      itemId: itemIdRaw,
       includeArchived,
       page,
       pageSize,
@@ -111,6 +113,64 @@ router.get('/colors', async (_req: Request, res: Response) => {
     });
   }
 });
+
+// ============================================================
+// POST /api/inventory/colors (ADMIN, MANAGER only)
+// ============================================================
+router.post(
+  '/colors',
+  requireRole('ADMIN', 'MANAGER'),
+  async (req: Request, res: Response) => {
+    try {
+      const name = String(req.body?.name ?? '').trim();
+      const hexCodeRaw = req.body?.hexCode;
+
+      if (!name) {
+        return res.status(400).json({ error: 'Color name is required' });
+      }
+
+      if (name.length > 50) {
+        return res.status(400).json({ error: 'Color name must be 50 characters or fewer' });
+      }
+
+      const hexCode =
+        hexCodeRaw !== undefined && String(hexCodeRaw).trim()
+          ? String(hexCodeRaw).trim()
+          : undefined;
+
+      if (hexCode && !/^#[0-9A-Fa-f]{6}$/.test(hexCode)) {
+        return res.status(400).json({ error: 'hexCode must be a valid #RRGGBB value' });
+      }
+
+      const existing = await prisma.color.findFirst({
+        where: {
+          name: {
+            equals: name,
+            mode: 'insensitive',
+          },
+        },
+      });
+
+      if (existing) {
+        return res.status(200).json(existing);
+      }
+
+      const color = await prisma.color.create({
+        data: {
+          name,
+          hexCode,
+        },
+        select: { id: true, name: true, hexCode: true },
+      });
+
+      return res.status(201).json(color);
+    } catch (error: any) {
+      return res.status(500).json({
+        error: error.message || 'Failed to create color',
+      });
+    }
+  }
+);
 
 // ============================================================
 // GET /api/inventory/:id
@@ -243,7 +303,8 @@ router.patch(
   async (req: Request, res: Response) => {
     try {
       const id = singleParam(req.params.id);
-      const { meters, pieceLength, quantity, costPrice, version } = req.body;
+      const { meters, pieceLength, quantity, costPrice, code, subCode, colorId, qrCodeValue, qrCodeDataUrl, version } =
+        req.body;
 
       if (!id) {
         return res.status(400).json({ error: 'Inventory item id is required' });
@@ -264,6 +325,11 @@ router.patch(
           quantity: quantity !== undefined ? parseInt(String(quantity), 10) : undefined,
           costPrice:
             costPrice !== undefined ? parseFloat(String(costPrice)) : undefined,
+          code: code !== undefined ? parseInt(String(code), 10) : undefined,
+          subCode: subCode !== undefined ? parseFloat(String(subCode)) : undefined,
+          colorId: colorId !== undefined ? String(colorId) : undefined,
+          qrCodeValue: qrCodeValue !== undefined ? String(qrCodeValue) : undefined,
+          qrCodeDataUrl: qrCodeDataUrl !== undefined ? String(qrCodeDataUrl) : undefined,
           version: parseInt(String(version), 10),
         },
         req.user?.userId,
@@ -283,6 +349,9 @@ router.patch(
         return res.status(409).json({ error: msg });
       }
       if (msg.includes('archived')) {
+        return res.status(400).json({ error: msg });
+      }
+      if (msg.includes('already exists') || msg.includes('must be')) {
         return res.status(400).json({ error: msg });
       }
       return res.status(500).json({ error: msg });

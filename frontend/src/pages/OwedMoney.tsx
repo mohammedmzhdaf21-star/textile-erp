@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../lib/api';
+import { useTranslation } from 'react-i18next';
 
 type Sale = {
   id: string;
@@ -101,6 +102,7 @@ const extractSales = (data: unknown): Sale[] => {
 };
 
 const OwedMoney: React.FC = () => {
+  const { t } = useTranslation();
   const [selectedBranch, setSelectedBranch] = useState<BranchId | null>(null);
   const [sales, setSales] = useState<Sale[]>([]);
   const [localPayments, setLocalPayments] = useState<OwedPayment[]>(() => readOwedPayments());
@@ -175,7 +177,7 @@ const OwedMoney: React.FC = () => {
       setSales([]);
       setError(
         `Request failed${status ? ` (status ${status})` : ''}: ${
-          body?.error ?? body?.message ?? err?.message ?? 'Failed to load owed money'
+          body?.error ?? body?.message ?? err?.message ?? t('owedMoney.failedToLoad')
         }`
       );
     } finally {
@@ -201,12 +203,12 @@ const OwedMoney: React.FC = () => {
 
     const amount = toMoneyNumber(paymentAmount);
     if (!Number.isFinite(amount) || amount <= 0) {
-      setPaymentError('Enter a payment amount greater than zero.');
+      setPaymentError(t('owedMoney.enterPaymentAmount'));
       return;
     }
     if (amount > paymentSale.outstandingAmount + 0.001) {
       setPaymentError(
-        `Payment cannot exceed the outstanding balance of $${paymentSale.outstandingAmount.toFixed(2)}.`
+        t('owedMoney.paymentExceedsBalance', { amount: paymentSale.outstandingAmount.toFixed(2) })
       );
       return;
     }
@@ -234,13 +236,11 @@ const OwedMoney: React.FC = () => {
     <div className="max-w-full overflow-x-hidden p-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-black">Owed Money</h2>
-          <p className="mt-1 max-w-xl text-sm text-gray-600">
-            Track partially paid or unpaid sales by branch. Record customer payments and see whether each payment settles the balance or leaves money still owed.
-          </p>
+          <h2 className="text-2xl font-bold text-black">{t('owedMoney.title')}</h2>
+          <p className="mt-1 max-w-xl text-sm text-gray-600">{t('owedMoney.subtitle')}</p>
         </div>
         <div className="text-sm text-gray-500">
-          {selectedBranch ? `Branch ${selectedBranch}` : 'Select a branch'}
+          {selectedBranch ? t('owedMoney.branchArrears', { branch: selectedBranch }) : t('common.selectBranch')}
         </div>
       </div>
 
@@ -269,7 +269,7 @@ const OwedMoney: React.FC = () => {
           <div className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <h3 className="text-xl font-semibold text-black">Branch {selectedBranch} arrears</h3>
+                <h3 className="text-xl font-semibold text-black">{t('owedMoney.branchArrears', { branch: selectedBranch })}</h3>
                 <p className="text-sm text-gray-600">
                   {outstandingRows.length} outstanding sale{outstandingRows.length === 1 ? '' : 's'}.
                 </p>
@@ -306,28 +306,28 @@ const OwedMoney: React.FC = () => {
                       }
                       className="min-w-0 flex-1 text-left"
                     >
-                      <div className="break-all text-sm font-semibold text-black">Sale ID: {sale.id}</div>
+                      <div className="break-all text-sm font-semibold text-black">{t('owedMoney.saleIdLabel', { id: sale.id })}</div>
                       <div className="mt-1 text-xs text-gray-500">{formatTime(sale.createdAt)}</div>
                       <div className="mt-2 text-sm text-gray-700">
-                        {sale.customerName || 'Unknown customer'} · {sale.employee?.name || sale.employeeName || 'Unknown Employee'}
+                        {sale.customerName || t('common.unknownCustomer')} · {sale.employee?.name || sale.employeeName || t('common.unknownEmployee')}
                       </div>
                     </button>
 
                     <div className="grid gap-3 text-sm sm:grid-cols-4 lg:min-w-[520px]">
                       <div>
-                        <div className="text-gray-500">Total</div>
+                        <div className="text-gray-500">{t('owedMoney.total')}</div>
                         <div className="font-bold text-black">{`$${sale.totalAmount.toFixed(2)}`}</div>
                       </div>
                       <div>
-                        <div className="text-gray-500">Paid</div>
+                        <div className="text-gray-500">{t('owedMoney.paid')}</div>
                         <div className="font-bold text-green-700">{`$${sale.paidAmount.toFixed(2)}`}</div>
                       </div>
                       <div>
-                        <div className="text-gray-500">Outstanding</div>
+                        <div className="text-gray-500">{t('owedMoney.outstanding')}</div>
                         <div className="font-bold text-red-700">{`$${sale.outstandingAmount.toFixed(2)}`}</div>
                       </div>
                       <div>
-                        <div className="text-gray-500">Status</div>
+                        <div className="text-gray-500">{t('owedMoney.status')}</div>
                         <div className="font-bold text-black">{sale.paymentStatus}</div>
                       </div>
                     </div>
@@ -355,22 +355,22 @@ const OwedMoney: React.FC = () => {
       {paymentSale && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-xl">
-            <h3 className="text-xl font-semibold text-black">Record customer payment</h3>
+            <h3 className="text-xl font-semibold text-black">{t('owedMoney.recordCustomerPayment')}</h3>
             <p className="mt-1 text-sm text-gray-600">
-              {paymentSale.customerName || 'Unknown customer'} · Sale {paymentSale.id}
+              {t('owedMoney.saleReference', { customer: paymentSale.customerName || t('common.unknownCustomer'), id: paymentSale.id })}
             </p>
 
             <div className="mt-4 grid grid-cols-2 gap-3 rounded-2xl bg-gray-50 p-4 text-sm">
               <div>
-                <div className="text-gray-500">Total sale</div>
+                <div className="text-gray-500">{t('owedMoney.totalSale')}</div>
                 <div className="font-bold text-black">${paymentSale.totalAmount.toFixed(2)}</div>
               </div>
               <div>
-                <div className="text-gray-500">Already paid</div>
+                <div className="text-gray-500">{t('owedMoney.alreadyPaid')}</div>
                 <div className="font-bold text-green-700">${paymentSale.paidAmount.toFixed(2)}</div>
               </div>
               <div className="col-span-2">
-                <div className="text-gray-500">Still owed</div>
+                <div className="text-gray-500">{t('owedMoney.stillOwed')}</div>
                 <div className="font-bold text-red-700">${paymentSale.outstandingAmount.toFixed(2)}</div>
               </div>
             </div>
@@ -402,16 +402,14 @@ const OwedMoney: React.FC = () => {
               >
                 {paymentSettlesFull ? (
                   <>
-                    <p className="font-semibold">This payment settles the full balance.</p>
-                    <p className="mt-1">After payment, nothing will remain owed on this sale.</p>
+                    <p className="font-semibold">{t('owedMoney.settlesFullBalance')}</p>
+                    <p className="mt-1">{t('owedMoney.nothingRemainsOwed')}</p>
                   </>
                 ) : (
                   <>
-                    <p className="font-semibold">This is a partial payment.</p>
+                    <p className="font-semibold">{t('owedMoney.partialPayment')}</p>
                     <p className="mt-1">
-                      After payment,{' '}
-                      <span className="font-bold">${paymentRemainingAfter.toFixed(2)}</span> will still
-                      be owed.
+                      {t('owedMoney.stillOwedAfter', { amount: `$${paymentRemainingAfter.toFixed(2)}` })}
                     </p>
                   </>
                 )}
@@ -426,14 +424,14 @@ const OwedMoney: React.FC = () => {
 
             <div className="mt-6 flex flex-wrap gap-3">
               <button type="button" className="btn-primary" onClick={recordPayment}>
-                Save payment
+                {t('common.savePayment')}
               </button>
               <button
                 type="button"
                 className="rounded-xl border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700"
                 onClick={closePaymentModal}
               >
-                Cancel
+                {t('common.cancel')}
               </button>
             </div>
           </div>
