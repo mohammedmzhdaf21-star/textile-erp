@@ -1,5 +1,17 @@
 import { prisma } from './prisma';
 import { Prisma } from '@prisma/client';
+import {
+  countCompletePackages,
+  deductFullPackageSale,
+  deductPartialPackageSale,
+  parsePackageComponents,
+  restoreFullPackageSale,
+  restorePartialPackageSale,
+  resolvePackageComponentStock,
+  validateFullPackageSale,
+  validatePartialPackageSale,
+} from './packageStock';
+import { meterStockUpdateAfterDeduction } from './inventoryRules';
 
 // ============================================================
 // SALES BUSINESS LOGIC
@@ -15,7 +27,32 @@ export interface SaleItemInput {
   quantitySold: number;
   soldPrice: number;
   lineDiscount?: number;
+  isPiecePackage?: boolean;
+  packageSaleMode?: 'FULL' | 'PARTIAL';
+  packagesSold?: number;
+  packageComponentsSold?: Array<{ name: string; quantity: number }>;
+  qrCodeValue?: string;
+  qrCodeDataUrl?: string;
 }
+
+const resolveSaleItemQr = (
+  item: SaleItemInput,
+  invItem?: { id: string; qrCodeValue: string | null; qrCodeDataUrl: string | null } | null
+) => {
+  if (item.qrCodeDataUrl) {
+    return {
+      qrCodeValue: item.qrCodeValue ?? item.inventoryItemId ?? null,
+      qrCodeDataUrl: item.qrCodeDataUrl,
+    };
+  }
+  if (invItem?.qrCodeDataUrl) {
+    return {
+      qrCodeValue: invItem.qrCodeValue ?? invItem.id,
+      qrCodeDataUrl: invItem.qrCodeDataUrl,
+    };
+  }
+  return { qrCodeValue: null, qrCodeDataUrl: null };
+};
 
 export interface CreateSaleInput {
   branchId: string;
@@ -33,6 +70,7 @@ export interface ListSalesParams {
   branchId?: string;
   employeeId?: string;
   customerPhone?: string;
+  search?: string;
   fromDate?: Date;
   toDate?: Date;
   includeVoided?: boolean;
@@ -44,6 +82,105 @@ export interface RefundInput {
   amount: number;
   method: 'CASH' | 'CARD' | 'STORE_CREDIT';
   reason: string;
+}
+
+export interface ExchangeReturnedInventoryInput {
+  inventoryItemId: string;
+  soldAsUnit: 'METER' | 'PIECE';
+  quantityReturned: number;
+  returnPrice: number;
+}
+
+export interface ExchangeReturnedPlainInput {
+  clothName: string;
+  meters: number;
+  returnPricePerMeter: number;
+  note?: string;
+}
+
+export interface ProcessExchangeInput {
+  branchId: string;
+  employeeId: string;
+  customerName: string;
+  customerPhone: string;
+  returnedInventory?: ExchangeReturnedInventoryInput[];
+  returnedPlain?: ExchangeReturnedPlainInput[];
+  replacementItems?: SaleItemInput[];
+  paymentStatus?: 'FULL' | 'PARTIAL';
+  amountPaid?: number;
+  notes?: string;
+}
+
+async function applyPackageSaleToInventory(
+  tx: Prisma.TransactionClient,
+  invItem: {
+    id: string;
+    quantity: number;
+    packageComponents: unknown;
+    packageComponentStock: unknown;
+    isPiecePackage: boolean;
+  },
+  item: SaleItemInput,
+  direction: 'deduct' | 'restore'
+) {
+  if (!invItem.isPiecePackage) return;
+
+  const components = parsePackageComponents(invItem.packageComponents);
+  const currentStock = resolvePackageComponentStock({
+    packageComponents: invItem.packageComponents,
+    packageComponentStock: invItem.packageComponentStock,
+    quantity: invItem.quantity,
+  });
+
+  if (item.packageSaleMode === 'FULL') {
+    const packagesSold = Math.floor(item.packagesSold ?? item.quantitySold);
+    const error =
+      direction === 'deduct'
+        ? validateFullPackageSale(components, currentStock, packagesSold)
+        : null;
+    if (error) throw new Error(error);
+
+    const nextStock =
+      direction === 'deduct'
+        ? deductFullPackageSale(components, currentStock, packagesSold)
+        : restoreFullPackageSale(components, currentStock, packagesSold);
+
+    await tx.inventoryItem.update({
+      where: { id: invItem.id },
+      data: {
+        packageComponentStock: nextStock as Prisma.InputJsonValue,
+        quantity:
+          direction === 'deduct'
+            ? { decrement: packagesSold }
+            : { increment: packagesSold },
+        version: { increment: 1 },
+      },
+    });
+    return;
+  }
+
+  if (item.packageSaleMode === 'PARTIAL') {
+    const componentsSold = item.packageComponentsSold ?? [];
+    const error =
+      direction === 'deduct'
+        ? validatePartialPackageSale(currentStock, componentsSold)
+        : null;
+    if (error) throw new Error(error);
+
+    const nextStock =
+      direction === 'deduct'
+        ? deductPartialPackageSale(currentStock, componentsSold)
+        : restorePartialPackageSale(currentStock, componentsSold);
+
+    await tx.inventoryItem.update({
+      where: { id: invItem.id },
+      data: {
+        packageComponentStock: nextStock as Prisma.InputJsonValue,
+        quantity: countCompletePackages(components, nextStock),
+        version: { increment: 1 },
+      },
+    });
+  }
 }
 
 // ============================================================
@@ -114,9 +251,22 @@ export async function createSale(
 
     // Process each item
     for (const item of input.items) {
+      let invItem: {
+        id: string;
+        type: string;
+        meters: Prisma.Decimal | null;
+        quantity: number;
+        isArchived: boolean;
+        isPiecePackage: boolean;
+        packageComponents: unknown;
+        packageComponentStock: unknown;
+        qrCodeValue: string | null;
+        qrCodeDataUrl: string | null;
+      } | null = null;
+
       // If it has an inventoryItemId, deduct from inventory
       if (item.inventoryItemId) {
-        const invItem = await tx.inventoryItem.findUnique({
+        invItem = await tx.inventoryItem.findUnique({
           where: { id: item.inventoryItemId },
         });
 
@@ -138,13 +288,18 @@ export async function createSale(
               `Not enough stock for ${item.inventoryItemId}. Available: ${currentMeters}m, Requested: ${item.quantitySold}m`
             );
           }
+          const remainingMeters = currentMeters - item.quantitySold;
+          const meterUpdate = meterStockUpdateAfterDeduction(invItem.type, remainingMeters);
           await tx.inventoryItem.update({
             where: { id: item.inventoryItemId },
             data: {
-              meters: new Prisma.Decimal((currentMeters - item.quantitySold).toFixed(2)),
+              meters: new Prisma.Decimal(meterUpdate.meters.toFixed(2)),
+              ...(meterUpdate.type ? { type: meterUpdate.type } : {}),
               version: { increment: 1 },
             },
           });
+        } else if (invItem.isPiecePackage && item.isPiecePackage) {
+          await applyPackageSaleToInventory(tx, invItem, item, 'deduct');
         } else if (item.soldAsUnit === 'PIECE') {
           if (invItem.quantity < item.quantitySold) {
             throw new Error(
@@ -164,20 +319,22 @@ export async function createSale(
       // Verify or create a plain cloth color placeholder when needed
       let colorId = item.colorId;
       if (item.isPlainCloth) {
-        colorId = colorId || 'PLAIN';
-        await tx.color.upsert({
-          where: { id: colorId },
+        const plainClothColor = await tx.color.upsert({
+          where: { name: 'Plain Cloth' },
           update: {},
           create: {
-            id: colorId,
+            id: colorId || 'PLAIN',
             name: 'Plain Cloth',
             hexCode: '#CCCCCC',
           },
         });
+        colorId = plainClothColor.id;
       } else {
         const color = await tx.color.findUnique({ where: { id: item.colorId } });
         if (!color) throw new Error(`Color ${item.colorId} not found`);
       }
+
+      const qrSnapshot = resolveSaleItemQr(item, invItem);
 
       // Create the sale item
       await tx.saleItem.create({
@@ -191,6 +348,14 @@ export async function createSale(
           quantitySold: new Prisma.Decimal(item.quantitySold.toFixed(2)),
           soldPrice: new Prisma.Decimal(item.soldPrice.toFixed(2)),
           lineDiscount: new Prisma.Decimal((item.lineDiscount || 0).toFixed(2)),
+          isPiecePackage: item.isPiecePackage || false,
+          packageSaleMode: item.packageSaleMode || null,
+          packagesSold: item.packagesSold ?? null,
+          packageComponentsSold: item.packageComponentsSold
+            ? (item.packageComponentsSold as Prisma.InputJsonValue)
+            : undefined,
+          qrCodeValue: qrSnapshot.qrCodeValue,
+          qrCodeDataUrl: qrSnapshot.qrCodeDataUrl,
         },
       });
     }
@@ -228,6 +393,289 @@ export async function createSale(
 }
 
 // ============================================================
+// PROCESS EXCHANGE
+// ============================================================
+export async function processExchange(
+  input: ProcessExchangeInput,
+  performedById?: string,
+  performedByEmail?: string
+) {
+  const returnedInventory = input.returnedInventory || [];
+  const returnedPlain = input.returnedPlain || [];
+  const replacementItems = input.replacementItems || [];
+
+  if (
+    returnedInventory.length === 0 &&
+    returnedPlain.length === 0 &&
+    replacementItems.length === 0
+  ) {
+    throw new Error('Exchange must include returned items or replacement items');
+  }
+
+  const returnedInventoryTotal = returnedInventory.reduce((sum, item) => {
+    if (item.quantityReturned <= 0) throw new Error('Returned quantity must be positive');
+    if (item.returnPrice < 0) throw new Error('Returned price cannot be negative');
+    return sum + item.quantityReturned * item.returnPrice;
+  }, 0);
+
+  const returnedPlainTotal = returnedPlain.reduce((sum, item) => {
+    if (item.meters <= 0) throw new Error('Returned plain cloth meters must be positive');
+    if (item.returnPricePerMeter < 0) {
+      throw new Error('Returned plain cloth price cannot be negative');
+    }
+    return sum + item.meters * item.returnPricePerMeter;
+  }, 0);
+
+  let replacementTotal = 0;
+  for (const item of replacementItems) {
+    if (item.quantitySold <= 0) throw new Error('Quantity must be positive');
+    if (item.soldPrice < 0) throw new Error('Price cannot be negative');
+    replacementTotal += item.soldPrice * item.quantitySold - (item.lineDiscount || 0);
+  }
+
+  const returnedTotal = returnedInventoryTotal + returnedPlainTotal;
+  const netDue = Number((replacementTotal - returnedTotal).toFixed(2));
+  const refundAmount = Math.max(0, Number((-netDue).toFixed(2)));
+  const saleTotal = Math.max(0, netDue);
+  const amountPaid =
+    saleTotal > 0
+      ? input.paymentStatus === 'PARTIAL'
+        ? Number((input.amountPaid || 0).toFixed(2))
+        : saleTotal
+      : refundAmount > 0
+      ? -refundAmount
+      : 0;
+
+  if (saleTotal > 0 && input.paymentStatus === 'PARTIAL') {
+    if (amountPaid <= 0 || amountPaid >= saleTotal) {
+      throw new Error('Partial exchange payments must be greater than 0 and less than the net amount due');
+    }
+  }
+
+  const sale = await prisma.$transaction(async (tx) => {
+    const branch = await tx.branch.findUnique({ where: { id: input.branchId } });
+    if (!branch) throw new Error('Branch not found');
+
+    const employee = await tx.employee.findUnique({ where: { id: input.employeeId } });
+    if (!employee) throw new Error('Employee not found');
+
+    let customerId: string | undefined;
+    if (input.customerPhone) {
+      const existingCustomer = await tx.customer.findUnique({
+        where: { phone: input.customerPhone },
+      });
+      customerId = existingCustomer?.id;
+    }
+
+    for (const returned of returnedInventory) {
+      const invItem = await tx.inventoryItem.findUnique({
+        where: { id: returned.inventoryItemId },
+      });
+
+      if (!invItem) throw new Error(`Inventory item ${returned.inventoryItemId} not found`);
+      if (invItem.isArchived) {
+        throw new Error(`Inventory item ${returned.inventoryItemId} is archived`);
+      }
+
+      if (returned.soldAsUnit === 'PIECE') {
+        await tx.inventoryItem.update({
+          where: { id: returned.inventoryItemId },
+          data: {
+            quantity: { increment: Math.floor(returned.quantityReturned) },
+            version: { increment: 1 },
+          },
+        });
+      } else {
+        const currentMeters = invItem.meters ? parseFloat(invItem.meters.toString()) : 0;
+        await tx.inventoryItem.update({
+          where: { id: returned.inventoryItemId },
+          data: {
+            meters: new Prisma.Decimal(
+              (currentMeters + returned.quantityReturned).toFixed(2)
+            ),
+            version: { increment: 1 },
+          },
+        });
+      }
+    }
+
+    const paymentNote =
+      saleTotal > 0
+        ? `Paid ${amountPaid.toFixed(2)} now, due ${(saleTotal - amountPaid).toFixed(2)}.`
+        : refundAmount > 0
+        ? `Refunded ${refundAmount.toFixed(2)} to customer.`
+        : 'Even exchange. Paid 0.00 now, due 0.00.';
+
+    const exchangeNotes = [
+      'EXCHANGE',
+      `Replacement ${replacementTotal.toFixed(2)}`,
+      `Returned ${returnedTotal.toFixed(2)}`,
+      `Net ${netDue.toFixed(2)}`,
+      paymentNote,
+      input.notes,
+    ]
+      .filter(Boolean)
+      .join(' | ');
+
+    const createdSale = await tx.sale.create({
+      data: {
+        branchId: input.branchId,
+        employeeId: input.employeeId,
+        customerId: customerId || null,
+        customerName: input.customerName,
+        customerPhone: input.customerPhone,
+        totalPrice: new Prisma.Decimal(saleTotal.toFixed(2)),
+        discount: new Prisma.Decimal(Math.min(returnedTotal, replacementTotal).toFixed(2)),
+        paymentMethod:
+          saleTotal > 0 && input.paymentStatus === 'PARTIAL' ? 'CREDIT' : 'CASH',
+        notes: exchangeNotes,
+      },
+    });
+
+    for (const item of replacementItems) {
+      let invItem: {
+        id: string;
+        type: string;
+        meters: Prisma.Decimal | null;
+        quantity: number;
+        isArchived: boolean;
+        isPiecePackage: boolean;
+        packageComponents: unknown;
+        packageComponentStock: unknown;
+        qrCodeValue: string | null;
+        qrCodeDataUrl: string | null;
+      } | null = null;
+
+      if (item.inventoryItemId) {
+        invItem = await tx.inventoryItem.findUnique({
+          where: { id: item.inventoryItemId },
+        });
+
+        if (!invItem) throw new Error(`Inventory item ${item.inventoryItemId} not found`);
+        if (invItem.isArchived) throw new Error(`Inventory item ${item.inventoryItemId} is archived`);
+
+        if (item.soldAsUnit === 'METER') {
+          const currentMeters = invItem.meters ? parseFloat(invItem.meters.toString()) : 0;
+          if (currentMeters < item.quantitySold) {
+            throw new Error(
+              `Not enough stock for ${item.inventoryItemId}. Available: ${currentMeters}m, Requested: ${item.quantitySold}m`
+            );
+          }
+          const remainingMeters = currentMeters - item.quantitySold;
+          const meterUpdate = meterStockUpdateAfterDeduction(invItem.type, remainingMeters);
+          await tx.inventoryItem.update({
+            where: { id: item.inventoryItemId },
+            data: {
+              meters: new Prisma.Decimal(meterUpdate.meters.toFixed(2)),
+              ...(meterUpdate.type ? { type: meterUpdate.type } : {}),
+              version: { increment: 1 },
+            },
+          });
+        } else if (invItem.isPiecePackage && item.isPiecePackage) {
+          await applyPackageSaleToInventory(tx, invItem, item, 'deduct');
+        } else if (item.soldAsUnit === 'PIECE') {
+          if (invItem.quantity < item.quantitySold) {
+            throw new Error(
+              `Not enough pieces for ${item.inventoryItemId}. Available: ${invItem.quantity}, Requested: ${item.quantitySold}`
+            );
+          }
+          await tx.inventoryItem.update({
+            where: { id: item.inventoryItemId },
+            data: {
+              quantity: { decrement: Math.floor(item.quantitySold) },
+              version: { increment: 1 },
+            },
+          });
+        }
+      }
+
+      let colorId = item.colorId;
+      if (item.isPlainCloth) {
+        const plainClothColor = await tx.color.upsert({
+          where: { name: 'Plain Cloth' },
+          update: {},
+          create: {
+            id: colorId || 'PLAIN',
+            name: 'Plain Cloth',
+            hexCode: '#CCCCCC',
+          },
+        });
+        colorId = plainClothColor.id;
+      } else {
+        const color = await tx.color.findUnique({ where: { id: item.colorId } });
+        if (!color) throw new Error(`Color ${item.colorId} not found`);
+      }
+
+      const qrSnapshot = resolveSaleItemQr(item, invItem);
+
+      await tx.saleItem.create({
+        data: {
+          saleId: createdSale.id,
+          inventoryItemId: item.inventoryItemId || null,
+          isPlainCloth: item.isPlainCloth || false,
+          plainClothName: item.plainClothName || null,
+          colorId,
+          soldAsUnit: item.soldAsUnit,
+          quantitySold: new Prisma.Decimal(item.quantitySold.toFixed(2)),
+          soldPrice: new Prisma.Decimal(item.soldPrice.toFixed(2)),
+          lineDiscount: new Prisma.Decimal((item.lineDiscount || 0).toFixed(2)),
+          isPiecePackage: item.isPiecePackage || false,
+          packageSaleMode: item.packageSaleMode || null,
+          packagesSold: item.packagesSold ?? null,
+          packageComponentsSold: item.packageComponentsSold
+            ? (item.packageComponentsSold as Prisma.InputJsonValue)
+            : undefined,
+          qrCodeValue: qrSnapshot.qrCodeValue,
+          qrCodeDataUrl: qrSnapshot.qrCodeDataUrl,
+        },
+      });
+    }
+
+    await tx.auditLog.create({
+      data: {
+        entityType: 'Exchange',
+        entityId: createdSale.id,
+        action: 'CREATE',
+        performedById: performedById || null,
+        performedByEmail: performedByEmail || null,
+        branchId: input.branchId,
+        changes: {
+          replacementTotal,
+          returnedTotal,
+          netDue,
+          amountPaid,
+          refundAmount,
+          returnedInventoryCount: returnedInventory.length,
+          returnedPlainCount: returnedPlain.length,
+          replacementCount: replacementItems.length,
+        } as Prisma.InputJsonValue,
+      },
+    });
+
+    return await tx.sale.findUnique({
+      where: { id: createdSale.id },
+      include: {
+        items: { include: { color: true, inventoryItem: true } },
+        branch: true,
+        employee: { select: { id: true, name: true, email: true } },
+        customer: true,
+      },
+    });
+  });
+
+  return {
+    sale,
+    summary: {
+      replacementTotal,
+      returnedTotal,
+      netDue,
+      amountPaid,
+      refundAmount,
+    },
+  };
+}
+
+// ============================================================
 // LIST SALES
 // ============================================================
 export async function listSales(params: ListSalesParams) {
@@ -235,6 +683,7 @@ export async function listSales(params: ListSalesParams) {
     branchId,
     employeeId,
     customerPhone,
+    search,
     fromDate,
     toDate,
     includeVoided = false,
@@ -248,6 +697,59 @@ export async function listSales(params: ListSalesParams) {
   if (employeeId) where.employeeId = employeeId;
   if (customerPhone) where.customerPhone = customerPhone;
   if (!includeVoided) where.isVoided = false;
+
+  if (search?.trim()) {
+    const trimmed = search.trim();
+    const phoneDigits = trimmed.replace(/\D/g, '');
+    const searchConditions: Prisma.SaleWhereInput[] = [
+      {
+        items: {
+          some: {
+            inventoryItemId: {
+              equals: trimmed,
+              mode: 'insensitive',
+            },
+          },
+        },
+      },
+      {
+        items: {
+          some: {
+            inventoryItemId: {
+              contains: trimmed,
+              mode: 'insensitive',
+            },
+          },
+        },
+      },
+      {
+        customerPhone: {
+          contains: trimmed,
+          mode: 'insensitive',
+        },
+      },
+      {
+        customerName: {
+          contains: trimmed,
+          mode: 'insensitive',
+        },
+      },
+    ];
+
+    if (phoneDigits.length >= 3) {
+      searchConditions.push({
+        customerPhone: {
+          contains: phoneDigits,
+        },
+      });
+    }
+
+    if (trimmed.length >= 8) {
+      searchConditions.push({ id: trimmed });
+    }
+
+    where.OR = searchConditions;
+  }
 
   if (fromDate || toDate) {
     where.createdAt = {};
@@ -347,6 +849,25 @@ export async function voidSale(
                 version: { increment: 1 },
               },
             });
+          } else if (item.isPiecePackage && item.packageSaleMode) {
+            await applyPackageSaleToInventory(
+              tx,
+              invItem,
+              {
+                inventoryItemId: item.inventoryItemId,
+                colorId: item.colorId,
+                soldAsUnit: 'PIECE',
+                quantitySold: parseFloat(item.quantitySold.toString()),
+                soldPrice: parseFloat(item.soldPrice.toString()),
+                isPiecePackage: true,
+                packageSaleMode: item.packageSaleMode as 'FULL' | 'PARTIAL',
+                packagesSold: item.packagesSold ?? undefined,
+                packageComponentsSold: Array.isArray(item.packageComponentsSold)
+                  ? (item.packageComponentsSold as Array<{ name: string; quantity: number }>)
+                  : undefined,
+              },
+              'restore'
+            );
           } else if (item.soldAsUnit === 'PIECE') {
             await tx.inventoryItem.update({
               where: { id: item.inventoryItemId },

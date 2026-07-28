@@ -14,7 +14,7 @@ import { authenticate, requireRole } from '../middleware/authenticate';
 
 const router = Router();
 
-const getRouteParam = (value: string | string[] | undefined): string | undefined =>
+const singleParam = (value: string | string[] | undefined) =>
   Array.isArray(value) ? value[0] : value;
 
 // All inventory routes require authentication
@@ -29,6 +29,7 @@ router.get('/', async (req: Request, res: Response) => {
     const colorId = req.query.colorId as string | undefined;
     const typeRaw = req.query.type as string | undefined;
     const codeRaw = req.query.code as string | undefined;
+    const itemIdRaw = req.query.itemId as string | undefined;
     const includeArchivedRaw = req.query.includeArchived as string | undefined;
     const pageRaw = req.query.page as string | undefined;
     const pageSizeRaw = req.query.pageSize as string | undefined;
@@ -48,6 +49,7 @@ router.get('/', async (req: Request, res: Response) => {
       colorId,
       type,
       code,
+      itemId: itemIdRaw,
       includeArchived,
       page,
       pageSize,
@@ -113,11 +115,69 @@ router.get('/colors', async (_req: Request, res: Response) => {
 });
 
 // ============================================================
+// POST /api/inventory/colors (ADMIN, MANAGER only)
+// ============================================================
+router.post(
+  '/colors',
+  requireRole('ADMIN', 'MANAGER'),
+  async (req: Request, res: Response) => {
+    try {
+      const name = String(req.body?.name ?? '').trim();
+      const hexCodeRaw = req.body?.hexCode;
+
+      if (!name) {
+        return res.status(400).json({ error: 'Color name is required' });
+      }
+
+      if (name.length > 50) {
+        return res.status(400).json({ error: 'Color name must be 50 characters or fewer' });
+      }
+
+      const hexCode =
+        hexCodeRaw !== undefined && String(hexCodeRaw).trim()
+          ? String(hexCodeRaw).trim()
+          : undefined;
+
+      if (hexCode && !/^#[0-9A-Fa-f]{6}$/.test(hexCode)) {
+        return res.status(400).json({ error: 'hexCode must be a valid #RRGGBB value' });
+      }
+
+      const existing = await prisma.color.findFirst({
+        where: {
+          name: {
+            equals: name,
+            mode: 'insensitive',
+          },
+        },
+      });
+
+      if (existing) {
+        return res.status(200).json(existing);
+      }
+
+      const color = await prisma.color.create({
+        data: {
+          name,
+          hexCode,
+        },
+        select: { id: true, name: true, hexCode: true },
+      });
+
+      return res.status(201).json(color);
+    } catch (error: any) {
+      return res.status(500).json({
+        error: error.message || 'Failed to create color',
+      });
+    }
+  }
+);
+
+// ============================================================
 // GET /api/inventory/:id
 // ============================================================
 router.get('/:id', async (req: Request, res: Response) => {
   try {
-    const id = getRouteParam(req.params.id);
+    const id = singleParam(req.params.id);
     if (!id) {
       return res.status(400).json({ error: 'Inventory item id is required' });
     }
@@ -144,17 +204,33 @@ router.post(
         id,
         branchId,
         code,
+        subCode,
         colorId,
         type,
         meters,
         pieceLength,
         quantity,
         costPrice,
+        qrCodeValue,
+        qrCodeDataUrl,
+        pictureName,
+        pictureDataUrl,
+        description,
+        isPiecePackage,
+        packageKey,
+        packageComponents,
       } = req.body;
 
-      if (!id || !branchId || code === undefined || !colorId || !type) {
+      if (!id || !branchId || code === undefined || subCode === undefined || !colorId || !type) {
         return res.status(400).json({
-          error: 'Missing required fields: id, branchId, code, colorId, type',
+          error: 'Missing required fields: id, branchId, code, subCode, colorId, type',
+        });
+      }
+
+      const parsedSubCode = parseFloat(String(subCode));
+      if (!Number.isFinite(parsedSubCode) || parsedSubCode < 0) {
+        return res.status(400).json({
+          error: 'subCode must be a non-negative price value',
         });
       }
 
@@ -169,6 +245,7 @@ router.post(
           id,
           branchId,
           code: parseInt(String(code), 10),
+          subCode: parsedSubCode,
           colorId,
           type,
           meters: meters !== undefined ? parseFloat(String(meters)) : undefined,
@@ -177,6 +254,19 @@ router.post(
           quantity: quantity !== undefined ? parseInt(String(quantity), 10) : undefined,
           costPrice:
             costPrice !== undefined ? parseFloat(String(costPrice)) : undefined,
+          qrCodeValue:
+            qrCodeValue !== undefined ? String(qrCodeValue) : String(id),
+          qrCodeDataUrl:
+            qrCodeDataUrl !== undefined ? String(qrCodeDataUrl) : undefined,
+          pictureName:
+            pictureName !== undefined ? String(pictureName) : undefined,
+          pictureDataUrl:
+            pictureDataUrl !== undefined ? String(pictureDataUrl) : undefined,
+          description:
+            description !== undefined ? String(description).trim() || undefined : undefined,
+          isPiecePackage: Boolean(isPiecePackage),
+          packageKey: packageKey !== undefined ? String(packageKey) : '',
+          packageComponents: Array.isArray(packageComponents) ? packageComponents : undefined,
         },
         req.user?.userId,
         req.user?.email
@@ -212,8 +302,9 @@ router.patch(
   requireRole('ADMIN', 'MANAGER'),
   async (req: Request, res: Response) => {
     try {
-      const id = getRouteParam(req.params.id);
-      const { meters, pieceLength, quantity, costPrice, version } = req.body;
+      const id = singleParam(req.params.id);
+      const { meters, pieceLength, quantity, costPrice, code, subCode, colorId, qrCodeValue, qrCodeDataUrl, version } =
+        req.body;
 
       if (!id) {
         return res.status(400).json({ error: 'Inventory item id is required' });
@@ -234,6 +325,11 @@ router.patch(
           quantity: quantity !== undefined ? parseInt(String(quantity), 10) : undefined,
           costPrice:
             costPrice !== undefined ? parseFloat(String(costPrice)) : undefined,
+          code: code !== undefined ? parseInt(String(code), 10) : undefined,
+          subCode: subCode !== undefined ? parseFloat(String(subCode)) : undefined,
+          colorId: colorId !== undefined ? String(colorId) : undefined,
+          qrCodeValue: qrCodeValue !== undefined ? String(qrCodeValue) : undefined,
+          qrCodeDataUrl: qrCodeDataUrl !== undefined ? String(qrCodeDataUrl) : undefined,
           version: parseInt(String(version), 10),
         },
         req.user?.userId,
@@ -255,6 +351,9 @@ router.patch(
       if (msg.includes('archived')) {
         return res.status(400).json({ error: msg });
       }
+      if (msg.includes('already exists') || msg.includes('must be')) {
+        return res.status(400).json({ error: msg });
+      }
       return res.status(500).json({ error: msg });
     }
   }
@@ -268,7 +367,7 @@ router.post(
   requireRole('ADMIN', 'MANAGER'),
   async (req: Request, res: Response) => {
     try {
-      const id = getRouteParam(req.params.id);
+      const id = singleParam(req.params.id);
       if (!id) {
         return res.status(400).json({ error: 'Inventory item id is required' });
       }
@@ -298,7 +397,7 @@ router.post(
   requireRole('ADMIN', 'MANAGER'),
   async (req: Request, res: Response) => {
     try {
-      const id = getRouteParam(req.params.id);
+      const id = singleParam(req.params.id);
       if (!id) {
         return res.status(400).json({ error: 'Inventory item id is required' });
       }
@@ -328,7 +427,7 @@ router.delete(
   requireRole('ADMIN'),
   async (req: Request, res: Response) => {
     try {
-      const id = getRouteParam(req.params.id);
+      const id = singleParam(req.params.id);
       if (!id) {
         return res.status(400).json({ error: 'Inventory item id is required' });
       }

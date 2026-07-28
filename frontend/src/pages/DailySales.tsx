@@ -1,12 +1,15 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../lib/api';
+import { useTranslation } from 'react-i18next';
 
 type Sale = {
   id: string;
-  total?: number;
+  sourceSaleId?: string;
+  total: number;
   totalPrice?: number | string;
   createdAt: string;
+  notes?: string;
   employee?: {
     id: string;
     name: string;
@@ -14,8 +17,19 @@ type Sale = {
   employeeName?: string;
   paymentStatus?: 'PAID' | 'PARTIAL' | 'UNPAID';
   paidAmount?: number;
-  paymentMethod?: string;
-  notes?: string;
+  items?: Array<{
+    inventoryItemId?: string | null;
+    qrCodeDataUrl?: string | null;
+  }>;
+};
+
+type OwedPayment = {
+  saleId: string;
+  branchId: string;
+  amount: number;
+  paidAt: string;
+  customerName?: string;
+  employeeName?: string;
 };
 
 type EmployeeGroup = {
@@ -33,6 +47,7 @@ const BRANCH_MAP: Record<string, string> = {
   F: 'B002',
 };
 type BranchId = typeof branches[number];
+const OWED_PAYMENTS_KEY = 'textile-erp-owed-payments';
 
 const formatDate = (date: Date) => {
   const year = date.getFullYear();
@@ -46,7 +61,45 @@ const formatTime = (dateString: string) => {
   return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 };
 
+const toMoneyNumber = (value: unknown) => {
+  const parsed = Number(value ?? 0);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const saleCashAmount = (sale: Sale) =>
+  typeof sale.paidAmount === 'number' && Number.isFinite(sale.paidAmount)
+    ? sale.paidAmount
+    : toMoneyNumber(sale.total ?? sale.totalPrice ?? 0);
+
+const readOwedPayments = (): OwedPayment[] => {
+  try {
+    const raw = localStorage.getItem(OWED_PAYMENTS_KEY);
+    return raw ? (JSON.parse(raw) as OwedPayment[]) : [];
+  } catch {
+    return [];
+  }
+};
+
+const paymentDateKey = (dateString: string) => formatDate(new Date(dateString));
+
+const owedPaymentRowsForDate = (branchId: string, dateKey: string) =>
+  readOwedPayments()
+    .filter((payment) => payment.branchId === branchId && paymentDateKey(payment.paidAt) === dateKey)
+    .map((payment) => ({
+      id: `owed-payment-${payment.saleId}-${payment.paidAt}`,
+      sourceSaleId: payment.saleId,
+      total: payment.amount,
+      totalPrice: payment.amount,
+      createdAt: payment.paidAt,
+      employeeName: payment.employeeName || 'Owed Payment',
+      customerName: payment.customerName,
+      notes: `OWED PAYMENT | Paid ${payment.amount.toFixed(2)} now, due 0.00.`,
+      paymentStatus: 'PAID' as const,
+      paidAmount: payment.amount,
+    }));
+
 const DailySales: React.FC = () => {
+  const { t } = useTranslation();
   const [selectedBranch, setSelectedBranch] = useState<BranchId | null>(null);
   const [sales, setSales] = useState<Sale[]>([]);
   const [loading, setLoading] = useState(false);
@@ -84,22 +137,31 @@ const toDate = formatDate(tomorrow);
         else if (data && Array.isArray(data.items)) raw = data.items as Sale[];
         else raw = [];
 
+        const branchId = BRANCH_MAP[selectedBranch as string] ?? selectedBranch;
+        const salesWithLocalOwedPayments = [
+          ...raw,
+          ...owedPaymentRowsForDate(branchId, fromDate),
+        ];
+
         // Enrich each sale with computed paidAmount and paymentStatus based on notes/paymentMethod
-        const enriched = raw.map((s) => {
+        const enriched = salesWithLocalOwedPayments.map((s) => {
           const notes = (s as any).notes || '';
           // Try to parse "Paid X" from notes (e.g. "Paid 50 now, due 150")
           let paidAmount = 0;
-          const paidMatch = /Paid\s+([0-9]+(?:\.[0-9]+)?)/i.exec(notes);
-          if (paidMatch) {
-            paidAmount = Number(paidMatch[1]);
+          const refundMatch = /Refunded\s+([0-9]+(?:\.[0-9]+)?)/i.exec(notes);
+          const paidMatch = /Paid\s+(-?[0-9]+(?:\.[0-9]+)?)/i.exec(notes);
+          if (refundMatch) {
+            paidAmount = -toMoneyNumber(refundMatch[1]);
+          } else if (paidMatch) {
+            paidAmount = toMoneyNumber(paidMatch[1]);
           } else if ((s as any).paymentStatus === 'PAID' || (s as any).paymentMethod === 'CASH') {
             // fully paid
-            paidAmount = Number((s as any).total ?? (s as any).totalPrice ?? 0);
+            paidAmount = toMoneyNumber((s as any).total ?? (s as any).totalPrice ?? 0);
           } else {
             paidAmount = 0;
           }
 
-          const totalPrice = Number((s as any).total ?? (s as any).totalPrice ?? 0);
+          const totalPrice = toMoneyNumber((s as any).total ?? (s as any).totalPrice ?? 0);
           const paymentStatus: 'PAID' | 'PARTIAL' | 'UNPAID' =
             paidAmount > 0 && paidAmount < totalPrice
               ? 'PARTIAL'
@@ -110,6 +172,10 @@ const toDate = formatDate(tomorrow);
           return { ...s, paidAmount, paymentStatus } as Sale & { paidAmount: number; paymentStatus: string };
         });
 
+        enriched.sort(
+          (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        );
+
         setSales(enriched as any);
       })
       .catch((err) => {
@@ -117,7 +183,7 @@ const toDate = formatDate(tomorrow);
         const body = err?.response?.data;
         setError(
           `Request failed${status ? ` (status ${status})` : ''}: ${
-            body?.error ?? body?.message ?? err?.message ?? 'Failed to load daily sales'
+            body?.error ?? body?.message ?? err?.message ?? t('dailySales.failedToLoad')
           }`
         );
         console.error('Daily sales load error:', err);
@@ -130,9 +196,9 @@ const toDate = formatDate(tomorrow);
 
     sales.forEach((sale: any) => {
       const employeeName =
-        sale.employee?.name || sale.employeeName || 'Unknown Employee';
+        sale.employee?.name || sale.employeeName || t('common.unknownEmployee');
       // Use paidAmount when available; fallback to totalPrice for fully paid
-      const salePaid = typeof sale.paidAmount === 'number' ? sale.paidAmount : Number(sale.total ?? sale.totalPrice ?? 0);
+      const salePaid = saleCashAmount(sale);
 
       if (!groups[employeeName]) {
         groups[employeeName] = {
@@ -159,12 +225,12 @@ const toDate = formatDate(tomorrow);
     <div className="p-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-black">Daily Sales</h2>
+          <h2 className="text-2xl font-bold text-black">{t('dailySales.title')}</h2>
           <p className="mt-1 text-sm text-gray-600 max-w-xl">
             Select a branch and explore today&apos;s sales grouped by employee.
           </p>
         </div>
-        <div className="text-sm text-gray-500">Today: {fromDate}</div>
+        <div className="text-sm text-gray-500">{t('dailySales.todayDate', { date: fromDate })}</div>
       </div>
 
       <section className="mt-6 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
@@ -192,7 +258,7 @@ const toDate = formatDate(tomorrow);
           <div className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
             <div className="flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-center">
               <div>
-                <h3 className="text-xl font-semibold text-black">Branch {selectedBranch}</h3>
+                <h3 className="text-xl font-semibold text-black">{t('dailySales.branchTitle', { branch: selectedBranch })}</h3>
                 <p className="text-sm text-gray-600">
                   Showing daily sales for {selectedBranch} on {fromDate}.
                 </p>
@@ -230,28 +296,60 @@ const toDate = formatDate(tomorrow);
                       </p>
                     </div>
                     <div className="rounded-full bg-magenta-500 px-4 py-2 text-sm font-semibold text-white">
-                      ${group.total.toFixed(2)}
+                      {`$${group.total.toFixed(2)}`}
                     </div>
                   </div>
                   <div className="mt-5 space-y-3">
-                    {group.sales.map((sale) => (
-                      <button
-                        key={sale.id}
-                        type="button"
-                        onClick={() => navigate(`/sales/${sale.id}`)}
-                        className={`w-full rounded-2xl border p-4 text-left transition hover:border-magenta-300 hover:bg-white ${getSaleBorder(sale)}`}
-                      >
-                        <div className="flex items-center justify-between gap-3">
-                          <div>
-                            <div className="text-sm font-semibold text-black">Sale ID: {sale.id}</div>
-                            <div className="text-xs text-gray-500">{formatTime(sale.createdAt)}</div>
+                    {group.sales.map((sale) => {
+                      const amount = saleCashAmount(sale);
+                      const isExchange = Boolean(sale.notes?.includes('EXCHANGE'));
+                      const isOwedPayment = Boolean(sale.notes?.includes('OWED PAYMENT'));
+
+                      return (
+                        <button
+                          key={sale.id}
+                          type="button"
+                          onClick={() =>
+                            navigate(`/sales/${sale.sourceSaleId || sale.id}`, {
+                              state: { returnTo: '/sales/daily' },
+                            })
+                          }
+                          className={`w-full rounded-2xl border p-4 text-left transition hover:border-black hover:bg-white ${getSaleBorder(sale)}`}
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <div>
+                              <div className="break-all text-sm font-semibold text-black">
+                                {isOwedPayment
+                                  ? `${t('dailySales.owedPaymentForSale')} ${sale.sourceSaleId || sale.id}`
+                                  : `${t('dailySales.saleIdLabel')}: ${sale.sourceSaleId || sale.id}`}
+                              </div>
+                              <div className="mt-1 text-xs text-gray-500">{formatTime(sale.createdAt)}</div>
+                              <div className={`mt-2 text-sm font-bold ${amount < 0 ? 'text-red-600' : 'text-magenta-600'}`}>
+                                {t('common.cashImpact')}: {amount < 0 ? '-' : ''}${Math.abs(amount).toFixed(2)}
+                              </div>
+                              {isExchange && (
+                                <span className="mt-2 inline-flex rounded-full bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700">
+                                  {t('common.exchange')}
+                                </span>
+                              )}
+                              {isOwedPayment && (
+                                <span className="mt-2 inline-flex rounded-full bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700">
+                                  {t('common.owedPayment')}
+                                </span>
+                              )}
+                              {sale.items?.some((item) => item.qrCodeDataUrl) && (
+                                <span className="mt-2 inline-flex rounded-full bg-gray-100 px-2 py-1 text-xs font-semibold text-gray-700">
+                                  {t('dailySales.qrSaved')}
+                                </span>
+                              )}
+                            </div>
+                            <div className={`text-lg font-bold ${amount < 0 ? 'text-red-600' : 'text-magenta-600'}`}>
+                              {`${amount < 0 ? '-' : ''}$${Math.abs(amount).toFixed(2)}`}
+                            </div>
                           </div>
-                          <div className="text-sm font-semibold text-magenta-500">
-                            ${typeof (sale as any).paidAmount === 'number' ? (sale as any).paidAmount.toFixed(2) : Number(sale.total ?? sale.totalPrice ?? 0).toFixed(2)}
-                          </div>
-                        </div>
-                      </button>
-                    ))}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
               ))}
