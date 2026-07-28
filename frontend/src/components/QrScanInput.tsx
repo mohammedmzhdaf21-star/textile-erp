@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import QrScannerModal from './QrScannerModal';
 import { normalizeQrScanValue } from '../lib/qrScan';
@@ -9,17 +9,13 @@ type QrScanInputProps = {
   onScan?: (value: string) => void;
   placeholder?: string;
   className?: string;
-  inputClassName?: string;
   disabled?: boolean;
-  autoFocus?: boolean;
-  onBlur?: () => void;
   id?: string;
-  name?: string;
 };
 
 function CameraIcon() {
   return (
-    <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
+    <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="1.8">
       <path
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -36,60 +32,37 @@ export default function QrScanInput({
   onScan,
   placeholder,
   className = '',
-  inputClassName = 'w-full rounded-xl border border-gray-300 px-3 py-2 text-sm',
   disabled = false,
-  autoFocus = false,
-  onBlur,
   id,
-  name,
 }: QrScanInputProps) {
   const { t } = useTranslation();
   const [scannerOpen, setScannerOpen] = useState(false);
-  const ignoreBlurRef = useRef(false);
 
   const applyScan = (rawValue: string) => {
     const normalized = normalizeQrScanValue(rawValue);
     if (!normalized) return;
-    ignoreBlurRef.current = true;
     onChange(normalized);
     onScan?.(normalized);
   };
 
-  const handleBlur = () => {
-    if (ignoreBlurRef.current) {
-      ignoreBlurRef.current = false;
-      return;
-    }
-    onBlur?.();
-  };
-
   return (
     <>
-      <div className={`flex gap-2 ${className}`}>
-        <input
-          id={id}
-          name={name}
-          value={value}
-          onChange={(event) => onChange(event.target.value)}
-          onBlur={handleBlur}
-          className={inputClassName}
-          placeholder={placeholder}
-          disabled={disabled}
-          autoFocus={autoFocus}
-        />
+      <div className={className} id={id}>
         <button
           type="button"
-          onMouseDown={(event) => event.preventDefault()}
-          onClick={() => {
-            ignoreBlurRef.current = true;
-            setScannerOpen(true);
-          }}
+          onClick={() => setScannerOpen(true)}
           disabled={disabled}
-          className="inline-flex shrink-0 items-center justify-center rounded-xl border border-magenta-200 bg-magenta-50 px-3 text-magenta-700 transition hover:bg-magenta-100 disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex items-center justify-center rounded-xl border border-magenta-200 bg-magenta-50 p-3 text-magenta-700 transition hover:bg-magenta-100 disabled:cursor-not-allowed disabled:opacity-50"
           aria-label={t('qrScanner.scanWithCamera')}
+          title={t('qrScanner.scanWithCamera')}
         >
           <CameraIcon />
         </button>
+        {value ? (
+          <p className="mt-2 break-all text-xs font-semibold text-gray-800">{value}</p>
+        ) : (
+          <p className="mt-2 text-xs text-gray-500">{placeholder ?? t('qrScanner.tapToScan')}</p>
+        )}
       </div>
 
       <QrScannerModal

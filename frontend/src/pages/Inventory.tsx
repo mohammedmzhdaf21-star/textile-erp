@@ -477,16 +477,8 @@ const InventoryView: React.FC = () => {
       <section className="mb-6 rounded-3xl border border-gray-200 bg-white p-5 shadow-sm">
         <h3 className="text-lg font-semibold text-black">{t('inventory.qrSearchTitle')}</h3>
         <p className="mt-1 text-sm text-gray-500">{t('inventory.qrSearchTitleDescription')}</p>
-        <form
-          className="mt-4 flex flex-col gap-3 sm:flex-row"
-          onSubmit={(event) => {
-            event.preventDefault();
-            runQrSearch();
-          }}
-        >
+        <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-start">
           <QrScanInput
-            className="flex-1"
-            inputClassName="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm"
             value={scanQuery}
             onChange={setScanQuery}
             onScan={(value) => {
@@ -494,11 +486,7 @@ const InventoryView: React.FC = () => {
               void runQrSearch(value);
             }}
             placeholder={t('inventory.scanPlaceholder')}
-            autoFocus
           />
-          <button type="submit" className="btn-primary" disabled={searchLoading}>
-            {searchLoading ? t('common.searching') : t('common.search')}
-          </button>
           {searchFamilyCode !== null && (
             <button
               type="button"
@@ -508,7 +496,10 @@ const InventoryView: React.FC = () => {
               {t('common.clear')}
             </button>
           )}
-        </form>
+        </div>
+        {searchLoading && (
+          <p className="mt-2 text-sm text-gray-500">{t('common.searching')}</p>
+        )}
 
         {searchError && (
           <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">

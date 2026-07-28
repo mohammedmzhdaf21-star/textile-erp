@@ -682,13 +682,6 @@ const SalesView: React.FC = () => {
                 <QrScanInput
                   className="mt-1"
                   value={scanState.inventoryItemId}
-                  onBlur={() => {
-                    if (scanState.inventoryItemId.trim()) {
-                      detectScanItem().catch((error) =>
-                        handleScanLookupError(error, scanState.inventoryItemId.trim())
-                      );
-                    }
-                  }}
                   onChange={(value) => {
                     setDetectedScanItem(null);
                     setScanMessage(null);

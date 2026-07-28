@@ -229,9 +229,6 @@ export default function Dashboard() {
                 }}
                 placeholder={t("dashboard.qrPlaceholder")}
               />
-              <button type="button" onClick={() => void loadItemForPrice()} className="btn-secondary mt-3 w-full">
-                {t("common.detectItem")}
-              </button>
 
               <div className="mt-4 grid grid-cols-2 gap-3">
                 <div>

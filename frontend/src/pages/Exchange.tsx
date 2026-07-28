@@ -497,11 +497,6 @@ const ExchangePage: React.FC = () => {
                 <QrScanInput
                   className="mt-1"
                   value={newScan.inventoryItemId}
-                  onBlur={() => {
-                    if (newScan.inventoryItemId.trim()) {
-                      detectNewItem().catch(handleNewScanLookupError);
-                    }
-                  }}
                   onChange={(value) => {
                     setDetectedNewItem(null);
                     setNewScanMessage(null);
@@ -642,11 +637,6 @@ const ExchangePage: React.FC = () => {
                 <QrScanInput
                   className="mt-1"
                   value={returnedScan.inventoryItemId}
-                  onBlur={() => {
-                    if (returnedScan.inventoryItemId.trim()) {
-                      detectReturnedItem().catch(handleReturnedScanLookupError);
-                    }
-                  }}
                   onChange={(value) => {
                     setDetectedReturnedItem(null);
                     setReturnedScanMessage(null);

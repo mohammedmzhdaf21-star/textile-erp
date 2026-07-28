@@ -897,6 +897,7 @@
     "startingCamera": "Starting camera...",
     "cameraError": "Could not access the camera. Check browser permissions and try again.",
     "scanWithCamera": "Scan with camera",
+    "tapToScan": "Tap the camera to scan a QR code",
     "itemNotFound": "Inventory item not found",
     "lookupFailedWithCode": "Could not find \"{{code}}\": {{message}}"
   },
