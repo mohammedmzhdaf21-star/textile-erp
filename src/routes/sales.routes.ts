@@ -175,6 +175,7 @@ router.get('/', async (req: Request, res: Response) => {
     const branchId = req.query.branchId as string | undefined;
     const employeeId = req.query.employeeId as string | undefined;
     const customerPhone = req.query.customerPhone as string | undefined;
+    const search = req.query.search as string | undefined;
     const fromDateRaw = req.query.fromDate as string | undefined;
     const toDateRaw = req.query.toDate as string | undefined;
     const includeVoidedRaw = req.query.includeVoided as string | undefined;
@@ -194,6 +195,7 @@ router.get('/', async (req: Request, res: Response) => {
       branchId,
       employeeId,
       customerPhone,
+      search,
       fromDate,
       toDate,
       includeVoided,

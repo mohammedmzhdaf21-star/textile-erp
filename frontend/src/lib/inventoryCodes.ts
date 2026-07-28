@@ -1,14 +1,15 @@
+import type { TFunction } from 'i18next';
 import { buildPackageIdSuffix, type PackageComponent } from './piecePackages';
 
 export type InventoryItemType = 'ROLL' | 'PIECE' | 'REMANENT';
 
 export const BRANCH_DESTINATIONS = [
-  { code: 'A', id: 'B001', label: 'Branch A' },
-  { code: 'B', id: 'B002', label: 'Branch B' },
-  { code: 'C', id: 'B003', label: 'Branch C' },
-  { code: 'E', id: 'B004', label: 'Branch E' },
-  { code: 'F', id: 'B005', label: 'Branch F' },
-  { code: 'S', id: 'B000', label: 'Storage' },
+  { code: 'A', id: 'B001', labelKey: 'branches.A' },
+  { code: 'B', id: 'B002', labelKey: 'branches.B' },
+  { code: 'C', id: 'B003', labelKey: 'branches.C' },
+  { code: 'E', id: 'B004', labelKey: 'branches.E' },
+  { code: 'F', id: 'B005', labelKey: 'branches.F' },
+  { code: 'S', id: 'B000', labelKey: 'branches.S' },
 ] as const;
 
 export type BranchDestinationCode = (typeof BRANCH_DESTINATIONS)[number]['code'];
@@ -21,10 +22,25 @@ export const BRANCH_CODE_BY_ID: Record<string, BranchDestinationCode> = Object.f
   BRANCH_DESTINATIONS.map((branch) => [branch.id, branch.code])
 );
 
+export const ITEM_TYPE_LABEL_KEYS: Record<InventoryItemType, string> = {
+  ROLL: 'itemTypes.ROLL',
+  PIECE: 'itemTypes.PIECE',
+  REMANENT: 'itemTypes.REMANENT',
+};
+
+/** @deprecated Use getItemTypeLabel(t, type) */
 export const ITEM_TYPE_LABELS: Record<InventoryItemType, string> = {
   ROLL: 'Roll',
   PIECE: 'Piece',
   REMANENT: 'Remnant',
+};
+
+export const getItemTypeLabel = (t: TFunction, type: InventoryItemType) =>
+  t(ITEM_TYPE_LABEL_KEYS[type]);
+
+export const getBranchLabel = (t: TFunction, code: BranchDestinationCode) => {
+  const destination = BRANCH_DESTINATIONS.find((branch) => branch.code === code);
+  return destination ? t(destination.labelKey) : code;
 };
 
 export const typeCode = (type: InventoryItemType) =>
@@ -55,6 +71,135 @@ export const padLengthCode = (meters: number) => {
   return String(encoded).padStart(4, '0');
 };
 
+export const meteredInstanceKeyPrefix = (type: 'ROLL' | 'REMANENT') =>
+  type === 'ROLL' ? 'roll' : 'remnant';
+
+export const formatMeteredInstanceIdSuffix = (
+  instanceKey: string,
+  type: 'ROLL' | 'REMANENT'
+) => {
+  const prefix = meteredInstanceKeyPrefix(type);
+  const match = instanceKey.match(new RegExp(`^${prefix}-(\\d+)$`));
+  if (!match) return '';
+  const letter = type === 'ROLL' ? 'R' : 'M';
+  return `${letter}${match[1].padStart(2, '0')}`;
+};
+
+const parseMeteredInstanceNumber = (
+  item: { id?: string; packageKey?: string },
+  type: 'ROLL' | 'REMANENT'
+) => {
+  const prefix = meteredInstanceKeyPrefix(type);
+  const letter = type === 'ROLL' ? 'R' : 'M';
+
+  if (item.id) {
+    const suffixMatch = item.id.match(new RegExp(`-${letter}(\\d{2})$`, 'i'));
+    if (suffixMatch) {
+      return Number(suffixMatch[1]);
+    }
+  }
+
+  const key = item.packageKey ?? '';
+  if (!key) {
+    return 1;
+  }
+
+  const match = key.match(new RegExp(`^${prefix}-(\\d+)$`));
+  return match ? Number(match[1]) : 1;
+};
+
+export const pieceInstanceKeyPrefix = () => 'piece';
+
+export const formatPieceInstanceIdSuffix = (instanceKey: string) => {
+  const match = instanceKey.match(/^piece-(\d+)$/);
+  if (!match) return '';
+  return `P${match[1].padStart(2, '0')}`;
+};
+
+export const resolvePieceInstanceKey = (input: {
+  items: Array<{
+    branchId: string;
+    code: number;
+    subCode?: number | string;
+    costPrice?: number | string;
+    colorId: string;
+    type: string;
+    pieceLength?: number | string | null;
+    packageKey?: string | null;
+    isPiecePackage?: boolean;
+  }>;
+  branchId: string;
+  familyCode: number;
+  subCode: number;
+  colorId: string;
+  pieceLength: number;
+}) => {
+  const matching = input.items.filter((item) => {
+    if (item.type !== 'PIECE' || item.isPiecePackage) return false;
+    const itemPrice = Number(item.subCode ?? item.costPrice ?? 0);
+    return (
+      item.branchId === input.branchId &&
+      Number(item.code) === Number(input.familyCode) &&
+      Math.abs(itemPrice - input.subCode) < 0.001 &&
+      item.colorId === input.colorId &&
+      Math.abs(Number(item.pieceLength ?? 0) - input.pieceLength) < 0.001
+    );
+  });
+
+  let maxInstance = 0;
+  for (const item of matching) {
+    const key = item.packageKey ?? '';
+    if (!key) {
+      maxInstance = Math.max(maxInstance, 1);
+      continue;
+    }
+    const match = key.match(/^piece-(\d+)$/);
+    if (match) {
+      maxInstance = Math.max(maxInstance, Number(match[1]));
+    }
+  }
+
+  const nextInstance = maxInstance + 1;
+  return `piece-${nextInstance}`;
+};
+
+export const resolveMeteredInstanceKey = (input: {
+  type: 'ROLL' | 'REMANENT';
+  items: Array<{
+    id?: string;
+    branchId: string;
+    code: number;
+    subCode?: number | string;
+    costPrice?: number | string;
+    colorId: string;
+    type: InventoryItemType;
+    packageKey?: string;
+  }>;
+  branchId: string;
+  familyCode: number;
+  subCode: number;
+  colorId: string;
+}) => {
+  const matching = input.items.filter((item) => {
+    const itemPrice = Number(item.subCode ?? item.costPrice ?? 0);
+    return (
+      item.branchId === input.branchId &&
+      Number(item.code) === Number(input.familyCode) &&
+      Math.abs(itemPrice - input.subCode) < 0.001 &&
+      item.colorId === input.colorId &&
+      item.type === input.type
+    );
+  });
+
+  let maxInstance = 0;
+  for (const item of matching) {
+    maxInstance = Math.max(maxInstance, parseMeteredInstanceNumber(item, input.type));
+  }
+
+  const nextInstance = maxInstance + 1;
+  return nextInstance === 1 ? '' : `${meteredInstanceKeyPrefix(input.type)}-${nextInstance}`;
+};
+
 export const buildInventoryItemId = (input: {
   branchId: string;
   familyCode: number;
@@ -65,6 +210,7 @@ export const buildInventoryItemId = (input: {
   pieceLength?: number;
   packageComponents?: PackageComponent[];
   isPiecePackage?: boolean;
+  instanceKey?: string;
 }) => {
   const colorCode = colorCodeFromName(input.colorName, input.colorId);
   const typeLetter = typeCode(input.type);
@@ -78,7 +224,14 @@ export const buildInventoryItemId = (input: {
     input.type === 'PIECE' && input.pieceLength && input.pieceLength > 0
       ? padLengthCode(input.pieceLength)
       : '';
-  return `${input.branchId}-${padFamilyCode(input.familyCode)}-${padSubCode(input.subCode)}-${colorCode}${typeLetter}${lengthSuffix}`;
+  const instanceSuffix = input.instanceKey
+    ? input.type === 'PIECE'
+      ? `-${formatPieceInstanceIdSuffix(input.instanceKey)}`
+      : (input.type === 'ROLL' || input.type === 'REMANENT')
+        ? `-${formatMeteredInstanceIdSuffix(input.instanceKey, input.type)}`
+        : ''
+    : '';
+  return `${input.branchId}-${padFamilyCode(input.familyCode)}-${padSubCode(input.subCode)}-${colorCode}${typeLetter}${lengthSuffix}${instanceSuffix}`;
 };
 
 export type ParsedInventoryItemId = {
@@ -100,7 +253,7 @@ export const parseInventoryItemId = (raw: string): ParsedInventoryItemId => {
   const value = raw.trim();
   const result: ParsedInventoryItemId = { raw: value };
 
-  const modern = value.match(/^([A-Z]\d{3})-(\d{3})-(\d+)-([A-Z]{3})([RPM])(\d{4})?$/i);
+  const modern = value.match(/^([A-Z]\d{3})-(\d{3})-(\d+)-([A-Z]{3})([RPM])(\d{4})?(?:-P(\d{2}))?$/i);
   if (modern) {
     result.branchId = modern[1].toUpperCase();
     result.familyCode = Number(modern[2]);
@@ -153,7 +306,7 @@ export type InventoryStockItem = {
 export type BranchStockRow = {
   branchId: string;
   branchCode: string;
-  branchLabel: string;
+  branchLabelKey: string;
   rollMeters: number;
   pieceCount: number;
   pieceMeters: number;
@@ -174,7 +327,7 @@ export const aggregateFamilyStock = (
     byBranch.set(destination.id, {
       branchId: destination.id,
       branchCode: destination.code,
-      branchLabel: destination.label,
+      branchLabelKey: destination.labelKey,
       rollMeters: 0,
       pieceCount: 0,
       pieceMeters: 0,
@@ -201,6 +354,98 @@ export const aggregateFamilyStock = (
   return Array.from(byBranch.values());
 };
 
+const meteredItemsForRow = (row: BranchStockRow, type: 'ROLL' | 'REMANENT') =>
+  row.items.filter((item) => item.type === type && Number(item.meters ?? 0) > 0);
+
+const pieceItemsForRow = (row: BranchStockRow) =>
+  row.items.filter(
+    (item) =>
+      item.type === 'PIECE' && !item.isPiecePackage && Number(item.quantity ?? 0) > 0
+  );
+
+export const hasStockForRow = (row: BranchStockRow, type: InventoryItemType) => {
+  if (type === 'ROLL') return meteredItemsForRow(row, 'ROLL').length > 0;
+  if (type === 'REMANENT') return meteredItemsForRow(row, 'REMANENT').length > 0;
+  return pieceItemsForRow(row).length > 0;
+};
+
+export const formatStockAmountLabel = (
+  t: TFunction,
+  row: BranchStockRow,
+  type: InventoryItemType
+) => {
+  if (type === 'ROLL') {
+    const rolls = meteredItemsForRow(row, 'ROLL');
+    if (!rolls.length) return '0';
+    const meters = rolls.reduce((sum, item) => sum + Number(item.meters ?? 0), 0);
+    const unit = t(rolls.length === 1 ? 'inventory.stockRoll' : 'inventory.stockRolls');
+    return t('inventory.stockMeteredSummary', {
+      count: rolls.length,
+      unit,
+      meters: formatMetersAmount(meters),
+    });
+  }
+  if (type === 'REMANENT') {
+    const remnants = meteredItemsForRow(row, 'REMANENT');
+    if (!remnants.length) return '0';
+    const meters = remnants.reduce((sum, item) => sum + Number(item.meters ?? 0), 0);
+    const unit = t(remnants.length === 1 ? 'inventory.stockRemnant' : 'inventory.stockRemnants');
+    return t('inventory.stockMeteredSummary', {
+      count: remnants.length,
+      unit,
+      meters: formatMetersAmount(meters),
+    });
+  }
+  const pieces = pieceItemsForRow(row);
+  const count = pieces.reduce((sum, item) => sum + Number(item.quantity ?? 0), 0);
+  if (count <= 0) return '0';
+  const unit = t(count === 1 ? 'common.pieceSingular' : 'common.pieces');
+  const lengths = new Set(pieces.map((item) => Number(item.pieceLength ?? 0)));
+  if (lengths.size <= 1) {
+    return t('inventory.stockPieceSummary', { count, unit });
+  }
+  return t('inventory.stockPieceSummaryWithSizes', { count, unit, sizes: lengths.size });
+};
+
+export const formatTotalStockLabel = (
+  t: TFunction,
+  rows: BranchStockRow[],
+  type: InventoryItemType
+) => {
+  if (type === 'ROLL') {
+    const rolls = rows.flatMap((row) => meteredItemsForRow(row, 'ROLL'));
+    if (!rolls.length) return '0';
+    const meters = rolls.reduce((sum, item) => sum + Number(item.meters ?? 0), 0);
+    const unit = t(rolls.length === 1 ? 'inventory.stockRoll' : 'inventory.stockRolls');
+    return t('inventory.stockMeteredSummary', {
+      count: rolls.length,
+      unit,
+      meters: formatMetersAmount(meters),
+    });
+  }
+  if (type === 'REMANENT') {
+    const remnants = rows.flatMap((row) => meteredItemsForRow(row, 'REMANENT'));
+    if (!remnants.length) return '0';
+    const meters = remnants.reduce((sum, item) => sum + Number(item.meters ?? 0), 0);
+    const unit = t(remnants.length === 1 ? 'inventory.stockRemnant' : 'inventory.stockRemnants');
+    return t('inventory.stockMeteredSummary', {
+      count: remnants.length,
+      unit,
+      meters: formatMetersAmount(meters),
+    });
+  }
+  const pieces = rows.flatMap((row) => pieceItemsForRow(row));
+  const count = pieces.reduce((sum, item) => sum + Number(item.quantity ?? 0), 0);
+  if (count <= 0) return '0';
+  const unit = t(count === 1 ? 'common.pieceSingular' : 'common.pieces');
+  const lengths = new Set(pieces.map((item) => Number(item.pieceLength ?? 0)));
+  if (lengths.size <= 1) {
+    return t('inventory.stockPieceSummary', { count, unit });
+  }
+  return t('inventory.stockPieceSummaryWithSizes', { count, unit, sizes: lengths.size });
+};
+
+/** @deprecated Use formatStockAmountLabel */
 export const stockAmountForType = (row: BranchStockRow, type: InventoryItemType) => {
   if (type === 'ROLL') {
     return row.rollMeters > 0 ? `${row.rollMeters.toFixed(2)} m` : '0';
@@ -211,6 +456,7 @@ export const stockAmountForType = (row: BranchStockRow, type: InventoryItemType)
   return row.remnantMeters > 0 ? `${row.remnantMeters.toFixed(2)} m` : '0';
 };
 
+/** @deprecated Use formatTotalStockLabel */
 export const totalStockForType = (rows: BranchStockRow[], type: InventoryItemType) => {
   if (type === 'ROLL') {
     const total = rows.reduce((sum, row) => sum + row.rollMeters, 0);
@@ -242,16 +488,16 @@ export type StockSizeBreakdown = {
   count: number;
   branches: Array<{
     branchId: string;
-    branchLabel: string;
+    branchLabelKey: string;
     branchCode: string;
     count: number;
   }>;
 };
 
-const breakdownUnitLabel = (type: InventoryItemType, count: number) => {
-  if (type === 'PIECE') return count === 1 ? 'piece' : 'pieces';
-  if (type === 'ROLL') return count === 1 ? 'roll' : 'rolls';
-  return count === 1 ? 'remnant' : 'remnants';
+const breakdownUnitKey = (type: InventoryItemType, count: number) => {
+  if (type === 'PIECE') return count === 1 ? 'common.pieceSingular' : 'common.pieces';
+  if (type === 'ROLL') return count === 1 ? 'inventory.stockRoll' : 'inventory.stockRolls';
+  return count === 1 ? 'inventory.stockRemnant' : 'inventory.stockRemnants';
 };
 
 export const formatMetersAmount = (meters: number) => {
@@ -259,9 +505,94 @@ export const formatMetersAmount = (meters: number) => {
   return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(2);
 };
 
-export const formatStockBreakdownLine = (type: InventoryItemType, entry: StockSizeBreakdown) => {
-  const unit = breakdownUnitLabel(type, entry.count);
-  return `${entry.count} ${unit} at ${formatMetersAmount(entry.sizeMeters)} m each`;
+export type StockDetailEntry = {
+  key: string;
+  sizeMeters: number;
+  count: number;
+  itemId?: string;
+  branchId?: string;
+  branchLabelKey?: string;
+  branchCode?: string;
+};
+
+export const aggregateDetailedStockBreakdown = (
+  rows: BranchStockRow[],
+  type: InventoryItemType,
+  branchId?: string
+): StockDetailEntry[] => {
+  const rowsToProcess = branchId ? rows.filter((row) => row.branchId === branchId) : rows;
+
+  if (type === 'ROLL' || type === 'REMANENT') {
+    const results: StockDetailEntry[] = [];
+    for (const row of rowsToProcess) {
+      for (const item of row.items) {
+        if (item.type !== type) continue;
+        const meters = Number(item.meters ?? 0);
+        if (meters <= 0) continue;
+        results.push({
+          key: item.id,
+          sizeMeters: meters,
+          count: 1,
+          itemId: item.id,
+          branchId: row.branchId,
+          branchLabelKey: row.branchLabelKey,
+          branchCode: row.branchCode,
+        });
+      }
+    }
+    return results.sort((a, b) => a.sizeMeters - b.sizeMeters);
+  }
+
+  const byLength = new Map<number, StockDetailEntry>();
+  for (const row of rowsToProcess) {
+    for (const item of row.items) {
+      if (item.type !== 'PIECE' || item.isPiecePackage) continue;
+      const length = Number(item.pieceLength ?? 0);
+      const qty = Number(item.quantity ?? 0);
+      if (length <= 0 || qty <= 0) continue;
+
+      const existing = byLength.get(length);
+      if (existing) {
+        existing.count += qty;
+      } else {
+        byLength.set(length, {
+          key: `piece-${length}`,
+          sizeMeters: length,
+          count: qty,
+        });
+      }
+    }
+  }
+
+  return Array.from(byLength.values()).sort((a, b) => a.sizeMeters - b.sizeMeters);
+};
+
+export const formatDetailedStockBreakdownLine = (
+  t: TFunction,
+  type: InventoryItemType,
+  entry: StockDetailEntry
+) => {
+  if (type === 'ROLL') {
+    return t('inventory.stockRollLine', { meters: formatMetersAmount(entry.sizeMeters) });
+  }
+  if (type === 'REMANENT') {
+    return t('inventory.stockRemnantLine', { meters: formatMetersAmount(entry.sizeMeters) });
+  }
+  const unit = t(entry.count === 1 ? 'common.pieceSingular' : 'common.pieces');
+  return t('inventory.stockBreakdownLine', {
+    count: entry.count,
+    unit,
+    size: formatMetersAmount(entry.sizeMeters),
+  });
+};
+
+export const formatStockBreakdownLine = (t: TFunction, type: InventoryItemType, entry: StockSizeBreakdown) => {
+  const unit = t(breakdownUnitKey(type, entry.count));
+  return t('inventory.stockBreakdownLine', {
+    count: entry.count,
+    unit,
+    size: formatMetersAmount(entry.sizeMeters),
+  });
 };
 
 export const aggregateStockBreakdown = (
@@ -275,6 +606,7 @@ export const aggregateStockBreakdown = (
   for (const row of rowsToProcess) {
     for (const item of row.items) {
       if (item.type !== type) continue;
+      if (type === 'PIECE' && item.isPiecePackage) continue;
 
       const sizeMeters =
         type === 'PIECE' ? Number(item.pieceLength ?? 0) : Number(item.meters ?? 0);
@@ -296,7 +628,7 @@ export const aggregateStockBreakdown = (
       } else {
         existing.branches.push({
           branchId: row.branchId,
-          branchLabel: row.branchLabel,
+          branchLabelKey: row.branchLabelKey,
           branchCode: row.branchCode,
           count,
         });
@@ -322,14 +654,23 @@ export const printInventoryLabel = (input: {
   familyCode: number;
   subCode: number;
   type: InventoryItemType;
+  typeLabel: string;
   colorName: string;
   branchLabel: string;
   amountLabel: string;
+  labels: {
+    title: string;
+    familyCode: string;
+    subCode: string;
+    type: string;
+    amount: string;
+    color: string;
+    destination: string;
+  };
 }) => {
   const popup = window.open('', '_blank', 'width=480,height=720');
   if (!popup) {
-    alert('Please allow pop-ups to print the QR label.');
-    return;
+    return false;
   }
 
   popup.document.write(`<!DOCTYPE html>
@@ -349,13 +690,13 @@ export const printInventoryLabel = (input: {
   </head>
   <body>
     <div class="label">
-      <div class="title">Textile ERP Inventory Label</div>
-      <div class="row"><span>Family code</span><strong>${input.familyCode}</strong></div>
-      <div class="row"><span>Sub code (price)</span><strong>$${formatSubCode(input.subCode)}</strong></div>
-      <div class="row"><span>Type</span><strong>${ITEM_TYPE_LABELS[input.type]}</strong></div>
-      <div class="row"><span>Amount</span><strong>${input.amountLabel}</strong></div>
-      <div class="row"><span>Color</span><strong>${input.colorName}</strong></div>
-      <div class="row"><span>Destination</span><strong>${input.branchLabel}</strong></div>
+      <div class="title">${input.labels.title}</div>
+      <div class="row"><span>${input.labels.familyCode}</span><strong>${input.familyCode}</strong></div>
+      <div class="row"><span>${input.labels.subCode}</span><strong>$${formatSubCode(input.subCode)}</strong></div>
+      <div class="row"><span>${input.labels.type}</span><strong>${input.typeLabel}</strong></div>
+      <div class="row"><span>${input.labels.amount}</span><strong>${input.amountLabel}</strong></div>
+      <div class="row"><span>${input.labels.color}</span><strong>${input.colorName}</strong></div>
+      <div class="row"><span>${input.labels.destination}</span><strong>${input.branchLabel}</strong></div>
       <div class="qr"><img src="${input.qrDataUrl}" alt="QR code" /></div>
       <div class="id">${input.itemId}</div>
     </div>
@@ -363,4 +704,5 @@ export const printInventoryLabel = (input: {
   </body>
 </html>`);
   popup.document.close();
+  return true;
 };

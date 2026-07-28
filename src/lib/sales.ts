@@ -11,6 +11,7 @@ import {
   validateFullPackageSale,
   validatePartialPackageSale,
 } from './packageStock';
+import { meterStockUpdateAfterDeduction } from './inventoryRules';
 
 // ============================================================
 // SALES BUSINESS LOGIC
@@ -30,7 +31,28 @@ export interface SaleItemInput {
   packageSaleMode?: 'FULL' | 'PARTIAL';
   packagesSold?: number;
   packageComponentsSold?: Array<{ name: string; quantity: number }>;
+  qrCodeValue?: string;
+  qrCodeDataUrl?: string;
 }
+
+const resolveSaleItemQr = (
+  item: SaleItemInput,
+  invItem?: { id: string; qrCodeValue: string | null; qrCodeDataUrl: string | null } | null
+) => {
+  if (item.qrCodeDataUrl) {
+    return {
+      qrCodeValue: item.qrCodeValue ?? item.inventoryItemId ?? null,
+      qrCodeDataUrl: item.qrCodeDataUrl,
+    };
+  }
+  if (invItem?.qrCodeDataUrl) {
+    return {
+      qrCodeValue: invItem.qrCodeValue ?? invItem.id,
+      qrCodeDataUrl: invItem.qrCodeDataUrl,
+    };
+  }
+  return { qrCodeValue: null, qrCodeDataUrl: null };
+};
 
 export interface CreateSaleInput {
   branchId: string;
@@ -48,6 +70,7 @@ export interface ListSalesParams {
   branchId?: string;
   employeeId?: string;
   customerPhone?: string;
+  search?: string;
   fromDate?: Date;
   toDate?: Date;
   includeVoided?: boolean;
@@ -228,9 +251,22 @@ export async function createSale(
 
     // Process each item
     for (const item of input.items) {
+      let invItem: {
+        id: string;
+        type: string;
+        meters: Prisma.Decimal | null;
+        quantity: number;
+        isArchived: boolean;
+        isPiecePackage: boolean;
+        packageComponents: unknown;
+        packageComponentStock: unknown;
+        qrCodeValue: string | null;
+        qrCodeDataUrl: string | null;
+      } | null = null;
+
       // If it has an inventoryItemId, deduct from inventory
       if (item.inventoryItemId) {
-        const invItem = await tx.inventoryItem.findUnique({
+        invItem = await tx.inventoryItem.findUnique({
           where: { id: item.inventoryItemId },
         });
 
@@ -252,10 +288,13 @@ export async function createSale(
               `Not enough stock for ${item.inventoryItemId}. Available: ${currentMeters}m, Requested: ${item.quantitySold}m`
             );
           }
+          const remainingMeters = currentMeters - item.quantitySold;
+          const meterUpdate = meterStockUpdateAfterDeduction(invItem.type, remainingMeters);
           await tx.inventoryItem.update({
             where: { id: item.inventoryItemId },
             data: {
-              meters: new Prisma.Decimal((currentMeters - item.quantitySold).toFixed(2)),
+              meters: new Prisma.Decimal(meterUpdate.meters.toFixed(2)),
+              ...(meterUpdate.type ? { type: meterUpdate.type } : {}),
               version: { increment: 1 },
             },
           });
@@ -295,6 +334,8 @@ export async function createSale(
         if (!color) throw new Error(`Color ${item.colorId} not found`);
       }
 
+      const qrSnapshot = resolveSaleItemQr(item, invItem);
+
       // Create the sale item
       await tx.saleItem.create({
         data: {
@@ -313,6 +354,8 @@ export async function createSale(
           packageComponentsSold: item.packageComponentsSold
             ? (item.packageComponentsSold as Prisma.InputJsonValue)
             : undefined,
+          qrCodeValue: qrSnapshot.qrCodeValue,
+          qrCodeDataUrl: qrSnapshot.qrCodeDataUrl,
         },
       });
     }
@@ -490,8 +533,21 @@ export async function processExchange(
     });
 
     for (const item of replacementItems) {
+      let invItem: {
+        id: string;
+        type: string;
+        meters: Prisma.Decimal | null;
+        quantity: number;
+        isArchived: boolean;
+        isPiecePackage: boolean;
+        packageComponents: unknown;
+        packageComponentStock: unknown;
+        qrCodeValue: string | null;
+        qrCodeDataUrl: string | null;
+      } | null = null;
+
       if (item.inventoryItemId) {
-        const invItem = await tx.inventoryItem.findUnique({
+        invItem = await tx.inventoryItem.findUnique({
           where: { id: item.inventoryItemId },
         });
 
@@ -505,10 +561,13 @@ export async function processExchange(
               `Not enough stock for ${item.inventoryItemId}. Available: ${currentMeters}m, Requested: ${item.quantitySold}m`
             );
           }
+          const remainingMeters = currentMeters - item.quantitySold;
+          const meterUpdate = meterStockUpdateAfterDeduction(invItem.type, remainingMeters);
           await tx.inventoryItem.update({
             where: { id: item.inventoryItemId },
             data: {
-              meters: new Prisma.Decimal((currentMeters - item.quantitySold).toFixed(2)),
+              meters: new Prisma.Decimal(meterUpdate.meters.toFixed(2)),
+              ...(meterUpdate.type ? { type: meterUpdate.type } : {}),
               version: { increment: 1 },
             },
           });
@@ -547,6 +606,8 @@ export async function processExchange(
         if (!color) throw new Error(`Color ${item.colorId} not found`);
       }
 
+      const qrSnapshot = resolveSaleItemQr(item, invItem);
+
       await tx.saleItem.create({
         data: {
           saleId: createdSale.id,
@@ -564,6 +625,8 @@ export async function processExchange(
           packageComponentsSold: item.packageComponentsSold
             ? (item.packageComponentsSold as Prisma.InputJsonValue)
             : undefined,
+          qrCodeValue: qrSnapshot.qrCodeValue,
+          qrCodeDataUrl: qrSnapshot.qrCodeDataUrl,
         },
       });
     }
@@ -620,6 +683,7 @@ export async function listSales(params: ListSalesParams) {
     branchId,
     employeeId,
     customerPhone,
+    search,
     fromDate,
     toDate,
     includeVoided = false,
@@ -633,6 +697,59 @@ export async function listSales(params: ListSalesParams) {
   if (employeeId) where.employeeId = employeeId;
   if (customerPhone) where.customerPhone = customerPhone;
   if (!includeVoided) where.isVoided = false;
+
+  if (search?.trim()) {
+    const trimmed = search.trim();
+    const phoneDigits = trimmed.replace(/\D/g, '');
+    const searchConditions: Prisma.SaleWhereInput[] = [
+      {
+        items: {
+          some: {
+            inventoryItemId: {
+              equals: trimmed,
+              mode: 'insensitive',
+            },
+          },
+        },
+      },
+      {
+        items: {
+          some: {
+            inventoryItemId: {
+              contains: trimmed,
+              mode: 'insensitive',
+            },
+          },
+        },
+      },
+      {
+        customerPhone: {
+          contains: trimmed,
+          mode: 'insensitive',
+        },
+      },
+      {
+        customerName: {
+          contains: trimmed,
+          mode: 'insensitive',
+        },
+      },
+    ];
+
+    if (phoneDigits.length >= 3) {
+      searchConditions.push({
+        customerPhone: {
+          contains: phoneDigits,
+        },
+      });
+    }
+
+    if (trimmed.length >= 8) {
+      searchConditions.push({ id: trimmed });
+    }
+
+    where.OR = searchConditions;
+  }
 
   if (fromDate || toDate) {
     where.createdAt = {};

@@ -1,9 +1,12 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
+import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { login } from "../lib/auth";
+import LanguageSwitcher from "../components/LanguageSwitcher";
 
 export default function Login() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [email, setEmail] = useState("admin@textile.com");
   const [password, setPassword] = useState("admin123");
@@ -22,7 +25,7 @@ export default function Login() {
       const msg =
         err?.response?.data?.error ||
         err?.message ||
-        "Login failed. Please try again.";
+        t("login.loginFailed");
       setError(msg);
     } finally {
       setLoading(false);
@@ -31,6 +34,9 @@ export default function Login() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-white via-gray-50 to-magenta-50 p-4">
+      <div className="absolute top-4 end-4">
+        <LanguageSwitcher />
+      </div>
       <div className="w-full max-w-md animate-slide-up">
         <div className="text-center mb-8">
           <div className="inline-block bg-black rounded-2xl p-4 mb-4 shadow-lg">
@@ -49,9 +55,9 @@ export default function Login() {
             </svg>
           </div>
           <h1 className="text-4xl font-extrabold text-black tracking-tight">
-            Textile <span className="text-magenta-500">ERP</span>
+            {t("login.title")} <span className="text-magenta-500">{t("login.titleAccent")}</span>
           </h1>
-          <p className="text-gray-500 mt-2">Sign in to your workspace</p>
+          <p className="text-gray-500 mt-2">{t("login.subtitle")}</p>
         </div>
 
         <div className="card animate-fade-in">
@@ -61,14 +67,14 @@ export default function Login() {
                 htmlFor="email"
                 className="block text-sm font-semibold text-black mb-2"
               >
-                Email Address
+                {t("login.emailLabel")}
               </label>
               <input
                 id="email"
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@company.com"
+                placeholder={t("login.emailPlaceholder")}
                 required
                 disabled={loading}
                 className="input-field"
@@ -80,14 +86,14 @@ export default function Login() {
                 htmlFor="password"
                 className="block text-sm font-semibold text-black mb-2"
               >
-                Password
+                {t("login.passwordLabel")}
               </label>
               <input
                 id="password"
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Enter your password"
+                placeholder={t("login.passwordPlaceholder")}
                 required
                 disabled={loading}
                 className="input-field"
@@ -126,29 +132,29 @@ export default function Login() {
                       d="M4 12a8 8 0 018-8V0C5.4 0 0 5.4 0 12h4z"
                     />
                   </svg>
-                  Signing in...
+                  {t("common.signingIn")}
                 </>
               ) : (
-                "Sign In"
+                t("common.signIn")
               )}
             </button>
           </form>
 
           <div className="mt-6 pt-6 border-t border-gray-100">
             <p className="text-xs text-gray-500 text-center mb-2 font-semibold">
-              DEMO CREDENTIALS
+              {t("login.demoCredentials")}
             </p>
             <div className="grid grid-cols-1 gap-2 text-xs">
               <div className="flex justify-between bg-gray-50 px-3 py-2 rounded">
-                <span className="text-gray-600">Admin</span>
+                <span className="text-gray-600">{t("common.admin")}</span>
                 <span className="text-black font-mono">admin@textile.com</span>
               </div>
               <div className="flex justify-between bg-gray-50 px-3 py-2 rounded">
-                <span className="text-gray-600">Manager</span>
+                <span className="text-gray-600">{t("common.manager")}</span>
                 <span className="text-black font-mono">manager@textile.com</span>
               </div>
               <div className="flex justify-between bg-gray-50 px-3 py-2 rounded">
-                <span className="text-gray-600">Employee</span>
+                <span className="text-gray-600">{t("common.employeeRole")}</span>
                 <span className="text-black font-mono">employee@textile.com</span>
               </div>
             </div>
@@ -156,7 +162,7 @@ export default function Login() {
         </div>
 
         <p className="text-center text-xs text-gray-400 mt-6">
-          Textile ERP &copy; 2026 - All rights reserved
+          {t("common.copyright")}
         </p>
       </div>
     </div>
