@@ -49,6 +49,7 @@ export interface ListSalesParams {
   branchId?: string;
   employeeId?: string;
   customerPhone?: string;
+  search?: string;
   fromDate?: Date;
   toDate?: Date;
   includeVoided?: boolean;
@@ -627,6 +628,7 @@ export async function listSales(params: ListSalesParams) {
     branchId,
     employeeId,
     customerPhone,
+    search,
     fromDate,
     toDate,
     includeVoided = false,
@@ -640,6 +642,59 @@ export async function listSales(params: ListSalesParams) {
   if (employeeId) where.employeeId = employeeId;
   if (customerPhone) where.customerPhone = customerPhone;
   if (!includeVoided) where.isVoided = false;
+
+  if (search?.trim()) {
+    const trimmed = search.trim();
+    const phoneDigits = trimmed.replace(/\D/g, '');
+    const searchConditions: Prisma.SaleWhereInput[] = [
+      {
+        items: {
+          some: {
+            inventoryItemId: {
+              equals: trimmed,
+              mode: 'insensitive',
+            },
+          },
+        },
+      },
+      {
+        items: {
+          some: {
+            inventoryItemId: {
+              contains: trimmed,
+              mode: 'insensitive',
+            },
+          },
+        },
+      },
+      {
+        customerPhone: {
+          contains: trimmed,
+          mode: 'insensitive',
+        },
+      },
+      {
+        customerName: {
+          contains: trimmed,
+          mode: 'insensitive',
+        },
+      },
+    ];
+
+    if (phoneDigits.length >= 3) {
+      searchConditions.push({
+        customerPhone: {
+          contains: phoneDigits,
+        },
+      });
+    }
+
+    if (trimmed.length >= 8) {
+      searchConditions.push({ id: trimmed });
+    }
+
+    where.OR = searchConditions;
+  }
 
   if (fromDate || toDate) {
     where.createdAt = {};
