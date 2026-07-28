@@ -813,7 +813,9 @@
     "hint": "Point your camera at the item QR label. The code fills in automatically.",
     "startingCamera": "Starting camera...",
     "cameraError": "Could not access the camera. Check browser permissions and try again.",
-    "scanWithCamera": "Scan with camera"
+    "scanWithCamera": "Scan with camera",
+    "itemNotFound": "Inventory item not found",
+    "lookupFailedWithCode": "Could not find \"{{code}}\": {{message}}"
   },
   "errors": {
     "somethingWentWrong": "Something went wrong",

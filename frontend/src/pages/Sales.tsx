@@ -235,15 +235,18 @@ const SalesView: React.FC = () => {
   const detectScanItem = () =>
     detectScanItemForCode(scanState.inventoryItemId, scanState.sourceBranch);
 
-  const handleScanLookupError = (error: unknown) => {
+  const handleScanLookupError = (error: unknown, scannedCode?: string) => {
     const apiError = error as { response?: { status?: number; data?: { error?: string; message?: string } }; message?: string };
     const status = apiError?.response?.status;
     const body = apiError?.response?.data;
+    const baseMessage = body?.error ?? body?.message ?? apiError?.message;
     setScanMessage(
-      t('common.notFound', {
-        status: status ? t('common.notFoundStatus', { status }) : '',
-        message: body?.error ?? body?.message ?? apiError?.message,
-      })
+      scannedCode
+        ? t('qrScanner.lookupFailedWithCode', { code: scannedCode, message: baseMessage ?? t('qrScanner.itemNotFound') })
+        : t('common.notFound', {
+            status: status ? t('common.notFoundStatus', { status }) : '',
+            message: baseMessage,
+          })
     );
   };
 
@@ -523,7 +526,9 @@ const SalesView: React.FC = () => {
                   value={scanState.inventoryItemId}
                   onBlur={() => {
                     if (scanState.inventoryItemId.trim()) {
-                      detectScanItem().catch(handleScanLookupError);
+                      detectScanItem().catch((error) =>
+                        handleScanLookupError(error, scanState.inventoryItemId.trim())
+                      );
                     }
                   }}
                   onChange={(value) => {
@@ -537,7 +542,9 @@ const SalesView: React.FC = () => {
                     setScanMessage(null);
                     setMinimumPriceMessage(null);
                     setScanState((s) => ({ ...s, inventoryItemId: value }));
-                    detectScanItemForCode(value, scanState.sourceBranch).catch(handleScanLookupError);
+                    detectScanItemForCode(value, scanState.sourceBranch).catch((error) =>
+                      handleScanLookupError(error, value)
+                    );
                   }}
                   placeholder={t('sales.itemIdPlaceholder')}
                 />

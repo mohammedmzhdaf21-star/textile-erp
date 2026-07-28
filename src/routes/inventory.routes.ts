@@ -29,6 +29,7 @@ router.get('/', async (req: Request, res: Response) => {
     const colorId = req.query.colorId as string | undefined;
     const typeRaw = req.query.type as string | undefined;
     const codeRaw = req.query.code as string | undefined;
+    const itemIdRaw = req.query.itemId as string | undefined;
     const includeArchivedRaw = req.query.includeArchived as string | undefined;
     const pageRaw = req.query.page as string | undefined;
     const pageSizeRaw = req.query.pageSize as string | undefined;
@@ -48,6 +49,7 @@ router.get('/', async (req: Request, res: Response) => {
       colorId,
       type,
       code,
+      itemId: itemIdRaw,
       includeArchived,
       page,
       pageSize,

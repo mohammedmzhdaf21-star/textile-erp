@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import QrScannerModal from './QrScannerModal';
 import { normalizeQrScanValue } from '../lib/qrScan';
@@ -45,12 +45,22 @@ export default function QrScanInput({
 }: QrScanInputProps) {
   const { t } = useTranslation();
   const [scannerOpen, setScannerOpen] = useState(false);
+  const ignoreBlurRef = useRef(false);
 
   const applyScan = (rawValue: string) => {
     const normalized = normalizeQrScanValue(rawValue);
     if (!normalized) return;
+    ignoreBlurRef.current = true;
     onChange(normalized);
     onScan?.(normalized);
+  };
+
+  const handleBlur = () => {
+    if (ignoreBlurRef.current) {
+      ignoreBlurRef.current = false;
+      return;
+    }
+    onBlur?.();
   };
 
   return (
@@ -61,7 +71,7 @@ export default function QrScanInput({
           name={name}
           value={value}
           onChange={(event) => onChange(event.target.value)}
-          onBlur={onBlur}
+          onBlur={handleBlur}
           className={inputClassName}
           placeholder={placeholder}
           disabled={disabled}
@@ -69,7 +79,11 @@ export default function QrScanInput({
         />
         <button
           type="button"
-          onClick={() => setScannerOpen(true)}
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => {
+            ignoreBlurRef.current = true;
+            setScannerOpen(true);
+          }}
           disabled={disabled}
           className="inline-flex shrink-0 items-center justify-center rounded-xl border border-magenta-200 bg-magenta-50 px-3 text-magenta-700 transition hover:bg-magenta-100 disabled:cursor-not-allowed disabled:opacity-50"
           aria-label={t('qrScanner.scanWithCamera')}

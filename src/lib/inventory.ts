@@ -21,6 +21,7 @@ export interface ListInventoryParams {
   colorId?: string;
   type?: 'ROLL' | 'PIECE' | 'REMANENT';
   code?: number;
+  itemId?: string;
   includeArchived?: boolean;
   page?: number;
   pageSize?: number;
@@ -67,6 +68,7 @@ export async function listInventory(params: ListInventoryParams) {
     colorId,
     type,
     code,
+    itemId,
     includeArchived = false,
     page = 1,
     pageSize = 50,
@@ -78,6 +80,13 @@ export async function listInventory(params: ListInventoryParams) {
   if (colorId) where.colorId = colorId;
   if (type) where.type = type;
   if (code !== undefined) where.code = code;
+  if (itemId?.trim()) {
+    const normalizedItemId = itemId.trim();
+    where.OR = [
+      { id: { equals: normalizedItemId, mode: 'insensitive' } },
+      { qrCodeValue: { equals: normalizedItemId, mode: 'insensitive' } },
+    ];
+  }
   if (!includeArchived) where.isArchived = false;
 
   const skip = (page - 1) * pageSize;
@@ -112,8 +121,16 @@ export async function listInventory(params: ListInventoryParams) {
 // GET ONE INVENTORY ITEM
 // ============================================================
 export async function getInventoryItem(id: string) {
-  const item = await prisma.inventoryItem.findUnique({
-    where: { id },
+  const normalizedId = id.trim();
+  const item = await prisma.inventoryItem.findFirst({
+    where: {
+      OR: [
+        { id: normalizedId },
+        { qrCodeValue: normalizedId },
+        { id: { equals: normalizedId, mode: 'insensitive' } },
+        { qrCodeValue: { equals: normalizedId, mode: 'insensitive' } },
+      ],
+    },
     include: {
       color: true,
       branch: true,
