@@ -85,9 +85,33 @@ export const formatMeteredInstanceIdSuffix = (
   return `${letter}${match[1].padStart(2, '0')}`;
 };
 
+const parseMeteredInstanceNumber = (
+  item: { id?: string; packageKey?: string },
+  type: 'ROLL' | 'REMANENT'
+) => {
+  const prefix = meteredInstanceKeyPrefix(type);
+  const letter = type === 'ROLL' ? 'R' : 'M';
+
+  if (item.id) {
+    const suffixMatch = item.id.match(new RegExp(`-${letter}(\\d{2})$`, 'i'));
+    if (suffixMatch) {
+      return Number(suffixMatch[1]);
+    }
+  }
+
+  const key = item.packageKey ?? '';
+  if (!key) {
+    return 1;
+  }
+
+  const match = key.match(new RegExp(`^${prefix}-(\\d+)$`));
+  return match ? Number(match[1]) : 1;
+};
+
 export const resolveMeteredInstanceKey = (input: {
   type: 'ROLL' | 'REMANENT';
   items: Array<{
+    id?: string;
     branchId: string;
     code: number;
     subCode?: number | string;
@@ -101,7 +125,6 @@ export const resolveMeteredInstanceKey = (input: {
   subCode: number;
   colorId: string;
 }) => {
-  const prefix = meteredInstanceKeyPrefix(input.type);
   const matching = input.items.filter((item) => {
     const itemPrice = Number(item.subCode ?? item.costPrice ?? 0);
     return (
@@ -115,19 +138,11 @@ export const resolveMeteredInstanceKey = (input: {
 
   let maxInstance = 0;
   for (const item of matching) {
-    const key = item.packageKey ?? '';
-    if (!key) {
-      maxInstance = Math.max(maxInstance, 1);
-      continue;
-    }
-    const match = key.match(new RegExp(`^${prefix}-(\\d+)$`));
-    if (match) {
-      maxInstance = Math.max(maxInstance, Number(match[1]));
-    }
+    maxInstance = Math.max(maxInstance, parseMeteredInstanceNumber(item, input.type));
   }
 
   const nextInstance = maxInstance + 1;
-  return nextInstance === 1 ? '' : `${prefix}-${nextInstance}`;
+  return nextInstance === 1 ? '' : `${meteredInstanceKeyPrefix(input.type)}-${nextInstance}`;
 };
 
 export const buildInventoryItemId = (input: {

@@ -396,24 +396,27 @@ const ItemInputPage: React.FC = () => {
     let instanceKeyForCreate = '';
     let id = '';
 
+    let freshItems = familyItems;
+    try {
+      const freshResponse = await api.get('/inventory', {
+        params: { code: familyCode, pageSize: 200, includeArchived: true },
+      });
+      const freshData = freshResponse.data;
+      freshItems = (Array.isArray(freshData) ? freshData : freshData?.items ?? []) as InventoryItemView[];
+    } catch (refreshError) {
+      console.error('Failed to refresh family inventory before create', refreshError);
+      return setErrorMessage(t('itemInput.failedRefreshBeforeCreate'));
+    }
+
     if (effectiveType === 'ROLL' || effectiveType === 'REMANENT') {
-      try {
-        const freshResponse = await api.get('/inventory', {
-          params: { code: familyCode, pageSize: 200, includeArchived: true },
-        });
-        const freshData = freshResponse.data;
-        const freshItems = (Array.isArray(freshData) ? freshData : freshData?.items ?? []) as InventoryItemView[];
-        instanceKeyForCreate = resolveMeteredInstanceKey({
-          type: effectiveType,
-          items: freshItems,
-          branchId,
-          familyCode,
-          subCode,
-          colorId,
-        });
-      } catch (refreshError) {
-        console.error('Failed to refresh family inventory before create', refreshError);
-      }
+      instanceKeyForCreate = resolveMeteredInstanceKey({
+        type: effectiveType,
+        items: freshItems,
+        branchId,
+        familyCode,
+        subCode,
+        colorId,
+      });
     }
 
     if (selectedColor) {
@@ -435,12 +438,6 @@ const ItemInputPage: React.FC = () => {
       return alert(t('itemInput.couldNotBuildId'));
     }
 
-    const createdQrDataUrl = await QRCode.toDataURL(id, {
-      errorCorrectionLevel: 'M',
-      margin: 1,
-      width: 240,
-    });
-
     const payload: Record<string, unknown> = {
       id,
       branchId,
@@ -450,7 +447,6 @@ const ItemInputPage: React.FC = () => {
       type: effectiveType,
       costPrice: subCode,
       qrCodeValue: id,
-      qrCodeDataUrl: createdQrDataUrl,
       description: description.trim() || undefined,
       pictureName: pictureName || undefined,
       pictureDataUrl: pictureDataUrl || undefined,
@@ -476,10 +472,15 @@ const ItemInputPage: React.FC = () => {
       const createResponse = await api.post('/inventory', payload);
       const savedItem = createResponse.data?.item;
       const savedId = savedItem?.id || id;
-      const savedQrDataUrl = savedItem?.qrCodeDataUrl || createdQrDataUrl;
+      const savedQrDataUrl = await QRCode.toDataURL(savedId, {
+        errorCorrectionLevel: 'M',
+        margin: 1,
+        width: 240,
+      });
       setSuccessMessage(t('itemInput.itemCreated', { id: savedId, branch: branchLabel }));
       setCreatedItemId(savedId);
       setCreatedItemQrDataUrl(savedQrDataUrl);
+      setQrDataUrl(savedQrDataUrl);
       setCreatedPictureDataUrl(pictureDataUrl);
       setCreatedDescription(description.trim());
       setMeters(1);
@@ -892,6 +893,7 @@ const ItemInputPage: React.FC = () => {
             <p className="mt-1 text-sm text-gray-500">
               {t('itemInput.qrLabelHint')}
             </p>
+            <p className="mt-1 text-xs text-amber-700">{t('itemInput.qrPreviewHint')}</p>
             <div className="mt-4 flex flex-col items-center rounded-2xl bg-gray-50 p-4">
               {qrDataUrl ? (
                 <>

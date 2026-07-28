@@ -743,6 +743,8 @@
     "duplicatePieceAlert": "This family already has a piece item with the same price, color, branch, and piece length.",
     "duplicateOtherAlert": "This family already has an item with the same sub code (price), color, type, and branch.",
     "couldNotBuildId": "Could not build item ID. Check all fields.",
+    "failedRefreshBeforeCreate": "Could not verify existing stock before saving. Refresh the page and try again.",
+    "qrPreviewHint": "Preview only. The final QR code is generated from the saved item ID after you click Save.",
     "failedToCreate": "Failed to create inventory item{{status}}: {{message}}",
     "failedToLoadColors": "Failed to load colors.",
     "failedNextFamilyCode": "Failed to find the next family code. You can still enter one manually.",

@@ -234,6 +234,7 @@ export async function createInventoryItem(
     packageKey = resolveMeteredInstanceKey({
       type: effectiveType,
       items: existingMeteredItems.map((item) => ({
+        id: item.id,
         branchId: item.branchId,
         code: item.code,
         subCode: item.subCode,
@@ -275,6 +276,11 @@ export async function createInventoryItem(
     qrCodeValue = itemId;
   }
 
+  const qrCodeDataUrl =
+    input.qrCodeDataUrl && (input.qrCodeValue || input.id) === itemId
+      ? input.qrCodeDataUrl
+      : undefined;
+
   // Create the item + audit log in a transaction
   const item = await prisma.$transaction(async (tx) => {
     const created = await tx.inventoryItem.create({
@@ -290,7 +296,7 @@ export async function createInventoryItem(
         quantity: effectiveQuantity,
         costPrice: input.costPrice ?? input.subCode,
         qrCodeValue,
-        qrCodeDataUrl: input.qrCodeDataUrl,
+        qrCodeDataUrl,
         pictureName: input.pictureName,
         pictureDataUrl: input.pictureDataUrl,
         description: input.description,
