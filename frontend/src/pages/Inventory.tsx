@@ -23,6 +23,7 @@ import {
   type InventoryItemType,
   type InventoryStockItem,
 } from '../lib/inventoryCodes';
+import { printInventoryItemLabel } from '../lib/inventoryLabel';
 import {
   formatInventoryPackageAmount,
   formatPackageStockSummary,
@@ -70,6 +71,7 @@ const InventoryView: React.FC = () => {
   const [actionError, setActionError] = useState<string | null>(null);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
   const [isRemoving, setIsRemoving] = useState(false);
+  const [printingItemId, setPrintingItemId] = useState<string | null>(null);
 
   const [scanQuery, setScanQuery] = useState('');
   const [searchLoading, setSearchLoading] = useState(false);
@@ -149,6 +151,27 @@ const InventoryView: React.FC = () => {
     setEditItem(null);
     setEditForm(null);
   };
+
+  const handleReprintQr = async (item: InventoryItemView) => {
+    setPrintingItemId(item.id);
+    setActionError(null);
+    try {
+      const printed = await printInventoryItemLabel(item, t);
+      if (!printed) {
+        setActionError(t('errors.allowPopups'));
+        return;
+      }
+      setActionMessage(t('inventory.reprintQrSent', { id: item.id }));
+    } catch (printError) {
+      console.error('Failed to print inventory QR label', printError);
+      setActionError(t('inventory.reprintQrFailed'));
+    } finally {
+      setPrintingItemId(null);
+    }
+  };
+
+  const findItemInFamilyStock = (itemId: string) =>
+    familyStock.flatMap((row) => row.items).find((item) => item.id === itemId) ?? null;
 
   const removeSelectedItems = async () => {
     if (selectedItems.length === 0) return;
@@ -598,7 +621,25 @@ const InventoryView: React.FC = () => {
                           </span>
                         )}
                         {entry.itemId && (
-                          <span className="break-all font-mono">{entry.itemId}</span>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="break-all font-mono">{entry.itemId}</span>
+                            {(() => {
+                              const stockItem = findItemInFamilyStock(entry.itemId);
+                              if (!stockItem) return null;
+                              return (
+                                <button
+                                  type="button"
+                                  className="rounded border border-gray-300 px-2 py-0.5 text-[11px] font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                                  disabled={printingItemId === entry.itemId}
+                                  onClick={() => void handleReprintQr(stockItem as InventoryItemView)}
+                                >
+                                  {printingItemId === entry.itemId
+                                    ? t('common.loading')
+                                    : t('inventory.reprintQr')}
+                                </button>
+                              );
+                            })()}
+                          </div>
                         )}
                       </div>
                     </div>
@@ -749,6 +790,7 @@ const InventoryView: React.FC = () => {
               <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('common.color')}</th>
               <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('common.amount')}</th>
               <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('common.packagePieces')}</th>
+              <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('inventory.qrLabel')}</th>
             </tr>
           </thead>
           <tbody>
@@ -794,6 +836,16 @@ const InventoryView: React.FC = () => {
                   <td className="px-4 py-2 text-sm text-gray-800">{item.color?.name ?? '-'}</td>
                   <td className="px-4 py-2 text-sm text-gray-800">{amount}</td>
                   <td className="px-4 py-2 text-sm text-gray-800">{packagePieces}</td>
+                  <td className="px-4 py-2">
+                    <button
+                      type="button"
+                      className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-800 hover:bg-gray-50 disabled:opacity-50"
+                      disabled={printingItemId === item.id}
+                      onClick={() => void handleReprintQr(item)}
+                    >
+                      {printingItemId === item.id ? t('common.loading') : t('inventory.reprintQr')}
+                    </button>
+                  </td>
                 </tr>
               );
             })}
@@ -937,6 +989,14 @@ const InventoryView: React.FC = () => {
                 onClick={saveEdit}
               >
                 {isSavingEdit ? t('common.saving') : t('common.saveChanges')}
+              </button>
+              <button
+                type="button"
+                className="rounded-xl border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 disabled:opacity-50"
+                disabled={isSavingEdit || printingItemId === editItem.id}
+                onClick={() => void handleReprintQr(editItem)}
+              >
+                {printingItemId === editItem.id ? t('common.loading') : t('inventory.reprintQr')}
               </button>
               <button
                 type="button"
