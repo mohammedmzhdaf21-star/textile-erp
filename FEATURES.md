@@ -101,3 +101,28 @@ cd frontend && npm run dev   # frontend :5173
 ```
 
 **Login:** `admin@textile.com` / `admin123`
+
+---
+
+## If features are missing in the UI
+
+This usually means the workspace is on an **old branch**, not `main`.
+
+```bash
+git fetch origin main
+git checkout main
+git pull origin main
+./scripts/setup-dev.sh
+npm run dev
+cd frontend && npm run dev
+```
+
+Confirm these files exist (if any are missing, you are not on `main`):
+
+- `frontend/src/components/QrScanInput.tsx`
+- `frontend/src/components/LanguageSwitcher.tsx`
+- `frontend/src/lib/cutAndSell.ts`
+- `frontend/src/lib/cuttingTasks.ts`
+- `FEATURES.md`
+
+**Never deploy or demo from stale feature branches** — they lag behind `main` and lose QR scan, cut-sell, i18n, and other merged work.

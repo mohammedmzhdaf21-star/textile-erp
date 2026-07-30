@@ -18,14 +18,14 @@ Full-stack inventory and sales system for textile branches (rolls, pieces, remna
 git clone https://github.com/mohammedmzhdaf21-star/textile-erp.git
 cd textile-erp
 git checkout main
-npm install
-cd frontend && npm install && cd ..
-npx prisma migrate deploy
-npx prisma generate
-npm run seed          # optional — fresh database only
-npm run dev           # backend :3000
-cd frontend && npm run dev   # frontend :5173
+git pull origin main
+./scripts/setup-dev.sh
+SEED_DB=1 ./scripts/setup-dev.sh   # optional — fresh database only
+npm run dev                        # backend :3000
+cd frontend && npm run dev         # frontend :5173
 ```
+
+If the UI is missing camera scan, cut-from-roll sell, Kurdish labels, or other features, you are on the wrong branch. Run `git checkout main && git pull` then `./scripts/setup-dev.sh` again. See [FEATURES.md](./FEATURES.md#if-features-are-missing-in-the-ui).
 
 ## Highlights (saved on `main`)
 
