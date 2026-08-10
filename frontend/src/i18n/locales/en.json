@@ -181,6 +181,12 @@
     "loadFailed": "Could not load employee accounts.",
     "adminOnly": "Only admins and managers can open Employee Accounts."
   },
+  "sidebar": {
+    "menu": "Menu",
+    "hide": "Hide",
+    "openMenu": "Open navigation menu",
+    "closeMenu": "Close navigation menu"
+  },
   "login": {
     "title": "Textile",
     "titleAccent": "ERP",

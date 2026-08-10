@@ -58,7 +58,7 @@ router.get('/branches/list', async (_req: Request, res: Response) => {
 
 router.get('/:id', async (req: Request, res: Response) => {
   try {
-    const employee = await getEmployeeById(req.params.id);
+    const employee = await getEmployeeById(singleParam(req.params.id) ?? '');
     if (!employee) {
       return res.status(404).json({ error: 'Employee not found' });
     }
@@ -107,7 +107,7 @@ router.patch('/:id', requireRole('ADMIN'), async (req: Request, res: Response) =
       return res.status(400).json({ error: 'Invalid role' });
     }
 
-    const employee = await updateEmployee(req.params.id, {
+    const employee = await updateEmployee(singleParam(req.params.id) ?? '', {
       name: name !== undefined ? String(name) : undefined,
       phone: phone !== undefined ? (phone ? String(phone) : null) : undefined,
       role: parsedRole ?? undefined,

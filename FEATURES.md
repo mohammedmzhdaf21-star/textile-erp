@@ -71,6 +71,19 @@ Deploy and develop from `main` so nothing is lost when starting a new session or
 - English + Kurdish Sorani (RTL)
 - Language switcher on login and sidebar
 
+## UI
+
+- **Collapsible sidebar** — floating Menu/Hide toggle (top-left) with luxury slide animation; preference saved in localStorage
+- Full-width workspace when sidebar is hidden
+
+## Employee Accounts (Admin)
+
+- Sidebar section: **Employee Accounts**
+- Create login accounts (name, email, password, role, branches)
+- Choose **sidebar access** per employee (which pages they see)
+- Access rules saved in database (`allowedSections` on Employee)
+- Admins/managers always have full access
+
 ## Branches
 
 - A, B, C, E, F + Storage (S)
