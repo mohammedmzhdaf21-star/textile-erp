@@ -149,6 +149,12 @@
     "exchange": "Exchange",
     "newItem": "New Item"
   },
+  "sidebar": {
+    "menu": "Menu",
+    "hide": "Hide",
+    "openMenu": "Open navigation menu",
+    "closeMenu": "Close navigation menu"
+  },
   "login": {
     "title": "Textile",
     "titleAccent": "ERP",

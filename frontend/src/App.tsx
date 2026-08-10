@@ -1,6 +1,6 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import Sidebar from './components/Sidebar';
+import AppShell from './components/AppShell';
 import Inventory from './pages/Inventory';
 import ItemConversion from './pages/ItemConversion';
 import Dashboard from './pages/Dashboard';
@@ -22,12 +22,7 @@ function ProtectedLayout({ children }: { children: React.ReactNode }) {
   if (!isAuthenticated()) {
     return <Navigate to="/login" replace />;
   }
-  return (
-    <div className="flex min-h-screen max-w-full overflow-x-hidden bg-white">
-      <Sidebar />
-      <main className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto p-4">{children}</main>
-    </div>
-  );
+  return <AppShell>{children}</AppShell>;
 }
 
 function App() {
