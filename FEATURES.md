@@ -97,7 +97,9 @@ npx prisma migrate deploy
 npx prisma generate
 ```
 
-Required migration for sale QR fields: `20260710120000_add_sale_item_qr_fields`
+Required migrations:
+- `20260710120000_add_sale_item_qr_fields`
+- `20260810120000_add_employee_access_fields`
 
 ---
 
