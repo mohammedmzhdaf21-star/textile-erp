@@ -5,6 +5,7 @@ import helmet from 'helmet';
 import authRoutes from './routes/auth.routes';
 import inventoryRoutes from './routes/inventory.routes';
 import salesRoutes from './routes/sales.routes';
+import employeesRoutes from './routes/employees.routes';
 import { prisma } from './lib/prisma';
 
 const app = express();
@@ -94,6 +95,7 @@ app.get('/', (_req: Request, res: Response) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/inventory', inventoryRoutes);
 app.use('/api/sales', salesRoutes);
+app.use('/api/employees', employeesRoutes);
 
 // ============================================================
 // 404 HANDLER

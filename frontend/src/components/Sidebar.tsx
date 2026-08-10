@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { NavLink } from 'react-router-dom';
 import { canAccessRoute } from '../lib/dashboardSettings';
-import { getCurrentUser } from '../lib/auth';
+import { canManageEmployeeAccounts, getCurrentUser } from '../lib/auth';
 import { countOpenTasks } from '../lib/taskSettings';
 import LanguageSwitcher from './LanguageSwitcher';
 
@@ -21,13 +21,22 @@ const navigation = [
   { to: '/trustee-commission', labelKey: 'nav.trusteeCommission', end: true },
   { to: '/exchange', labelKey: 'nav.exchange', end: true },
   { to: '/item-input', labelKey: 'nav.newItem', end: true },
+  { to: '/employee-accounts', labelKey: 'nav.employeeAccounts', end: true, adminOnly: true },
 ];
 
-const Sidebar: React.FC = () => {
+type SidebarProps = {
+  isOpen: boolean;
+  onNavigate?: () => void;
+};
+
+const Sidebar: React.FC<SidebarProps> = ({ isOpen, onNavigate }) => {
   const { t } = useTranslation();
   const user = getCurrentUser();
   const [openTaskCount, setOpenTaskCount] = useState(() => countOpenTasks());
-  const visibleNavigation = navigation.filter((nav) => canAccessRoute(user?.email, nav.to));
+  const visibleNavigation = navigation.filter((nav) => {
+    if (nav.adminOnly && !canManageEmployeeAccounts(user)) return false;
+    return canAccessRoute(user, nav.to);
+  });
 
   useEffect(() => {
     const refreshCount = () => setOpenTaskCount(countOpenTasks());
@@ -37,23 +46,35 @@ const Sidebar: React.FC = () => {
   }, []);
 
   return (
-    <aside className="h-full w-64 shrink-0 bg-white border-r border-gray-200 p-4 flex flex-col">
-      <nav className="space-y-2 flex-1">
-        {visibleNavigation.map((nav) => (
+    <aside
+      className={`sidebar-panel ${isOpen ? 'sidebar-panel--open' : 'sidebar-panel--closed'}`}
+      aria-hidden={!isOpen}
+    >
+      <div className="sidebar-panel__sheen" aria-hidden="true" />
+      <div className="sidebar-panel__edge" aria-hidden="true" />
+      <nav className="sidebar-panel__nav">
+        {visibleNavigation.map((nav, index) => (
           <NavLink
             key={nav.to}
             to={nav.to}
             end={nav.end}
+            onClick={() => {
+              if (window.innerWidth < 1024) {
+                onNavigate?.();
+              }
+            }}
+            style={{ transitionDelay: isOpen ? `${index * 35}ms` : '0ms' }}
             className={({ isActive }) => {
+              const motion = 'sidebar-nav-item';
               if (nav.to === '/sales') {
                 return isActive
-                  ? 'nav-liquid-sales scale-[1.02]'
-                  : 'nav-liquid-sales opacity-95 hover:opacity-100';
+                  ? `nav-liquid-sales scale-[1.02] ${motion}`
+                  : `nav-liquid-sales opacity-95 hover:opacity-100 ${motion}`;
               }
 
               return isActive
-                ? 'block px-3 py-2 rounded-md bg-black text-white font-semibold'
-                : 'block px-3 py-2 rounded-md text-gray-700 hover:bg-gray-100 transition-colors';
+                ? `block px-3 py-2 rounded-md bg-black text-white font-semibold ${motion}`
+                : `block px-3 py-2 rounded-md text-gray-700 hover:bg-gray-100 transition-colors ${motion}`;
             }}
           >
             <span
@@ -74,7 +95,7 @@ const Sidebar: React.FC = () => {
           </NavLink>
         ))}
       </nav>
-      <LanguageSwitcher className="mt-4 border-t border-gray-100 pt-4" />
+      <LanguageSwitcher className="sidebar-panel__footer mt-4 border-t border-gray-100/80 pt-4" />
     </aside>
   );
 };

@@ -1,6 +1,6 @@
 import React from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import Sidebar from './components/Sidebar';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import AppShell from './components/AppShell';
 import Inventory from './pages/Inventory';
 import ItemConversion from './pages/ItemConversion';
 import Dashboard from './pages/Dashboard';
@@ -16,18 +16,27 @@ import TaskEmployee from './pages/TaskEmployee';
 import DataAnalysis from './pages/DataAnalysis';
 import TrusteeCommission from './pages/TrusteeCommission';
 import SaleDetail from './pages/SaleDetail';
-import { isAuthenticated } from './lib/auth';
+import EmployeeAccounts from './pages/EmployeeAccounts';
+import { getCurrentUser, isAuthenticated } from './lib/auth';
+import { canAccessAdminRoute, canAccessRoute } from './lib/dashboardSettings';
 
 function ProtectedLayout({ children }: { children: React.ReactNode }) {
+  const location = useLocation();
+  const user = getCurrentUser();
+
   if (!isAuthenticated()) {
     return <Navigate to="/login" replace />;
   }
-  return (
-    <div className="flex min-h-screen max-w-full overflow-x-hidden bg-white">
-      <Sidebar />
-      <main className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto p-4">{children}</main>
-    </div>
-  );
+
+  if (!canAccessAdminRoute(user, location.pathname)) {
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  if (!canAccessRoute(user, location.pathname)) {
+    return <Navigate to="/task-employee" replace />;
+  }
+
+  return <AppShell>{children}</AppShell>;
 }
 
 function App() {
@@ -144,6 +153,14 @@ function App() {
           element={
             <ProtectedLayout>
               <TrusteeCommission />
+            </ProtectedLayout>
+          }
+        />
+        <Route
+          path="/employee-accounts"
+          element={
+            <ProtectedLayout>
+              <EmployeeAccounts />
             </ProtectedLayout>
           }
         />
