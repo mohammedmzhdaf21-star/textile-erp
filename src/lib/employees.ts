@@ -132,7 +132,7 @@ export async function createEmployee(input: {
       action: 'CREATE',
       performedById: input.performedById,
       performedByEmail: input.performedByEmail,
-      newValues: {
+      changes: {
         email: employee.email,
         role: employee.role,
         allowedSections: sections,
@@ -221,7 +221,7 @@ export async function updateEmployee(
       action: 'UPDATE',
       performedById: input.performedById,
       performedByEmail: input.performedByEmail,
-      newValues: {
+      changes: {
         role: refreshed.role,
         isActive: refreshed.isActive,
         allowedSections: nextSections,
