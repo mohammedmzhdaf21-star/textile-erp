@@ -81,13 +81,16 @@ async function main() {
 
   const employee = await prisma.employee.upsert({
     where: { email: 'employee@textile.com' },
-    update: {},
+    update: {
+      allowedSections: ['sales', 'dailySales', 'historySales', 'taskEmployee'],
+    },
     create: {
       name: 'Sarah Employee',
       email: 'employee@textile.com',
       phone: '+1000000003',
       role: 'EMPLOYEE',
       passwordHash: employeePassword,
+      allowedSections: ['sales', 'dailySales', 'historySales', 'taskEmployee'],
     },
   });
   console.log('✅ 3 employees created (admin, manager, employee)\n');

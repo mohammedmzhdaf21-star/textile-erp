@@ -7,6 +7,7 @@ import {
   hashRefreshToken,
   JwtPayload,
 } from './jwt';
+import { getEmployeeAuthProfile } from './employees';
 
 const MAX_FAILED_ATTEMPTS = 5;
 const LOCKOUT_DURATION_MINUTES = 15;
@@ -101,15 +102,15 @@ export async function loginUser(
     },
   });
 
+  const profile = await getEmployeeAuthProfile(employee.id);
+  if (!profile) {
+    throw new Error('Account is inactive');
+  }
+
   return {
     accessToken,
     refreshToken,
-    user: {
-      id: employee.id,
-      name: employee.name,
-      email: employee.email,
-      role: employee.role,
-    },
+    user: profile,
   };
 }
 

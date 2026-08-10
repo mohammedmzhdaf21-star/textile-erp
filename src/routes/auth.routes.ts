@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { loginUser, logoutUser, refreshAccessToken } from '../lib/auth';
+import { getEmployeeAuthProfile } from '../lib/employees';
 import { authenticate } from '../middleware/authenticate';
 
 const router = Router();
@@ -94,11 +95,19 @@ router.post('/logout', async (req: Request, res: Response) => {
   }
 });
 
-router.get('/me', authenticate, (req: Request, res: Response) => {
-  return res.status(200).json({
-    message: 'You are authenticated!',
-    user: req.user,
-  });
+router.get('/me', authenticate, async (req: Request, res: Response) => {
+  try {
+    const profile = await getEmployeeAuthProfile(req.user!.userId);
+    if (!profile) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    return res.status(200).json({
+      message: 'You are authenticated!',
+      user: profile,
+    });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message || 'Failed to load profile' });
+  }
 });
 
 export default router;

@@ -1,10 +1,20 @@
 import api from "./api";
+import type { DashboardSectionKey } from "./dashboardSettings";
+
+export type UserRole = "ADMIN" | "MANAGER" | "EMPLOYEE" | "TRUSTEE";
 
 export interface User {
   id: string;
   name: string;
   email: string;
-  role: "ADMIN" | "MANAGER" | "EMPLOYEE" | "TRUSTEE";
+  phone?: string | null;
+  role: UserRole;
+  isActive?: boolean;
+  assignedWork?: string | null;
+  allowedSections?: DashboardSectionKey[] | null;
+  branchIds?: string[];
+  lastLoginAt?: string | null;
+  createdAt?: string;
 }
 
 export interface LoginResponse {
@@ -55,6 +65,18 @@ export function getCurrentUser(): User | null {
   }
 }
 
+export function updateStoredUser(user: User) {
+  localStorage.setItem("user", JSON.stringify(user));
+}
+
 export function isAuthenticated(): boolean {
   return !!localStorage.getItem("accessToken");
+}
+
+export function canManageEmployeeAccounts(user: User | null | undefined) {
+  return user?.role === "ADMIN" || user?.role === "MANAGER";
+}
+
+export function canEditEmployeeAccounts(user: User | null | undefined) {
+  return user?.role === "ADMIN";
 }

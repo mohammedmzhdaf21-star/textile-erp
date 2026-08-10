@@ -93,13 +93,36 @@ export const getEmployeeAccessRule = (email?: string | null) => {
   return readEmployeeAccessRules()[email.toLowerCase()];
 };
 
-export const canAccessRoute = (email: string | undefined, route: string) => {
+const userHasFullAccess = (user?: { role?: string } | null) =>
+  user?.role === 'ADMIN' || user?.role === 'MANAGER';
+
+export const canAccessRoute = (
+  user: { email?: string; role?: string; allowedSections?: DashboardSectionKey[] | null } | null | undefined,
+  route: string
+) => {
   if (ALWAYS_VISIBLE_ROUTES.has(route)) return true;
-  const rule = getEmployeeAccessRule(email);
+  if (!user) return false;
+  if (userHasFullAccess(user)) return true;
+
+  const serverSections = user.allowedSections;
+  if (serverSections && serverSections.length > 0) {
+    return dashboardSections.some(
+      (section) => section.route === route && serverSections.includes(section.key)
+    );
+  }
+
+  const rule = getEmployeeAccessRule(user.email);
   if (!rule) return true;
   return dashboardSections.some(
     (section) => section.route === route && rule.sections.includes(section.key)
   );
+};
+
+export const ADMIN_ONLY_ROUTES = new Set(['/employee-accounts']);
+
+export const canAccessAdminRoute = (user: { role?: string } | null | undefined, route: string) => {
+  if (!ADMIN_ONLY_ROUTES.has(route)) return true;
+  return user?.role === 'ADMIN' || user?.role === 'MANAGER';
 };
 
 export const readCommissionSettings = () =>

@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { NavLink } from 'react-router-dom';
 import { canAccessRoute } from '../lib/dashboardSettings';
-import { getCurrentUser } from '../lib/auth';
+import { canManageEmployeeAccounts, getCurrentUser } from '../lib/auth';
 import { countOpenTasks } from '../lib/taskSettings';
 import LanguageSwitcher from './LanguageSwitcher';
 
@@ -21,13 +21,17 @@ const navigation = [
   { to: '/trustee-commission', labelKey: 'nav.trusteeCommission', end: true },
   { to: '/exchange', labelKey: 'nav.exchange', end: true },
   { to: '/item-input', labelKey: 'nav.newItem', end: true },
+  { to: '/employee-accounts', labelKey: 'nav.employeeAccounts', end: true, adminOnly: true },
 ];
 
 const Sidebar: React.FC = () => {
   const { t } = useTranslation();
   const user = getCurrentUser();
   const [openTaskCount, setOpenTaskCount] = useState(() => countOpenTasks());
-  const visibleNavigation = navigation.filter((nav) => canAccessRoute(user?.email, nav.to));
+  const visibleNavigation = navigation.filter((nav) => {
+    if (nav.adminOnly && !canManageEmployeeAccounts(user)) return false;
+    return canAccessRoute(user, nav.to);
+  });
 
   useEffect(() => {
     const refreshCount = () => setOpenTaskCount(countOpenTasks());
