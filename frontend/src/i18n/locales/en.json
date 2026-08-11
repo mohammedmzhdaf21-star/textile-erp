@@ -481,6 +481,7 @@
     "customerAndPayment": "Customer & Payment",
     "customerName": "Customer Name",
     "customerPhone": "Customer Phone",
+    "paymentChannel": "Paid with",
     "paymentStatus": "Payment Status",
     "amountPaidNow": "Amount paid now",
     "remainingDue": "Remaining due: {{amount}}",
@@ -933,6 +934,14 @@
     "UNPAID": "UNPAID",
     "fullyPaid": "Fully paid",
     "partiallyPaid": "Partially paid"
+  },
+  "paymentMethod": {
+    "cash": "Cash",
+    "fib": "FIB",
+    "credit": "Credit",
+    "card": "Card",
+    "transfer": "Transfer",
+    "unknown": "Unknown"
   },
   "schedules": {
     "DAILY": "Every day",

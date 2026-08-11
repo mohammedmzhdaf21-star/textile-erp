@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import api from '../lib/api';
 import { useTranslation } from 'react-i18next';
 import { formatCurrency } from '../lib/currency';
+import { isImmediatePaymentMethod } from '../lib/paymentMethod';
 
 type Sale = {
   id: string;
@@ -57,7 +58,7 @@ const saleCashAmount = (sale: Sale) => {
 
   if (refundMatch) return -toMoneyNumber(refundMatch[1]);
   if (paidMatch) return toMoneyNumber(paidMatch[1]);
-  if (sale.paymentMethod === 'CASH') return toMoneyNumber(sale.total ?? sale.totalPrice ?? 0);
+  if (isImmediatePaymentMethod(sale.paymentMethod)) return toMoneyNumber(sale.total ?? sale.totalPrice ?? 0);
   return toMoneyNumber(sale.total ?? sale.totalPrice ?? 0);
 };
 

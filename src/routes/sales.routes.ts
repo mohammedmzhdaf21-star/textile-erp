@@ -48,12 +48,13 @@ router.post('/', async (req: Request, res: Response) => {
     if (
       paymentMethod &&
       paymentMethod !== 'CASH' &&
+      paymentMethod !== 'FIB' &&
       paymentMethod !== 'CARD' &&
       paymentMethod !== 'TRANSFER' &&
       paymentMethod !== 'CREDIT'
     ) {
       return res.status(400).json({
-        error: 'paymentMethod must be CASH, CARD, TRANSFER, or CREDIT',
+        error: 'paymentMethod must be CASH, FIB, CARD, TRANSFER, or CREDIT',
       });
     }
 

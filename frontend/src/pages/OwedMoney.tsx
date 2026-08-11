@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import api from '../lib/api';
 import { useTranslation } from 'react-i18next';
 import { formatCurrency, parsePriceInput } from '../lib/currency';
+import { isImmediatePaymentMethod } from '../lib/paymentMethod';
 
 type Sale = {
   id: string;
@@ -85,7 +86,7 @@ const paidFromSale = (sale: Sale) => {
 
   if (refundMatch) return -toMoneyNumber(refundMatch[1]);
   if (paidMatch) return toMoneyNumber(paidMatch[1]);
-  if (sale.paymentStatus === 'PAID' || sale.paymentMethod === 'CASH') {
+  if (sale.paymentStatus === 'PAID' || isImmediatePaymentMethod(sale.paymentMethod)) {
     return toMoneyNumber(sale.total ?? sale.totalPrice ?? 0);
   }
   return toMoneyNumber(sale.paidAmount);

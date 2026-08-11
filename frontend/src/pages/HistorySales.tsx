@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import api from '../lib/api';
 import { useTranslation } from 'react-i18next';
 import { formatCurrency, formatSignedCurrency } from '../lib/currency';
+import { isImmediatePaymentMethod, resolveSalePaymentLabel } from '../lib/paymentMethod';
 
 type Sale = {
   id: string;
@@ -142,7 +143,7 @@ const enrichedSale = (sale: Sale): Sale => {
     paidAmount = -toMoneyNumber(refundMatch[1]);
   } else if (paidMatch) {
     paidAmount = toMoneyNumber(paidMatch[1]);
-  } else if (sale.paymentStatus === 'PAID' || sale.paymentMethod === 'CASH') {
+  } else if (sale.paymentStatus === 'PAID' || isImmediatePaymentMethod(sale.paymentMethod)) {
     paidAmount = toMoneyNumber(sale.total ?? sale.totalPrice ?? 0);
   }
 
@@ -336,6 +337,9 @@ const HistorySales: React.FC = () => {
                 amount: formatSignedCurrency(amount),
               })}
             </div>
+            <span className="mt-2 inline-flex rounded-full bg-gray-100 px-2 py-1 text-xs font-semibold text-gray-700">
+              {resolveSalePaymentLabel(t, sale.paymentMethod, sale.notes)}
+            </span>
           </div>
           <div className={`text-lg font-bold ${amount < 0 ? 'text-red-600' : 'text-magenta-600'}`}>
             {formatSignedCurrency(amount)}

@@ -66,7 +66,7 @@ export interface CreateSaleInput {
   customerPhone: string;
   items: SaleItemInput[];
   discount?: number;
-  paymentMethod?: 'CASH' | 'CARD' | 'TRANSFER' | 'CREDIT';
+  paymentMethod?: 'CASH' | 'FIB' | 'CARD' | 'TRANSFER' | 'CREDIT';
   notes?: string;
 }
 

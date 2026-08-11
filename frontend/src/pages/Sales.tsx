@@ -5,6 +5,7 @@ import api from '../lib/api';
 import { getCurrentUser } from '../lib/auth';
 import { getItemMinimumPrice } from '../lib/dashboardSettings';
 import { formatCurrency, parsePriceInput, toPriceInputNumber } from '../lib/currency';
+import type { SalePaymentChannel } from '../lib/paymentMethod';
 import { completeCuttingTasksAfterRollToPiece, maybeCreateCuttingTaskAfterPieceSale } from '../lib/cuttingTasks';
 import { sellCutPiece } from '../lib/cutAndSell';
 import { getColorLabel } from '../lib/colorLabels';
@@ -117,6 +118,7 @@ const SalesView: React.FC = () => {
   const [customerName, setCustomerName] = useState('Walk-in');
   const [customerPhone, setCustomerPhone] = useState('0000000000');
   const [paymentStatus, setPaymentStatus] = useState<'FULL' | 'PARTIAL'>('FULL');
+  const [paymentChannel, setPaymentChannel] = useState<SalePaymentChannel>('CASH');
   const [amountPaid, setAmountPaid] = useState('0');
   const [plainCloth, setPlainCloth] = useState({ clothName: clothOptions[0], meters: 1, pricePerMeter: 20 });
   const [scanState, setScanState] = useState({ inventoryItemId: '', sourceBranch: branch, amount: 1, price: 15 });
@@ -565,6 +567,7 @@ const SalesView: React.FC = () => {
         }
       }
 
+      const channelLabel = paymentChannel === 'FIB' ? 'FIB' : 'Cash';
       const payload = {
         branchId: BRANCH_MAP[branch] ?? branch,
         employeeId: currentUser.id,
@@ -572,8 +575,12 @@ const SalesView: React.FC = () => {
         customerPhone,
         items: resolvedItems,
         discount: 0,
-        paymentMethod: paymentStatus === 'FULL' ? 'CASH' : 'CREDIT',
-        notes: `Source branch: ${branch}. ${paymentStatus === 'PARTIAL' ? `Paid ${formatCurrency(parsePriceInput(amountPaid))} now, due ${formatCurrency(dueAmount)}.` : 'Fully paid.'}`,
+        paymentMethod: paymentStatus === 'FULL' ? paymentChannel : 'CREDIT',
+        notes: `Source branch: ${branch}. ${
+          paymentStatus === 'PARTIAL'
+            ? `Paid ${formatCurrency(parsePriceInput(amountPaid))} now via ${channelLabel}, due ${formatCurrency(dueAmount)}.`
+            : `Fully paid via ${channelLabel}.`
+        }`,
       };
 
       console.debug('createSale payload', payload);
@@ -622,6 +629,7 @@ const SalesView: React.FC = () => {
       setCart([]);
       setAmountPaid('0');
       setPaymentStatus('FULL');
+      setPaymentChannel('CASH');
     } catch (err: any) {
       const status = err?.response?.status;
       const body = err?.response?.data;
@@ -1046,6 +1054,17 @@ const SalesView: React.FC = () => {
                   value={customerPhone}
                   onChange={(e) => setCustomerPhone(e.target.value)}
                 />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">{t('sales.paymentChannel')}</label>
+                <select
+                  value={paymentChannel}
+                  onChange={(e) => setPaymentChannel(e.target.value as SalePaymentChannel)}
+                  className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
+                >
+                  <option value="CASH">{t('paymentMethod.cash')}</option>
+                  <option value="FIB">{t('paymentMethod.fib')}</option>
+                </select>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">{t('sales.paymentStatus')}</label>

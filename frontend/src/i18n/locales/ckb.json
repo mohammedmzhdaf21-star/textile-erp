@@ -481,6 +481,7 @@
     "customerAndPayment": "کڕیار و پارەدان",
     "customerName": "ناوی کڕیار",
     "customerPhone": "تەلەفۆنی کڕیار",
+    "paymentChannel": "پارەدراوە بە",
     "paymentStatus": "دۆخی پارەدان",
     "amountPaidNow": "بڕی ئێستا دراو",
     "remainingDue": "ماوە: {{amount}}",
@@ -932,6 +933,14 @@
     "UNPAID": "نەدراو",
     "fullyPaid": "تەواو دراو",
     "partiallyPaid": "بەشەکی دراو"
+  },
+  "paymentMethod": {
+    "cash": "کاش",
+    "fib": "FIB",
+    "credit": "قەرز",
+    "card": "کارت",
+    "transfer": "گواستنەوە",
+    "unknown": "نەناسراو"
   },
   "schedules": {
     "DAILY": "هەموو ڕۆژێک",

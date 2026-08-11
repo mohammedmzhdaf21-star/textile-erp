@@ -5,6 +5,7 @@ import { formatPackageComponentsSold } from '../lib/piecePackages';
 import { getColorLabel } from '../lib/colorLabels';
 import { useTranslation } from 'react-i18next';
 import { formatCurrency } from '../lib/currency';
+import { isImmediatePaymentMethod, resolveSalePaymentLabel } from '../lib/paymentMethod';
 
 type SaleItem = {
   id: string;
@@ -111,7 +112,7 @@ const SaleDetail: React.FC = () => {
             const notes = sale.notes || '';
             let paymentStatus: 'PAID' | 'PARTIAL' | 'UNPAID' = 'UNPAID';
             if (/paid\s+\d+/i.test(notes) && /due/i.test(notes)) paymentStatus = 'PARTIAL';
-            else if (/fully paid/i.test(notes) || sale.paymentMethod === 'CASH') paymentStatus = 'PAID';
+            else if (/fully paid/i.test(notes) || isImmediatePaymentMethod(sale.paymentMethod)) paymentStatus = 'PAID';
 
             const borderClass =
               paymentStatus === 'PARTIAL'
@@ -163,7 +164,9 @@ const SaleDetail: React.FC = () => {
             </div>
             <div className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
               <div className="text-sm text-gray-500">{t('saleDetail.paymentMethod')}</div>
-              <div className="mt-2 text-2xl font-bold text-black">{sale.paymentMethod}</div>
+              <div className="mt-2 text-2xl font-bold text-black">
+                {resolveSalePaymentLabel(t, sale.paymentMethod, sale.notes)}
+              </div>
             </div>
           </div>
 
@@ -174,7 +177,7 @@ const SaleDetail: React.FC = () => {
             const paidMatch = /Paid\s+([0-9]+(?:\.[0-9]+)?)/i.exec(notes);
             if (paidMatch) {
               paidAmount = Number(paidMatch[1]);
-            } else if (sale.paymentMethod === 'CASH') {
+            } else if (isImmediatePaymentMethod(sale.paymentMethod)) {
               paidAmount = totalPrice;
             }
             const remainingDue = Math.max(0, totalPrice - paidAmount);

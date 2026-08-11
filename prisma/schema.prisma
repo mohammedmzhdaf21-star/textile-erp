@@ -30,6 +30,7 @@ enum TaskPriority {
 }
 enum PaymentMethod {
   CASH
+  FIB
   CARD
   TRANSFER
   CREDIT
