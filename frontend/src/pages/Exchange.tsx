@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import api from '../lib/api';
 import { getCurrentUser } from '../lib/auth';
 import { useTranslation } from 'react-i18next';
+import { formatCurrency } from '../lib/currency';
 import QrScanInput from '../components/QrScanInput';
 import { resolveInventoryItem } from '../lib/inventoryLookup';
 
@@ -418,9 +419,9 @@ const ExchangePage: React.FC = () => {
 
       setSuccessMessage(
         t('exchange.exchangeProcessed', {
-          replacement: summary.replacementTotal.toFixed(2),
-          returned: summary.returnedTotal.toFixed(2),
-          net: summary.netDue.toFixed(2),
+          replacement: formatCurrency(summary.replacementTotal),
+          returned: formatCurrency(summary.returnedTotal),
+          net: formatCurrency(summary.netDue),
         }) + (createdSale ? t('exchange.newSaleId', { id: createdSale.id }) : '')
       );
       setReturnedInventory([]);
@@ -612,8 +613,8 @@ const ExchangePage: React.FC = () => {
                         </p>
                         <p className="text-sm text-gray-600">
                           {line.type === 'inventory'
-                            ? `${line.itemType}: ${line.quantity} ${line.soldAsUnit === 'PIECE' ? 'pieces' : 'meters'} @ $${line.price}/unit`
-                            : `${line.meters} meters @ $${line.pricePerMeter}/m`}
+                            ? `${line.itemType}: ${line.quantity} ${line.soldAsUnit === 'PIECE' ? 'pieces' : 'meters'} @ ${formatCurrency(line.price)}/unit`
+                            : `${line.meters} meters @ ${formatCurrency(line.pricePerMeter)}/m`}
                         </p>
                       </div>
                       <button type="button" className="text-red-600 font-semibold" onClick={() => removeNewSaleLine(index)}>
@@ -712,7 +713,7 @@ const ExchangePage: React.FC = () => {
                       <div>
                         <p className="font-semibold text-black">{t('exchange.returnedItem', { id: line.inventoryItemId })}</p>
                         <p className="text-sm text-gray-600">
-                          {line.itemType}: {line.amount} {line.soldAsUnit === 'PIECE' ? 'pieces' : 'meters'} @ ${line.returnPrice}/unit from branch {line.sourceBranch}
+                          {line.itemType}: {line.amount} {line.soldAsUnit === 'PIECE' ? 'pieces' : 'meters'} @ {formatCurrency(line.returnPrice)}/unit from branch {line.sourceBranch}
                         </p>
                       </div>
                       <button type="button" className="text-red-600 font-semibold" onClick={() => removeReturnedInventory(index)}>
@@ -785,7 +786,7 @@ const ExchangePage: React.FC = () => {
                       <div>
                         <p className="font-semibold text-black">{line.clothName}</p>
                         <p className="text-sm text-gray-600">
-                          {line.meters} meters @ ${line.returnPricePerMeter}/m returned
+                          {line.meters} meters @ {formatCurrency(line.returnPricePerMeter)}/m returned
                         </p>
                         {line.note && <p className="text-sm text-gray-500">{line.note}</p>}
                       </div>
@@ -818,11 +819,11 @@ const ExchangePage: React.FC = () => {
               </div>
               <div className="flex justify-between font-semibold">
                 <span>{t('exchange.replacementValue')}</span>
-                <span>${totalNewSaleAmount.toFixed(2)}</span>
+                <span>{formatCurrency(totalNewSaleAmount)}</span>
               </div>
               <div className="flex justify-between">
                 <span>{t('exchange.returnedCredit')}</span>
-                <span>${totalReturnedValue.toFixed(2)}</span>
+                <span>{formatCurrency(totalReturnedValue)}</span>
               </div>
               <div className="flex justify-between text-base font-bold">
                 <span>
@@ -832,7 +833,7 @@ const ExchangePage: React.FC = () => {
                       ? t('exchange.refundCustomer')
                       : t('exchange.evenExchange')}
                 </span>
-                <span>${Math.abs(netDue).toFixed(2)}</span>
+                <span>{formatCurrency(Math.abs(netDue))}</span>
               </div>
             </div>
           </div>
@@ -880,14 +881,14 @@ const ExchangePage: React.FC = () => {
                         onChange={(e) => setAmountPaid(e.target.value)}
                         className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
                       />
-                      <p className="mt-2 text-sm text-gray-500">{t('exchange.remainingDue', { amount: dueAmount.toFixed(2) })}</p>
+                      <p className="mt-2 text-sm text-gray-500">{t('exchange.remainingDue', { amount: formatCurrency(dueAmount) })}</p>
                     </div>
                   )}
                 </>
               ) : (
                 <p className="rounded-2xl bg-gray-50 p-3 text-sm text-gray-600">
                   {netDue < 0
-                    ? t('exchange.refundHigher', { amount: Math.abs(netDue).toFixed(2) })
+                    ? t('exchange.refundHigher', { amount: formatCurrency(Math.abs(netDue)) })
                     : t('exchange.noExtraPayment')}
                 </p>
               )}

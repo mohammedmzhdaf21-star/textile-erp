@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import api from '../lib/api';
 import { useTranslation } from 'react-i18next';
+import { formatCurrency } from '../lib/currency';
 
 type Sale = {
   id: string;
@@ -215,11 +216,11 @@ const DataAnalysis: React.FC = () => {
             </div>
             <div className="rounded-3xl bg-black p-6 text-white shadow-sm">
               <div className="text-sm opacity-80">{t('dataAnalysis.revenue')}</div>
-              <div className="mt-1 text-3xl font-bold">${totalRevenue.toFixed(2)}</div>
+              <div className="mt-1 text-3xl font-bold">{formatCurrency(totalRevenue)}</div>
             </div>
             <div className="rounded-3xl border-2 border-magenta-500 bg-white p-6 text-black shadow-sm">
               <div className="text-sm text-gray-500">{t('dataAnalysis.averageSale')}</div>
-              <div className="mt-1 text-3xl font-bold text-magenta-500">${averageSale.toFixed(2)}</div>
+              <div className="mt-1 text-3xl font-bold text-magenta-500">{formatCurrency(averageSale)}</div>
             </div>
           </section>
 
@@ -234,7 +235,7 @@ const DataAnalysis: React.FC = () => {
                     <div key={entry.date}>
                       <div className="mb-1 flex justify-between text-sm">
                         <span>{entry.date}</span>
-                        <span className="font-semibold">${entry.total.toFixed(2)}</span>
+                        <span className="font-semibold">{formatCurrency(entry.total)}</span>
                       </div>
                       <div className="h-4 overflow-hidden rounded-full bg-gray-100">
                         <div
@@ -258,7 +259,7 @@ const DataAnalysis: React.FC = () => {
                     <div key={entry.employee}>
                       <div className="mb-1 flex justify-between text-sm">
                         <span>{entry.employee}</span>
-                        <span className="font-semibold">${entry.total.toFixed(2)}</span>
+                        <span className="font-semibold">{formatCurrency(entry.total)}</span>
                       </div>
                       <div className="h-4 overflow-hidden rounded-full bg-gray-100">
                         <div

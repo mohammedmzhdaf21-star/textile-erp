@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import QrScanInput from '../components/QrScanInput';
 import api from '../lib/api';
 import { getCurrentUser } from '../lib/auth';
+import { formatCurrency } from '../lib/currency';
 import {
   aggregateDetailedStockBreakdown,
   aggregateFamilyStock,
@@ -12,7 +13,6 @@ import {
   BRANCH_ID_BY_CODE,
   formatDetailedStockBreakdownLine,
   formatStockAmountLabel,
-  formatSubCode,
   formatTotalStockLabel,
   getItemTypeLabel,
   hasStockForRow,
@@ -513,7 +513,7 @@ const InventoryView: React.FC = () => {
               <div>
                 <p className="text-sm font-semibold text-black">
                   {t('inventory.familyColor', { code: searchFamilyCode, color: getColorLabel(t, searchColor.name) })}
-                  {searchSubCode !== null ? t('inventory.subCodePrice', { price: formatSubCode(searchSubCode) }) : ''}
+                  {searchSubCode !== null ? t('inventory.subCodePrice', { price: formatCurrency(searchSubCode) }) : ''}
                 </p>
                 {searchScannedId && (
                   <p className="mt-1 break-all text-xs text-gray-500">{t('inventory.scanned', { id: searchScannedId })}</p>
@@ -566,7 +566,7 @@ const InventoryView: React.FC = () => {
                       className="rounded-xl border border-white bg-white px-4 py-3 text-sm"
                     >
                       <p className="font-semibold text-black">
-                        {entry.branchLabel} · ${formatSubCode(Number(entry.item.subCode ?? entry.item.costPrice ?? 0))}
+                        {entry.branchLabel} · {formatCurrency(Number(entry.item.subCode ?? entry.item.costPrice ?? 0))}
                       </p>
                       <p className="mt-1 text-gray-700">{t('inventory.setLabel', { summary: entry.packageSummary })}</p>
                       <p className="mt-1 text-gray-700">
@@ -820,7 +820,7 @@ const InventoryView: React.FC = () => {
                     {BRANCH_CODE_BY_ID[item.branchId] ?? item.branch?.name ?? item.branchId}
                   </td>
                   <td className="px-4 py-2 text-sm text-gray-800">{item.code}</td>
-                  <td className="px-4 py-2 text-sm text-gray-800">${formatSubCode(price)}</td>
+                  <td className="px-4 py-2 text-sm text-gray-800">{formatCurrency(price)}</td>
                   <td className="px-4 py-2 text-sm text-gray-800">
                     {getItemTypeLabel(t, item.type as InventoryItemType) ?? item.type}
                     {item.isPiecePackage ? t('inventory.packageSuffix') : ''}

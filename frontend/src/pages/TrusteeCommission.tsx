@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import api from '../lib/api';
 import { useTranslation } from 'react-i18next';
+import { formatCurrency } from '../lib/currency';
 
 type BranchCode = 'A' | 'B' | 'C' | 'E' | 'F';
 
@@ -406,11 +407,11 @@ const TrusteeCommission: React.FC = () => {
               </div>
               <div className="rounded-2xl bg-magenta-500 p-4 text-white">
                 <div className="text-sm opacity-80">{t('trusteeCommission.linkedBranchRevenue')}</div>
-                <div className="mt-1 text-2xl font-bold">${totalBranchRevenue.toFixed(2)}</div>
+                <div className="mt-1 text-2xl font-bold">{formatCurrency(totalBranchRevenue)}</div>
               </div>
               <div className="rounded-2xl bg-black p-4 text-white">
                 <div className="text-sm opacity-80">{t('trusteeCommission.trusteeCommission')}</div>
-                <div className="mt-1 text-2xl font-bold">${totalTrusteeCommission.toFixed(2)}</div>
+                <div className="mt-1 text-2xl font-bold">{formatCurrency(totalTrusteeCommission)}</div>
               </div>
             </div>
           </div>
@@ -444,11 +445,11 @@ const TrusteeCommission: React.FC = () => {
                         <div className="grid gap-2 sm:grid-cols-2">
                           <div className="rounded-xl bg-white px-3 py-2">
                             <div className="text-xs text-gray-500">{t('trusteeCommission.linkedBranchSales')}</div>
-                            <div className="text-lg font-bold text-black">${result.branchRevenue.toFixed(2)}</div>
+                            <div className="text-lg font-bold text-black">{formatCurrency(result.branchRevenue)}</div>
                           </div>
                           <div className="rounded-xl bg-white px-3 py-2">
                             <div className="text-xs text-gray-500">{t('trusteeCommission.trusteeCommission')}</div>
-                            <div className="text-lg font-bold text-magenta-600">${result.commissionAmount.toFixed(2)}</div>
+                            <div className="text-lg font-bold text-magenta-600">{formatCurrency(result.commissionAmount)}</div>
                           </div>
                         </div>
                       </div>

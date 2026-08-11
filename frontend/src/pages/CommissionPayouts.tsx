@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import api from "../lib/api";
 import { canManageEmployeeAccounts, getCurrentUser } from "../lib/auth";
+import { formatCurrency } from "../lib/currency";
 
 type PendingLine = {
   id: string;
@@ -76,7 +77,7 @@ export default function CommissionPayouts() {
       setMessage(
         t("commissionPayouts.paidSuccess", {
           count: response.data.paidCount,
-          amount: Number(response.data.amountPaid).toFixed(2),
+          amount: formatCurrency(response.data.amountPaid),
         })
       );
       await loadPending();
@@ -107,7 +108,7 @@ export default function CommissionPayouts() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <div className="text-sm text-gray-500">{t("commissionPayouts.totalPending")}</div>
-            <div className="mt-1 text-3xl font-bold text-black">${grandTotal.toFixed(2)}</div>
+            <div className="mt-1 text-3xl font-bold text-black">{formatCurrency(grandTotal)}</div>
           </div>
           <button type="button" onClick={() => void loadPending()} className="btn-secondary">
             {t("common.refresh")}
@@ -139,7 +140,7 @@ export default function CommissionPayouts() {
                   <div className="text-right">
                     <div className="text-sm text-gray-500">{t("commissionPayouts.employeeTotal")}</div>
                     <div className="text-2xl font-bold text-magenta-600">
-                      ${Number(group.totalPending).toFixed(2)}
+                      {formatCurrency(group.totalPending)}
                     </div>
                     {canPay && (
                       <button
@@ -168,8 +169,8 @@ export default function CommissionPayouts() {
                         </div>
                         <div className="text-xs text-gray-500">
                           {t("commissionPayouts.lineDetail", {
-                            sold: Number(entry.soldPrice).toFixed(2),
-                            min: Number(entry.minimumPrice).toFixed(2),
+                            sold: formatCurrency(entry.soldPrice),
+                            min: formatCurrency(entry.minimumPrice),
                             qty: Number(entry.quantitySold).toFixed(2),
                             rate: Number(entry.ratePercent).toFixed(1),
                             date: new Date(entry.saleDate).toLocaleString(),
@@ -177,7 +178,7 @@ export default function CommissionPayouts() {
                         </div>
                       </div>
                       <div className="self-center whitespace-nowrap font-bold text-magenta-600">
-                        ${Number(entry.commissionAmount).toFixed(2)}
+                        {formatCurrency(entry.commissionAmount)}
                       </div>
                     </div>
                   ))}

@@ -4,12 +4,12 @@ import QRCode from 'qrcode';
 import { Link } from 'react-router-dom';
 import api from '../lib/api';
 import { getCurrentUser } from '../lib/auth';
+import { formatCurrency } from '../lib/currency';
 import {
   BRANCH_DESTINATIONS,
   BRANCH_CODE_BY_ID,
   BRANCH_ID_BY_CODE,
   buildInventoryItemId,
-  formatSubCode,
   getItemTypeLabel,
   printInventoryLabel,
   resolveMeteredInstanceKey,
@@ -650,7 +650,7 @@ const ItemInputPage: React.FC = () => {
                       }}
                       className="rounded-full border border-gray-300 bg-white px-3 py-1 text-xs font-semibold text-gray-700 hover:border-black"
                     >
-                      ${formatSubCode(Number(item.subCode ?? item.costPrice ?? 0))} ·{' '}
+                      {formatCurrency(Number(item.subCode ?? item.costPrice ?? 0))} ·{' '}
                       {getColorLabel(t, item.color?.name) || t('common.color')} · {getItemTypeLabel(t, item.type)}
                       {item.isPiecePackage
                         ? ` · pkg: ${formatPackageSummary(parsePackageComponents(item.packageComponents))}`
@@ -1015,7 +1015,7 @@ const ItemInputPage: React.FC = () => {
                     </div>
                     <div className="flex justify-between">
                       <span>{t('itemInput.subCodeLabel')}</span>
-                      <strong>${formatSubCode(subCode)}</strong>
+                      <strong>{formatCurrency(subCode)}</strong>
                     </div>
                     <div className="flex justify-between">
                       <span>{t('itemInput.type')}</span>

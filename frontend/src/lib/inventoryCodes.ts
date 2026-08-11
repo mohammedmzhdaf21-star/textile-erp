@@ -52,6 +52,8 @@ export const colorCodeFromName = (name: string, fallbackId = '') =>
     .toUpperCase()
     .slice(0, 3) || fallbackId.slice(0, 3).toUpperCase();
 
+import { formatCurrency } from './currency';
+
 export const formatSubCode = (price: number) =>
   Number.isInteger(price) ? String(price) : price.toFixed(2);
 
@@ -668,6 +670,7 @@ export const printInventoryLabel = (input: {
     destination: string;
   };
 }) => {
+  const subCodeLabel = formatCurrency(input.subCode);
   const popup = window.open('', '_blank', 'width=480,height=720');
   if (!popup) {
     return false;
@@ -692,7 +695,7 @@ export const printInventoryLabel = (input: {
     <div class="label">
       <div class="title">${input.labels.title}</div>
       <div class="row"><span>${input.labels.familyCode}</span><strong>${input.familyCode}</strong></div>
-      <div class="row"><span>${input.labels.subCode}</span><strong>$${formatSubCode(input.subCode)}</strong></div>
+      <div class="row"><span>${input.labels.subCode}</span><strong>${subCodeLabel}</strong></div>
       <div class="row"><span>${input.labels.type}</span><strong>${input.typeLabel}</strong></div>
       <div class="row"><span>${input.labels.amount}</span><strong>${input.amountLabel}</strong></div>
       <div class="row"><span>${input.labels.color}</span><strong>${input.colorName}</strong></div>

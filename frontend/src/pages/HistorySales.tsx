@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../lib/api';
 import { useTranslation } from 'react-i18next';
+import { formatCurrency, formatSignedCurrency } from '../lib/currency';
 
 type Sale = {
   id: string;
@@ -332,12 +333,12 @@ const HistorySales: React.FC = () => {
             )}
             <div className={`mt-2 text-sm font-bold ${amount < 0 ? 'text-red-600' : 'text-magenta-600'}`}>
               {t('historySales.cashImpact', {
-                amount: `${amount < 0 ? '-' : ''}$${Math.abs(amount).toFixed(2)}`,
+                amount: formatSignedCurrency(amount),
               })}
             </div>
           </div>
           <div className={`text-lg font-bold ${amount < 0 ? 'text-red-600' : 'text-magenta-600'}`}>
-            {`${amount < 0 ? '-' : ''}$${Math.abs(amount).toFixed(2)}`}
+            {formatSignedCurrency(amount)}
           </div>
         </div>
       </button>
@@ -502,7 +503,7 @@ const HistorySales: React.FC = () => {
                         </p>
                       </div>
                       <div className="rounded-full bg-magenta-500 px-4 py-2 text-sm font-semibold text-white">
-                        {`$${group.total.toFixed(2)}`}
+                        {formatCurrency(group.total)}
                       </div>
                     </div>
 

@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../lib/api';
 import { useTranslation } from 'react-i18next';
+import { formatCurrency } from '../lib/currency';
 
 type Sale = {
   id: string;
@@ -208,7 +209,7 @@ const OwedMoney: React.FC = () => {
     }
     if (amount > paymentSale.outstandingAmount + 0.001) {
       setPaymentError(
-        t('owedMoney.paymentExceedsBalance', { amount: paymentSale.outstandingAmount.toFixed(2) })
+        t('owedMoney.paymentExceedsBalance', { amount: formatCurrency(paymentSale.outstandingAmount) })
       );
       return;
     }
@@ -275,7 +276,7 @@ const OwedMoney: React.FC = () => {
                 </p>
               </div>
               <div className="rounded-full bg-magenta-500 px-4 py-2 text-sm font-semibold text-white">
-                {`Outstanding $${outstandingTotal.toFixed(2)}`}
+                {t('owedMoney.outstandingTotal', { amount: formatCurrency(outstandingTotal) })}
               </div>
             </div>
           </div>
@@ -316,15 +317,15 @@ const OwedMoney: React.FC = () => {
                     <div className="grid gap-3 text-sm sm:grid-cols-4 lg:min-w-[520px]">
                       <div>
                         <div className="text-gray-500">{t('owedMoney.total')}</div>
-                        <div className="font-bold text-black">{`$${sale.totalAmount.toFixed(2)}`}</div>
+                        <div className="font-bold text-black">{formatCurrency(sale.totalAmount)}</div>
                       </div>
                       <div>
                         <div className="text-gray-500">{t('owedMoney.paid')}</div>
-                        <div className="font-bold text-green-700">{`$${sale.paidAmount.toFixed(2)}`}</div>
+                        <div className="font-bold text-green-700">{formatCurrency(sale.paidAmount)}</div>
                       </div>
                       <div>
                         <div className="text-gray-500">{t('owedMoney.outstanding')}</div>
-                        <div className="font-bold text-red-700">{`$${sale.outstandingAmount.toFixed(2)}`}</div>
+                        <div className="font-bold text-red-700">{formatCurrency(sale.outstandingAmount)}</div>
                       </div>
                       <div>
                         <div className="text-gray-500">{t('owedMoney.status')}</div>
@@ -363,15 +364,15 @@ const OwedMoney: React.FC = () => {
             <div className="mt-4 grid grid-cols-2 gap-3 rounded-2xl bg-gray-50 p-4 text-sm">
               <div>
                 <div className="text-gray-500">{t('owedMoney.totalSale')}</div>
-                <div className="font-bold text-black">${paymentSale.totalAmount.toFixed(2)}</div>
+                <div className="font-bold text-black">{formatCurrency(paymentSale.totalAmount)}</div>
               </div>
               <div>
                 <div className="text-gray-500">{t('owedMoney.alreadyPaid')}</div>
-                <div className="font-bold text-green-700">${paymentSale.paidAmount.toFixed(2)}</div>
+                <div className="font-bold text-green-700">{formatCurrency(paymentSale.paidAmount)}</div>
               </div>
               <div className="col-span-2">
                 <div className="text-gray-500">{t('owedMoney.stillOwed')}</div>
-                <div className="font-bold text-red-700">${paymentSale.outstandingAmount.toFixed(2)}</div>
+                <div className="font-bold text-red-700">{formatCurrency(paymentSale.outstandingAmount)}</div>
               </div>
             </div>
 
@@ -409,7 +410,7 @@ const OwedMoney: React.FC = () => {
                   <>
                     <p className="font-semibold">{t('owedMoney.partialPayment')}</p>
                     <p className="mt-1">
-                      {t('owedMoney.stillOwedAfter', { amount: `$${paymentRemainingAfter.toFixed(2)}` })}
+                      {t('owedMoney.stillOwedAfter', { amount: formatCurrency(paymentRemainingAfter) })}
                     </p>
                   </>
                 )}

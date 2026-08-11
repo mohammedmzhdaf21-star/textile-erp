@@ -4,6 +4,7 @@ import api from '../lib/api';
 import { formatPackageComponentsSold } from '../lib/piecePackages';
 import { getColorLabel } from '../lib/colorLabels';
 import { useTranslation } from 'react-i18next';
+import { formatCurrency } from '../lib/currency';
 
 type SaleItem = {
   id: string;
@@ -35,10 +36,6 @@ type Sale = {
   notes?: string | null;
   createdAt: string;
   items: SaleItem[];
-};
-
-const formatCurrency = (value: string | number) => {
-  return `$${Number(value).toFixed(2)}`;
 };
 
 const SaleDetail: React.FC = () => {

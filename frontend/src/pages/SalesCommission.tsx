@@ -7,6 +7,7 @@ import {
   saveCommissionSettings,
 } from "../lib/dashboardSettings";
 import { pushCommissionRateToServer } from "../lib/commissionSettingsApi";
+import { formatCurrency } from "../lib/currency";
 
 type SaleItem = {
   inventoryItemId?: string | null;
@@ -124,7 +125,7 @@ export default function SalesCommission() {
         <div className="mt-6 rounded-2xl border-2 border-magenta-500 bg-white p-4 text-black">
           <div className="text-sm text-gray-500">{t("dashboard.totalCommission")}</div>
           <div className="mt-2 rounded-xl bg-black px-4 py-3 text-2xl font-bold leading-none text-white">
-            {`$${commissionTotal.toFixed(2)}`}
+            {formatCurrency(commissionTotal)}
           </div>
         </div>
 
@@ -142,7 +143,7 @@ export default function SalesCommission() {
                   <div className="break-all text-xs text-gray-500">{row.itemId}</div>
                 </div>
                 <div className="self-center whitespace-nowrap font-bold text-magenta-600">
-                  ${row.commission.toFixed(2)}
+                  {formatCurrency(row.commission)}
                 </div>
               </div>
             ))

@@ -4,6 +4,7 @@ import QrScanInput from '../components/QrScanInput';
 import api from '../lib/api';
 import { getCurrentUser } from '../lib/auth';
 import { getItemMinimumPrice } from '../lib/dashboardSettings';
+import { formatCurrency } from '../lib/currency';
 import { completeCuttingTasksAfterRollToPiece, maybeCreateCuttingTaskAfterPieceSale } from '../lib/cuttingTasks';
 import { sellCutPiece } from '../lib/cutAndSell';
 import { getColorLabel } from '../lib/colorLabels';
@@ -213,7 +214,7 @@ const SalesView: React.FC = () => {
         setMinimumPriceMessage(
           t('sales.minimumPriceFor', {
             id: item.id,
-            price: savedPrice.minimumPrice.toFixed(2),
+            price: formatCurrency(savedPrice.minimumPrice),
             unit: savedPrice.unit === 'PIECE' ? t('common.piece') : t('common.meter'),
           })
         );
@@ -326,7 +327,7 @@ const SalesView: React.FC = () => {
       }
 
       if (savedPrice && price < savedPrice.minimumPrice) {
-        return alert(t('sales.minimumPriceAlert', { price: savedPrice.minimumPrice.toFixed(2) }));
+        return alert(t('sales.minimumPriceAlert', { price: formatCurrency(savedPrice.minimumPrice) }));
       }
 
       setCart((current) => [
@@ -615,8 +616,8 @@ const SalesView: React.FC = () => {
       }
       setSuccessMessage(
         cuttingTasksCreated > 0
-          ? t('sales.saleCreatedWithTasks', { branch, total: saleTotal.toFixed(2), count: cuttingTasksCreated })
-          : t('sales.saleCreated', { branch, total: saleTotal.toFixed(2) })
+          ? t('sales.saleCreatedWithTasks', { branch, total: formatCurrency(saleTotal), count: cuttingTasksCreated })
+          : t('sales.saleCreated', { branch, total: formatCurrency(saleTotal) })
       );
       setCart([]);
       setAmountPaid('0');
@@ -1022,7 +1023,7 @@ const SalesView: React.FC = () => {
               </div>
               <div className="flex justify-between font-semibold">
                 <span>{t('common.total')}</span>
-                <span>{`$${saleTotal.toFixed(2)}`}</span>
+                <span>{formatCurrency(saleTotal)}</span>
               </div>
             </div>
           </div>
@@ -1068,7 +1069,7 @@ const SalesView: React.FC = () => {
                     onChange={(e) => setAmountPaid(e.target.value)}
                     className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
                   />
-                  <p className="mt-2 text-sm text-gray-500">{t('sales.remainingDue', { amount: dueAmount.toFixed(2) })}</p>
+                  <p className="mt-2 text-sm text-gray-500">{t('sales.remainingDue', { amount: formatCurrency(dueAmount) })}</p>
                 </div>
               )}
             </div>
@@ -1111,9 +1112,9 @@ const SalesView: React.FC = () => {
                     <p className="text-sm text-gray-500">
                       {line.type === 'inventory'
                         ? line.isPiecePackage
-                          ? `${line.description}: ${line.packageSummary ?? 'package sale'} — $${lineTotal(line).toFixed(2)}`
-                          : `${line.description}: ${line.quantity} ${line.soldAsUnit === 'PIECE' ? 'pieces' : 'meters'} @ $${line.price}/unit`
-                        : `${line.meters} meters @ $${line.pricePerMeter}/m`}
+                          ? `${line.description}: ${line.packageSummary ?? 'package sale'} — ${formatCurrency(lineTotal(line))}`
+                          : `${line.description}: ${line.quantity} ${line.soldAsUnit === 'PIECE' ? 'pieces' : 'meters'} @ ${formatCurrency(line.price)}/unit`
+                        : `${line.meters} meters @ ${formatCurrency(line.pricePerMeter)}/m`}
                     </p>
                   </div>
                   <button
@@ -1126,7 +1127,7 @@ const SalesView: React.FC = () => {
                 </div>
                 <div className="flex items-center justify-between text-sm text-gray-700">
                   <span>{t('common.lineTotal')}</span>
-                  <span>{`$${lineTotal(line).toFixed(2)}`}</span>
+                  <span>{formatCurrency(lineTotal(line))}</span>
                 </div>
               </div>
             ))}

@@ -8,6 +8,7 @@ import {
   saveItemMinimumPrice,
 } from "../lib/dashboardSettings";
 import { pushItemMinimumPriceToServer } from "../lib/commissionSettingsApi";
+import { formatCurrency } from "../lib/currency";
 
 export default function ItemPricing() {
   const { t } = useTranslation();
@@ -76,7 +77,7 @@ export default function ItemPricing() {
       setPriceMessage(
         t("dashboard.savedMinimumPrice", {
           itemId,
-          price: parsedPrice.toFixed(2),
+          price: formatCurrency(parsedPrice),
           unit: unitLabel(priceUnit),
         })
       );
@@ -84,7 +85,7 @@ export default function ItemPricing() {
       setPriceMessage(
         t("dashboard.savedMinimumPriceLocalOnly", {
           itemId,
-          price: parsedPrice.toFixed(2),
+          price: formatCurrency(parsedPrice),
           unit: unitLabel(priceUnit),
         })
       );
@@ -151,7 +152,7 @@ export default function ItemPricing() {
                 <div className="break-all font-semibold text-black">{price.itemId}</div>
                 <div className="text-gray-600">
                   {t("dashboard.pricePerUnit", {
-                    price: price.minimumPrice.toFixed(2),
+                    price: formatCurrency(price.minimumPrice),
                     unit: unitLabel(price.unit),
                   })}
                 </div>

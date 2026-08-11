@@ -192,7 +192,7 @@ async function main() {
   await prisma.setting.createMany({
     data: [
       { key: 'company_name',    value: 'Textile ERP Inc.',  description: 'Company display name' },
-      { key: 'currency',        value: 'USD',               description: 'Default currency' },
+      { key: 'currency',        value: 'IQD',               description: 'Default currency' },
       { key: 'tax_rate',        value: 0.0,                 description: 'Default tax rate (0-1)' },
       { key: 'low_stock_alert', value: 10,                  description: 'Trigger alert below this meter count' },
     ],

@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../lib/api';
 import { useTranslation } from 'react-i18next';
+import { formatCurrency, formatSignedCurrency } from '../lib/currency';
 
 type Sale = {
   id: string;
@@ -296,7 +297,7 @@ const toDate = formatDate(tomorrow);
                       </p>
                     </div>
                     <div className="rounded-full bg-magenta-500 px-4 py-2 text-sm font-semibold text-white">
-                      {`$${group.total.toFixed(2)}`}
+                      {formatCurrency(group.total)}
                     </div>
                   </div>
                   <div className="mt-5 space-y-3">
@@ -325,7 +326,7 @@ const toDate = formatDate(tomorrow);
                               </div>
                               <div className="mt-1 text-xs text-gray-500">{formatTime(sale.createdAt)}</div>
                               <div className={`mt-2 text-sm font-bold ${amount < 0 ? 'text-red-600' : 'text-magenta-600'}`}>
-                                {t('common.cashImpact')}: {amount < 0 ? '-' : ''}${Math.abs(amount).toFixed(2)}
+                                {t('common.cashImpact')}: {formatSignedCurrency(amount)}
                               </div>
                               {isExchange && (
                                 <span className="mt-2 inline-flex rounded-full bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700">
@@ -344,7 +345,7 @@ const toDate = formatDate(tomorrow);
                               )}
                             </div>
                             <div className={`text-lg font-bold ${amount < 0 ? 'text-red-600' : 'text-magenta-600'}`}>
-                              {`${amount < 0 ? '-' : ''}$${Math.abs(amount).toFixed(2)}`}
+                              {formatSignedCurrency(amount)}
                             </div>
                           </div>
                         </button>
