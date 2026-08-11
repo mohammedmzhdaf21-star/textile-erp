@@ -1,5 +1,7 @@
 export const EMPLOYEE_SECTION_KEYS = [
   'dashboard',
+  'itemPricing',
+  'salesCommission',
   'inventory',
   'itemConversion',
   'sales',
@@ -12,6 +14,7 @@ export const EMPLOYEE_SECTION_KEYS = [
   'trusteeCommission',
   'exchange',
   'itemInput',
+  'employeeAccounts',
 ] as const;
 
 export type EmployeeSectionKey = (typeof EMPLOYEE_SECTION_KEYS)[number];

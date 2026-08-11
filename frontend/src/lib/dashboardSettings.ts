@@ -1,5 +1,7 @@
 export type DashboardSectionKey =
   | 'dashboard'
+  | 'itemPricing'
+  | 'salesCommission'
   | 'inventory'
   | 'itemConversion'
   | 'sales'
@@ -11,7 +13,8 @@ export type DashboardSectionKey =
   | 'dataAnalysis'
   | 'trusteeCommission'
   | 'exchange'
-  | 'itemInput';
+  | 'itemInput'
+  | 'employeeAccounts';
 
 export type ItemMinimumPrice = {
   itemId: string;
@@ -38,6 +41,8 @@ const ALWAYS_VISIBLE_ROUTES = new Set(['/task-employee']);
 
 export const dashboardSections: Array<{ key: DashboardSectionKey; labelKey: string; route: string }> = [
   { key: 'dashboard', labelKey: 'nav.dashboard', route: '/dashboard' },
+  { key: 'itemPricing', labelKey: 'nav.itemPricing', route: '/item-pricing' },
+  { key: 'salesCommission', labelKey: 'nav.salesCommission', route: '/sales-commission' },
   { key: 'inventory', labelKey: 'nav.inventory', route: '/inventory' },
   { key: 'itemConversion', labelKey: 'nav.itemConversion', route: '/inventory/convert' },
   { key: 'sales', labelKey: 'nav.sales', route: '/sales' },
@@ -50,6 +55,7 @@ export const dashboardSections: Array<{ key: DashboardSectionKey; labelKey: stri
   { key: 'trusteeCommission', labelKey: 'nav.trusteeCommission', route: '/trustee-commission' },
   { key: 'exchange', labelKey: 'nav.exchange', route: '/exchange' },
   { key: 'itemInput', labelKey: 'nav.newItem', route: '/item-input' },
+  { key: 'employeeAccounts', labelKey: 'nav.employeeAccounts', route: '/employee-accounts' },
 ];
 
 const readJson = <T,>(key: string, fallback: T): T => {
@@ -118,7 +124,11 @@ export const canAccessRoute = (
   );
 };
 
-export const ADMIN_ONLY_ROUTES = new Set(['/employee-accounts']);
+export const ADMIN_ONLY_ROUTES = new Set([
+  '/employee-accounts',
+  '/item-pricing',
+  '/sales-commission',
+]);
 
 export const canAccessAdminRoute = (user: { role?: string } | null | undefined, route: string) => {
   if (!ADMIN_ONLY_ROUTES.has(route)) return true;

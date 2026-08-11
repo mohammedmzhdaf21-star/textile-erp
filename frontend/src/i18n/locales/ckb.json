@@ -137,6 +137,8 @@
   },
   "nav": {
     "dashboard": "داشبۆرد",
+    "itemPricing": "نرخی بەرهەم",
+    "salesCommission": "کۆمیشنی فرۆشتن",
     "inventory": "کۆگا",
     "itemConversion": "گۆڕینی بەرهەم",
     "sales": "فرۆشتن",
@@ -203,8 +205,8 @@
   },
   "dashboard": {
     "welcome": "بەخێربێیت، {{name}}!",
-    "managementTitle": "بەڕێوەبردنی داشبۆرد",
-    "managementDescription": "کەمترین نرخی بەرهەم، دەستگەیشتنی کارمەند، و حیسابکردنی کۆمیشن بەڕێوەببە.",
+    "overviewTitle": "شوێنی کاری تۆ",
+    "overviewDescription": "لە مێنووی لای چەپەوە کۆگا، فرۆشتن، نرخ، کۆمیشن، هەژماری کارمەند و بەشەکانی تر بکەرەوە.",
     "priceTitle": "نرخ",
     "priceDescription": "ناسنامەی بەرهەم سکان بکە یان بنووسە و کەمترین نرخی فرۆشتن بۆ هەر مەترێک یان پارچەیەک پاشەکەوت بکە.",
     "qrItemId": "QR / ناسنامەی بەرهەم",
@@ -238,6 +240,8 @@
     "enterValidCommission": "ڕێژەی کۆمیشنێکی دروست بنووسە.",
     "sections": {
       "dashboard": "داشبۆرد",
+      "itemPricing": "نرخی بەرهەم",
+      "salesCommission": "کۆمیشنی فرۆشتن",
       "inventory": "کۆگا",
       "itemConversion": "گۆڕینی بەرهەم",
       "sales": "فرۆشتن",
@@ -249,8 +253,16 @@
       "dataAnalysis": "شیکردنەوەی داتا",
       "trusteeCommission": "کۆمیشنی وەبەرهێنەر",
       "exchange": "گۆڕینەوە",
-      "itemInput": "بەرهەمی نوێ"
+      "itemInput": "بەرهەمی نوێ",
+      "employeeAccounts": "هەژمارەکانی کارمەند"
     }
+  },
+  "itemPricing": {
+    "savedPrices": "کەمترین نرخە پاشەکەوتکراوەکان",
+    "noSavedPrices": "هێشتا هیچ کەمترین نرخێک پاشەکەوت نەکراوە."
+  },
+  "salesCommission": {
+    "noResults": "کۆمیشن حیساب بکە بۆ بینینی ئەنجام. سەرەتا کەمترین نرخ لە نرخی بەرهەم پاشەکەوت بکە."
   },
   "inventory": {
     "title": "کۆگا",
