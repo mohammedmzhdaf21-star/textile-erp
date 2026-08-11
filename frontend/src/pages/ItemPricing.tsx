@@ -7,6 +7,7 @@ import {
   readItemMinimumPrices,
   saveItemMinimumPrice,
 } from "../lib/dashboardSettings";
+import { pushItemMinimumPriceToServer } from "../lib/commissionSettingsApi";
 
 export default function ItemPricing() {
   const { t } = useTranslation();
@@ -54,7 +55,7 @@ export default function ItemPricing() {
     }
   }
 
-  function savePrice() {
+  async function savePrice() {
     const itemId = priceItemId.trim();
     const parsedPrice = Number(minimumPrice);
     if (!itemId) return alert(t("dashboard.enterItemId"));
@@ -62,19 +63,32 @@ export default function ItemPricing() {
       return alert(t("dashboard.enterValidMinimumPrice"));
     }
 
-    saveItemMinimumPrice({
+    const price = {
       itemId,
       unit: priceUnit,
       minimumPrice: parsedPrice,
       updatedAt: new Date().toISOString(),
-    });
-    setPriceMessage(
-      t("dashboard.savedMinimumPrice", {
-        itemId,
-        price: parsedPrice.toFixed(2),
-        unit: unitLabel(priceUnit),
-      })
-    );
+    };
+
+    saveItemMinimumPrice(price);
+    try {
+      await pushItemMinimumPriceToServer(price);
+      setPriceMessage(
+        t("dashboard.savedMinimumPrice", {
+          itemId,
+          price: parsedPrice.toFixed(2),
+          unit: unitLabel(priceUnit),
+        })
+      );
+    } catch {
+      setPriceMessage(
+        t("dashboard.savedMinimumPriceLocalOnly", {
+          itemId,
+          price: parsedPrice.toFixed(2),
+          unit: unitLabel(priceUnit),
+        })
+      );
+    }
   }
 
   return (

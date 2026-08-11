@@ -2,6 +2,7 @@ export type DashboardSectionKey =
   | 'dashboard'
   | 'itemPricing'
   | 'salesCommission'
+  | 'commissionPayouts'
   | 'inventory'
   | 'itemConversion'
   | 'sales'
@@ -43,6 +44,7 @@ export const dashboardSections: Array<{ key: DashboardSectionKey; labelKey: stri
   { key: 'dashboard', labelKey: 'nav.dashboard', route: '/dashboard' },
   { key: 'itemPricing', labelKey: 'nav.itemPricing', route: '/item-pricing' },
   { key: 'salesCommission', labelKey: 'nav.salesCommission', route: '/sales-commission' },
+  { key: 'commissionPayouts', labelKey: 'nav.commissionPayouts', route: '/commission-payouts' },
   { key: 'inventory', labelKey: 'nav.inventory', route: '/inventory' },
   { key: 'itemConversion', labelKey: 'nav.itemConversion', route: '/inventory/convert' },
   { key: 'sales', labelKey: 'nav.sales', route: '/sales' },

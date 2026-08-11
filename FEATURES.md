@@ -86,8 +86,9 @@ Deploy and develop from `main` so nothing is lost when starting a new session or
 
 ## Management sections (sidebar)
 
-- **Item Pricing** — scan/set minimum sale prices per item
+- **Item Pricing** — scan/set minimum sale prices per item (synced to server for commission tracking)
 - **Sales Commission** — calculate employee commission from sales vs minimum prices
+- **Commission Payouts** — pending commission ledger grouped by employee; admin marks **Paid** to clear the list
 - **Employee Accounts** — team login and access control (replaces old dashboard employee access panel)
 
 ## Branches
@@ -106,6 +107,7 @@ npx prisma generate
 Required migrations:
 - `20260710120000_add_sale_item_qr_fields`
 - `20260810120000_add_employee_access_fields`
+- `20260811120000_add_commission_entries`
 
 ---
 

@@ -17,6 +17,7 @@
     "searching": "Searching...",
     "clear": "Clear",
     "loading": "Loading...",
+    "refresh": "Refresh",
     "saving": "Saving...",
     "removing": "Removing...",
     "signIn": "Sign In",
@@ -61,6 +62,7 @@
     "family": "Family",
     "id": "ID",
     "unknownEmployee": "Unknown Employee",
+    "unknownItem": "Unknown item",
     "unknownCustomer": "Unknown customer",
     "unknownColor": "Unknown color",
     "noContact": "No contact",
@@ -139,6 +141,7 @@
     "dashboard": "Dashboard",
     "itemPricing": "Item Pricing",
     "salesCommission": "Sales Commission",
+    "commissionPayouts": "Commission Payouts",
     "inventory": "Inventory",
     "itemConversion": "Item Conversion",
     "sales": "Sales",
@@ -219,6 +222,7 @@
     "enterItemId": "Enter or scan an item ID.",
     "enterValidMinimumPrice": "Enter a valid minimum price.",
     "savedMinimumPrice": "Saved {{itemId}} minimum price: ${{price}} per {{unit}}.",
+    "savedMinimumPriceLocalOnly": "Saved {{itemId}} locally (${{price}} per {{unit}}). Server sync failed — commission may not apply until synced.",
     "employeeAccessTitle": "Employee access",
     "employeeAccessDescription": "Assign work and choose which dashboard sections an employee can see.",
     "employeeEmail": "Employee email",
@@ -242,6 +246,7 @@
       "dashboard": "Dashboard",
       "itemPricing": "Item Pricing",
       "salesCommission": "Sales Commission",
+      "commissionPayouts": "Commission Payouts",
       "inventory": "Inventory",
       "itemConversion": "Item Conversion",
       "sales": "Sales",
@@ -263,6 +268,18 @@
   },
   "salesCommission": {
     "noResults": "Run commission to see results. Save item minimum prices first in Item Pricing."
+  },
+  "commissionPayouts": {
+    "subtitle": "Pending sales commissions grouped by employee. Mark an employee as paid to clear their list.",
+    "totalPending": "Total pending",
+    "employeeTotal": "Pending total",
+    "markPaid": "Mark paid",
+    "confirmPaid": "Mark all pending commission for this employee as paid?",
+    "paidSuccess": "Marked {{count}} line(s) as paid (${{amount}}).",
+    "payFailed": "Could not mark commission as paid.",
+    "loadFailed": "Could not load pending commissions.",
+    "noPending": "No pending commissions. New sales with margin above minimum price appear here automatically.",
+    "lineDetail": "Sold ${{sold}} · Min ${{min}} · Qty {{qty}} · {{rate}}% · {{date}}"
   },
   "inventory": {
     "title": "Inventory",

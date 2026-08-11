@@ -17,6 +17,7 @@
     "searching": "گەڕان...",
     "clear": "پاککردنەوە",
     "loading": "بارکردن...",
+    "refresh": "نوێکردنەوە",
     "saving": "پاشەکەوتکردن...",
     "removing": "لابردن...",
     "signIn": "چوونەژوورەوە",
@@ -61,6 +62,7 @@
     "family": "خێزان",
     "id": "ناسنامە",
     "unknownEmployee": "کارمەندی نەناسراو",
+    "unknownItem": "بەرهەمی نەناسراو",
     "unknownCustomer": "کڕیاری نەناسراو",
     "unknownColor": "ڕەنگی نەناسراو",
     "noContact": "پەیوەندی نییە",
@@ -139,6 +141,7 @@
     "dashboard": "داشبۆرد",
     "itemPricing": "نرخی بەرهەم",
     "salesCommission": "کۆمیشنی فرۆشتن",
+    "commissionPayouts": "پارەدانی کۆمیشن",
     "inventory": "کۆگا",
     "itemConversion": "گۆڕینی بەرهەم",
     "sales": "فرۆشتن",
@@ -219,6 +222,7 @@
     "enterItemId": "ناسنامەی بەرهەم بنووسە یان سکان بکە.",
     "enterValidMinimumPrice": "کەمترین نرخێکی دروست بنووسە.",
     "savedMinimumPrice": "کەمترین نرخی {{itemId}} پاشەکەوت کرا: ${{price}} بۆ هەر {{unit}}ێک.",
+    "savedMinimumPriceLocalOnly": "نرخی {{itemId}} لەسەر ئامێرەکەت پاشەکەوت کرا (${{price}} بۆ هەر {{unit}}ێک). هاوکاتکردن لەگەڵ سێرڤەر سەرکەوتوو نەبوو.",
     "employeeAccessTitle": "دەستگەیشتنی کارمەند",
     "employeeAccessDescription": "کار دیاری بکە و بەشی داشبۆرد هەڵبژێرە کە کارمەند دەتوانێت بیبینێت.",
     "employeeEmail": "ئیمەیڵی کارمەند",
@@ -242,6 +246,7 @@
       "dashboard": "داشبۆرد",
       "itemPricing": "نرخی بەرهەم",
       "salesCommission": "کۆمیشنی فرۆشتن",
+      "commissionPayouts": "پارەدانی کۆمیشن",
       "inventory": "کۆگا",
       "itemConversion": "گۆڕینی بەرهەم",
       "sales": "فرۆشتن",
@@ -263,6 +268,18 @@
   },
   "salesCommission": {
     "noResults": "کۆمیشن حیساب بکە بۆ بینینی ئەنجام. سەرەتا کەمترین نرخ لە نرخی بەرهەم پاشەکەوت بکە."
+  },
+  "commissionPayouts": {
+    "subtitle": "کۆمیشنە چاوەڕوانکراوەکانی فرۆشتن بەپێی کارمەند. دوگمەی پارەدراو بکە بۆ سڕینەوەی لیستەکە.",
+    "totalPending": "کۆی چاوەڕوان",
+    "employeeTotal": "کۆی چاوەڕوان",
+    "markPaid": "نیشانکردن وەک پارەدراو",
+    "confirmPaid": "هەموو کۆمیشنە چاوەڕوانکراوەکانی ئەم کارمەندە وەک پارەدراو نیشان بکرێت؟",
+    "paidSuccess": "{{count}} هێڵ وەک پارەدراو نیشانکرا (${{amount}}).",
+    "payFailed": "نەتوانرا کۆمیشن وەک پارەدراو نیشان بکرێت.",
+    "loadFailed": "نەتوانرا کۆمیشنە چاوەڕوانکراوەکان بار بکرێن.",
+    "noPending": "هیچ کۆمیشنێکی چاوەڕوان نییە. فرۆشتنە نوێیەکان کە لەسەر کەمترین نرخ زیاتر بن لێرە دەردەکەون.",
+    "lineDetail": "فرۆشراو ${{sold}} · کەمترین ${{min}} · بڕ {{qty}} · {{rate}}% · {{date}}"
   },
   "inventory": {
     "title": "کۆگا",

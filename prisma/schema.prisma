@@ -63,6 +63,10 @@ enum NotificationType {
   SYSTEM
   BROADCAST
 }
+enum CommissionEntryStatus {
+  PENDING
+  PAID
+}
 
 model Branch {
   id        String    @id @db.VarChar(5)
@@ -191,8 +195,9 @@ model Sale {
 
   createdAt     DateTime      @default(now())
 
-  items         SaleItem[]
-  refunds       Refund[]
+  items              SaleItem[]
+  refunds            Refund[]
+  commissionEntries  EmployeeCommissionEntry[]
 
   @@index([branchId, createdAt])
   @@index([employeeId, createdAt])
@@ -228,6 +233,8 @@ model SaleItem {
   qrCodeValue     String?        @db.VarChar(255)
   qrCodeDataUrl   String?        @db.Text
   createdAt       DateTime       @default(now())
+
+  commissionEntry EmployeeCommissionEntry?
 
   @@index([saleId])
   @@index([inventoryItemId])
@@ -330,7 +337,9 @@ model Employee {
 
   sales            Sale[]                          @relation("SaleEmployee")
   voidedSales      Sale[]                          @relation("SaleVoidedBy")
-  commissions      PaidCommissionHistory[]
+  commissions           PaidCommissionHistory[]
+  commissionEntries     EmployeeCommissionEntry[]       @relation("CommissionEmployee")
+  commissionsPaid       EmployeeCommissionEntry[]       @relation("CommissionPaidBy")
   branches         BranchEmployee[]
   tasksDone        Task[]                          @relation("TaskCompletedBy")
   tasksAssigned    Task[]                          @relation("TaskAssignedTo")
@@ -392,6 +401,32 @@ model PaidCommissionHistory {
 
   @@index([employeeId, paidAt])
   @@map("paid_commission_history")
+}
+
+model EmployeeCommissionEntry {
+  id               String                @id @default(uuid())
+  employeeId       String
+  employee         Employee              @relation("CommissionEmployee", fields: [employeeId], references: [id], onDelete: Restrict)
+  saleId           String
+  sale             Sale                  @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  saleItemId       String                @unique
+  saleItem         SaleItem              @relation(fields: [saleItemId], references: [id], onDelete: Cascade)
+  inventoryItemId  String?
+  soldPrice        Decimal               @db.Decimal(12, 2)
+  minimumPrice     Decimal               @db.Decimal(12, 2)
+  quantitySold     Decimal               @db.Decimal(10, 2)
+  ratePercent      Decimal               @db.Decimal(5, 2)
+  commissionAmount Decimal               @db.Decimal(12, 2)
+  status           CommissionEntryStatus @default(PENDING)
+  paidAt           DateTime?
+  paidById         String?
+  paidBy           Employee?             @relation("CommissionPaidBy", fields: [paidById], references: [id], onDelete: SetNull)
+  createdAt        DateTime              @default(now())
+
+  @@index([employeeId, status])
+  @@index([saleId])
+  @@index([status])
+  @@map("employee_commission_entries")
 }
 
 model Trustee {

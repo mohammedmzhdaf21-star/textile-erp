@@ -12,6 +12,10 @@ import {
   validatePartialPackageSale,
 } from './packageStock';
 import { meterStockUpdateAfterDeduction } from './inventoryRules';
+import {
+  recordCommissionForSaleItem,
+  removePendingCommissionsForSale,
+} from './commissions';
 
 // ============================================================
 // SALES BUSINESS LOGIC
@@ -337,7 +341,7 @@ export async function createSale(
       const qrSnapshot = resolveSaleItemQr(item, invItem);
 
       // Create the sale item
-      await tx.saleItem.create({
+      const createdSaleItem = await tx.saleItem.create({
         data: {
           saleId: createdSale.id,
           inventoryItemId: item.inventoryItemId || null,
@@ -357,6 +361,15 @@ export async function createSale(
           qrCodeValue: qrSnapshot.qrCodeValue,
           qrCodeDataUrl: qrSnapshot.qrCodeDataUrl,
         },
+      });
+
+      await recordCommissionForSaleItem(tx, {
+        employeeId: input.employeeId,
+        saleId: createdSale.id,
+        saleItemId: createdSaleItem.id,
+        inventoryItemId: item.inventoryItemId,
+        soldPrice: item.soldPrice,
+        quantitySold: item.quantitySold,
       });
     }
 
@@ -608,7 +621,7 @@ export async function processExchange(
 
       const qrSnapshot = resolveSaleItemQr(item, invItem);
 
-      await tx.saleItem.create({
+      const createdSaleItem = await tx.saleItem.create({
         data: {
           saleId: createdSale.id,
           inventoryItemId: item.inventoryItemId || null,
@@ -628,6 +641,15 @@ export async function processExchange(
           qrCodeValue: qrSnapshot.qrCodeValue,
           qrCodeDataUrl: qrSnapshot.qrCodeDataUrl,
         },
+      });
+
+      await recordCommissionForSaleItem(tx, {
+        employeeId: input.employeeId,
+        saleId: createdSale.id,
+        saleItemId: createdSaleItem.id,
+        inventoryItemId: item.inventoryItemId,
+        soldPrice: item.soldPrice,
+        quantitySold: item.quantitySold,
       });
     }
 
@@ -880,6 +902,9 @@ export async function voidSale(
         }
       }
     }
+
+    // Remove pending commission entries for voided sale
+    await removePendingCommissionsForSale(tx, saleId);
 
     // Mark sale as voided
     const voidedSale = await tx.sale.update({

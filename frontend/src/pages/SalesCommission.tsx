@@ -6,6 +6,7 @@ import {
   readItemMinimumPrices,
   saveCommissionSettings,
 } from "../lib/dashboardSettings";
+import { pushCommissionRateToServer } from "../lib/commissionSettingsApi";
 
 type SaleItem = {
   inventoryItemId?: string | null;
@@ -37,6 +38,11 @@ export default function SalesCommission() {
     const rate = Number(commissionRate);
     if (!Number.isFinite(rate) || rate < 0) return alert(t("dashboard.enterValidCommission"));
     saveCommissionSettings({ ratePercent: rate });
+    try {
+      await pushCommissionRateToServer(rate);
+    } catch {
+      // Rate saved locally; server sync can retry on next save
+    }
     setCommissionMessage(null);
 
     try {

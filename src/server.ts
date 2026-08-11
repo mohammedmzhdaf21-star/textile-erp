@@ -6,6 +6,7 @@ import authRoutes from './routes/auth.routes';
 import inventoryRoutes from './routes/inventory.routes';
 import salesRoutes from './routes/sales.routes';
 import employeesRoutes from './routes/employees.routes';
+import commissionsRoutes from './routes/commissions.routes';
 import { prisma } from './lib/prisma';
 
 const app = express();
@@ -96,6 +97,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/inventory', inventoryRoutes);
 app.use('/api/sales', salesRoutes);
 app.use('/api/employees', employeesRoutes);
+app.use('/api/commissions', commissionsRoutes);
 
 // ============================================================
 // 404 HANDLER

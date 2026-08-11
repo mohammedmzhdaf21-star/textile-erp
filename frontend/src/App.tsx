@@ -19,6 +19,7 @@ import SaleDetail from './pages/SaleDetail';
 import EmployeeAccounts from './pages/EmployeeAccounts';
 import ItemPricing from './pages/ItemPricing';
 import SalesCommission from './pages/SalesCommission';
+import CommissionPayouts from './pages/CommissionPayouts';
 import { getCurrentUser, isAuthenticated } from './lib/auth';
 import { canAccessAdminRoute, canAccessRoute } from './lib/dashboardSettings';
 
@@ -67,6 +68,14 @@ function App() {
           element={
             <ProtectedLayout>
               <SalesCommission />
+            </ProtectedLayout>
+          }
+        />
+        <Route
+          path="/commission-payouts"
+          element={
+            <ProtectedLayout>
+              <CommissionPayouts />
             </ProtectedLayout>
           }
         />

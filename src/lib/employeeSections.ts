@@ -2,6 +2,7 @@ export const EMPLOYEE_SECTION_KEYS = [
   'dashboard',
   'itemPricing',
   'salesCommission',
+  'commissionPayouts',
   'inventory',
   'itemConversion',
   'sales',

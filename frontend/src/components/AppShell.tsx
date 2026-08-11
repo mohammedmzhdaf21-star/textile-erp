@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
+import { ensureCommissionSettingsSynced } from '../lib/commissionSettingsApi';
 import Sidebar from './Sidebar';
 import SidebarToggle from './SidebarToggle';
 
@@ -22,6 +23,10 @@ const AppShell: React.FC<AppShellProps> = ({ children }) => {
 
   const closeSidebar = useCallback(() => {
     setIsOpen(false);
+  }, []);
+
+  useEffect(() => {
+    void ensureCommissionSettingsSynced();
   }, []);
 
   useEffect(() => {
