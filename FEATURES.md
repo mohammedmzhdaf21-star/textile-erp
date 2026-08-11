@@ -84,6 +84,12 @@ Deploy and develop from `main` so nothing is lost when starting a new session or
 - Access rules saved in database (`allowedSections` on Employee)
 - Admins/managers always have full access
 
+## Management sections (sidebar)
+
+- **Item Pricing** — scan/set minimum sale prices per item
+- **Sales Commission** — calculate employee commission from sales vs minimum prices
+- **Employee Accounts** — team login and access control (replaces old dashboard employee access panel)
+
 ## Branches
 
 - A, B, C, E, F + Storage (S)
