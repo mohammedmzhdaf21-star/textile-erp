@@ -8,7 +8,7 @@ import {
   saveItemMinimumPrice,
 } from "../lib/dashboardSettings";
 import { pushItemMinimumPriceToServer } from "../lib/commissionSettingsApi";
-import { formatCurrency } from "../lib/currency";
+import { formatCurrency, parsePriceInput, toPriceInput } from "../lib/currency";
 
 export default function ItemPricing() {
   const { t } = useTranslation();
@@ -35,7 +35,7 @@ export default function ItemPricing() {
       const unit = item.type === "PIECE" ? "PIECE" : "METER";
       const existing = getItemMinimumPrice(itemId);
       setPriceUnit(unit);
-      if (existing) setMinimumPrice(String(existing.minimumPrice));
+      if (existing) setMinimumPrice(toPriceInput(existing.minimumPrice));
       setPriceMessage(
         t("dashboard.itemDetected", {
           type: item.type || "Item",
@@ -58,16 +58,16 @@ export default function ItemPricing() {
 
   async function savePrice() {
     const itemId = priceItemId.trim();
-    const parsedPrice = Number(minimumPrice);
+    const storedPrice = parsePriceInput(minimumPrice);
     if (!itemId) return alert(t("dashboard.enterItemId"));
-    if (!Number.isFinite(parsedPrice) || parsedPrice < 0) {
+    if (!Number.isFinite(Number(minimumPrice)) || Number(minimumPrice) < 0) {
       return alert(t("dashboard.enterValidMinimumPrice"));
     }
 
     const price = {
       itemId,
       unit: priceUnit,
-      minimumPrice: parsedPrice,
+      minimumPrice: storedPrice,
       updatedAt: new Date().toISOString(),
     };
 
@@ -77,7 +77,7 @@ export default function ItemPricing() {
       setPriceMessage(
         t("dashboard.savedMinimumPrice", {
           itemId,
-          price: formatCurrency(parsedPrice),
+          price: formatCurrency(storedPrice),
           unit: unitLabel(priceUnit),
         })
       );
@@ -85,7 +85,7 @@ export default function ItemPricing() {
       setPriceMessage(
         t("dashboard.savedMinimumPriceLocalOnly", {
           itemId,
-          price: formatCurrency(parsedPrice),
+          price: formatCurrency(storedPrice),
           unit: unitLabel(priceUnit),
         })
       );
@@ -97,6 +97,7 @@ export default function ItemPricing() {
       <div>
         <h1 className="text-3xl font-bold text-black">{t("nav.itemPricing")}</h1>
         <p className="mt-1 text-sm text-gray-600">{t("dashboard.priceDescription")}</p>
+        <p className="mt-1 text-xs text-magenta-600">{t("currency.thousandsHint")}</p>
       </div>
 
       <section className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">

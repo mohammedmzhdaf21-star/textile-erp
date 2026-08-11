@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import api from '../lib/api';
 import { getCurrentUser } from '../lib/auth';
 import { useTranslation } from 'react-i18next';
-import { formatCurrency } from '../lib/currency';
+import { formatCurrency, parsePriceInput } from '../lib/currency';
 import QrScanInput from '../components/QrScanInput';
 import { resolveInventoryItem } from '../lib/inventoryLookup';
 
@@ -114,17 +114,23 @@ const ExchangePage: React.FC = () => {
     () =>
       newSaleLines.reduce((sum, line) => {
         if (line.type === 'inventory') {
-          return sum + line.quantity * line.price;
+          return sum + line.quantity * parsePriceInput(line.price);
         }
-        return sum + line.meters * line.pricePerMeter;
+        return sum + line.meters * parsePriceInput(line.pricePerMeter);
       }, 0),
     [newSaleLines]
   );
 
   const totalReturnedValue = useMemo(
     () =>
-      returnedInventory.reduce((sum, item) => sum + item.amount * item.returnPrice, 0) +
-      returnedPlain.reduce((sum, item) => sum + item.meters * item.returnPricePerMeter, 0),
+      returnedInventory.reduce(
+        (sum, item) => sum + item.amount * parsePriceInput(item.returnPrice),
+        0
+      ) +
+      returnedPlain.reduce(
+        (sum, item) => sum + item.meters * parsePriceInput(item.returnPricePerMeter),
+        0
+      ),
     [returnedInventory, returnedPlain]
   );
 
@@ -135,7 +141,7 @@ const ExchangePage: React.FC = () => {
 
   const dueAmount = useMemo(() => {
     if (netDue <= 0 || paymentStatus === 'FULL') return 0;
-    return Math.max(0, netDue - Number(amountPaid || 0));
+    return Math.max(0, netDue - parsePriceInput(amountPaid || 0));
   }, [amountPaid, netDue, paymentStatus]);
 
   const detectReturnedItemForCode = async (inventoryItemId: string, sourceBranch: BranchCode) => {
@@ -358,10 +364,10 @@ const ExchangePage: React.FC = () => {
     if (returnedInventory.length === 0 && returnedPlain.length === 0 && newSaleLines.length === 0) {
       return alert(t('exchange.addItemsFirst'));
     }
-    if (netDue > 0 && paymentStatus === 'PARTIAL' && Number(amountPaid) <= 0) {
+    if (netDue > 0 && paymentStatus === 'PARTIAL' && parsePriceInput(amountPaid) <= 0) {
       return alert(t('exchange.enterPartialPayment'));
     }
-    if (netDue > 0 && paymentStatus === 'PARTIAL' && Number(amountPaid) >= netDue) {
+    if (netDue > 0 && paymentStatus === 'PARTIAL' && parsePriceInput(amountPaid) >= netDue) {
       return alert(t('exchange.useFullyPaid'));
     }
 
@@ -377,14 +383,14 @@ const ExchangePage: React.FC = () => {
             colorId: line.colorId,
             soldAsUnit: line.soldAsUnit,
             quantitySold: line.quantity,
-            soldPrice: line.price,
+            soldPrice: parsePriceInput(line.price),
           };
         }
         return {
           colorId: 'PLAIN',
           soldAsUnit: 'METER',
           quantitySold: line.meters,
-          soldPrice: line.pricePerMeter,
+          soldPrice: parsePriceInput(line.pricePerMeter),
           isPlainCloth: true,
           plainClothName: line.clothName,
         };
@@ -399,17 +405,17 @@ const ExchangePage: React.FC = () => {
           inventoryItemId: line.inventoryItemId,
           soldAsUnit: line.soldAsUnit,
           quantityReturned: line.amount,
-          returnPrice: line.returnPrice,
+          returnPrice: parsePriceInput(line.returnPrice),
         })),
         returnedPlain: returnedPlain.map((line) => ({
           clothName: line.clothName,
           meters: line.meters,
-          returnPricePerMeter: line.returnPricePerMeter,
+          returnPricePerMeter: parsePriceInput(line.returnPricePerMeter),
           note: line.note,
         })),
         replacementItems,
         paymentStatus: netDue > 0 ? paymentStatus : 'FULL',
-        amountPaid: netDue > 0 && paymentStatus === 'PARTIAL' ? Number(amountPaid) : undefined,
+        amountPaid: netDue > 0 && paymentStatus === 'PARTIAL' ? parsePriceInput(amountPaid) : undefined,
         notes: `Exchange at branch ${selectedBranch}. Returned inventory: ${returnedInventory.length}. Returned plain cloth lines: ${returnedPlain.length}.`,
       };
 
@@ -613,8 +619,8 @@ const ExchangePage: React.FC = () => {
                         </p>
                         <p className="text-sm text-gray-600">
                           {line.type === 'inventory'
-                            ? `${line.itemType}: ${line.quantity} ${line.soldAsUnit === 'PIECE' ? 'pieces' : 'meters'} @ ${formatCurrency(line.price)}/unit`
-                            : `${line.meters} meters @ ${formatCurrency(line.pricePerMeter)}/m`}
+                            ? `${line.itemType}: ${line.quantity} ${line.soldAsUnit === 'PIECE' ? 'pieces' : 'meters'} @ ${formatCurrency(parsePriceInput(line.price))}/unit`
+                            : `${line.meters} meters @ ${formatCurrency(parsePriceInput(line.pricePerMeter))}/m`}
                         </p>
                       </div>
                       <button type="button" className="text-red-600 font-semibold" onClick={() => removeNewSaleLine(index)}>
@@ -713,7 +719,7 @@ const ExchangePage: React.FC = () => {
                       <div>
                         <p className="font-semibold text-black">{t('exchange.returnedItem', { id: line.inventoryItemId })}</p>
                         <p className="text-sm text-gray-600">
-                          {line.itemType}: {line.amount} {line.soldAsUnit === 'PIECE' ? 'pieces' : 'meters'} @ {formatCurrency(line.returnPrice)}/unit from branch {line.sourceBranch}
+                          {line.itemType}: {line.amount} {line.soldAsUnit === 'PIECE' ? 'pieces' : 'meters'} @ {formatCurrency(parsePriceInput(line.returnPrice))}/unit from branch {line.sourceBranch}
                         </p>
                       </div>
                       <button type="button" className="text-red-600 font-semibold" onClick={() => removeReturnedInventory(index)}>
@@ -786,7 +792,7 @@ const ExchangePage: React.FC = () => {
                       <div>
                         <p className="font-semibold text-black">{line.clothName}</p>
                         <p className="text-sm text-gray-600">
-                          {line.meters} meters @ {formatCurrency(line.returnPricePerMeter)}/m returned
+                          {line.meters} meters @ {formatCurrency(parsePriceInput(line.returnPricePerMeter))}/m returned
                         </p>
                         {line.note && <p className="text-sm text-gray-500">{line.note}</p>}
                       </div>

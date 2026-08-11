@@ -137,6 +137,9 @@
     "newItem": "New Item",
     "copyright": "Textile ERP © 2026 - All rights reserved"
   },
+  "currency": {
+    "thousandsHint": "Enter price in thousands (example: 20 = 20,000 IQD)."
+  },
   "nav": {
     "dashboard": "Dashboard",
     "itemPricing": "Item Pricing",

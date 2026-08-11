@@ -7,6 +7,7 @@ import {
   type CommissionSettings,
   type ItemMinimumPrice,
 } from './dashboardSettings';
+import { normalizeStoredAmount } from './currency';
 
 type SettingsResponse = {
   rate: CommissionSettings;
@@ -25,7 +26,10 @@ export async function syncCommissionSettingsFromServer() {
     if (prices && typeof prices === 'object') {
       for (const price of Object.values(prices)) {
         if (price?.itemId) {
-          saveItemMinimumPrice(price);
+          saveItemMinimumPrice({
+            ...price,
+            minimumPrice: normalizeStoredAmount(price.minimumPrice),
+          });
         }
       }
     }

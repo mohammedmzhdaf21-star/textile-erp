@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../lib/api';
 import { useTranslation } from 'react-i18next';
-import { formatCurrency } from '../lib/currency';
+import { formatCurrency, parsePriceInput } from '../lib/currency';
 
 type Sale = {
   id: string;
@@ -114,7 +114,7 @@ const OwedMoney: React.FC = () => {
   const [paymentError, setPaymentError] = useState<string | null>(null);
   const navigate = useNavigate();
 
-  const paymentAmountNumber = toMoneyNumber(paymentAmount);
+  const paymentAmountNumber = parsePriceInput(paymentAmount);
   const paymentRemainingAfter =
     paymentSale === null
       ? 0
@@ -202,7 +202,7 @@ const OwedMoney: React.FC = () => {
   const recordPayment = () => {
     if (!selectedBranch || !paymentSale) return;
 
-    const amount = toMoneyNumber(paymentAmount);
+    const amount = parsePriceInput(paymentAmount);
     if (!Number.isFinite(amount) || amount <= 0) {
       setPaymentError(t('owedMoney.enterPaymentAmount'));
       return;
@@ -377,8 +377,9 @@ const OwedMoney: React.FC = () => {
             </div>
 
             <label className="mt-4 block text-sm font-medium text-gray-700">
-              Amount customer is paying now
+              {t('owedMoney.amountPayingNow')}
             </label>
+            <p className="mt-1 text-xs text-magenta-600">{t('currency.thousandsHint')}</p>
             <input
               type="number"
               min="0.01"

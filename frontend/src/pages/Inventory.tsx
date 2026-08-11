@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 import QrScanInput from '../components/QrScanInput';
 import api from '../lib/api';
 import { getCurrentUser } from '../lib/auth';
-import { formatCurrency } from '../lib/currency';
+import { formatCurrency, parsePriceInput, toPriceInput } from '../lib/currency';
 import {
   aggregateDetailedStockBreakdown,
   aggregateFamilyStock,
@@ -138,7 +138,7 @@ const InventoryView: React.FC = () => {
     setEditItem(item);
     setEditForm({
       code: String(item.code),
-      subCode: String(item.subCode ?? item.costPrice ?? 0),
+      subCode: toPriceInput(item.subCode ?? item.costPrice ?? 0),
       colorId: item.colorId,
       meters: String(item.meters ?? 0),
       pieceLength: String(item.pieceLength ?? 0),
@@ -209,15 +209,16 @@ const InventoryView: React.FC = () => {
     if (!editItem || !editForm) return;
 
     const familyCode = Number(editForm.code);
-    const subCode = Number(editForm.subCode);
+    const subCodeInput = Number(editForm.subCode);
     if (!Number.isFinite(familyCode) || familyCode <= 0) {
       setActionError(t('inventory.enterValidFamilyCode'));
       return;
     }
-    if (!Number.isFinite(subCode) || subCode < 0) {
+    if (!Number.isFinite(subCodeInput) || subCodeInput < 0) {
       setActionError(t('inventory.enterValidSubCode'));
       return;
     }
+    const subCode = parsePriceInput(subCodeInput);
     if (!editForm.colorId) {
       setActionError(t('inventory.chooseColor'));
       return;

@@ -7,7 +7,7 @@ import inventoryRoutes from './routes/inventory.routes';
 import salesRoutes from './routes/sales.routes';
 import employeesRoutes from './routes/employees.routes';
 import commissionsRoutes from './routes/commissions.routes';
-import { prisma } from './lib/prisma';
+import { migrateLegacySettingsPrices } from './lib/currency';
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '3000', 10);
@@ -124,7 +124,16 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
 // ============================================================
 // START SERVER
 // ============================================================
-const server = app.listen(PORT, () => {
+const server = app.listen(PORT, async () => {
+  try {
+    const result = await migrateLegacySettingsPrices();
+    if (result.updated > 0) {
+      console.log(`Migrated ${result.updated} legacy minimum price setting(s) to full IQD.`);
+    }
+  } catch (error) {
+    console.warn('Could not migrate legacy price settings:', error);
+  }
+
   console.log('');
   console.log('============================================================');
   console.log('Textile ERP Server');

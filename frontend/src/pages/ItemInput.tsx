@@ -4,7 +4,7 @@ import QRCode from 'qrcode';
 import { Link } from 'react-router-dom';
 import api from '../lib/api';
 import { getCurrentUser } from '../lib/auth';
-import { formatCurrency } from '../lib/currency';
+import { formatCurrency, normalizeStoredAmount, parsePriceInput, toPriceInputNumber } from '../lib/currency';
 import {
   BRANCH_DESTINATIONS,
   BRANCH_CODE_BY_ID,
@@ -181,7 +181,7 @@ const ItemInputPage: React.FC = () => {
   const familySubCodes = useMemo(() => {
     const unique = new Map<string, InventoryItemView>();
     familyItems.forEach((item) => {
-      const price = Number(item.subCode ?? item.costPrice ?? 0);
+      const price = normalizeStoredAmount(Number(item.subCode ?? item.costPrice ?? 0));
       const key = `${item.code}-${price}-${item.colorId}-${item.type}-${item.pieceLength ?? 0}-${item.packageKey ?? ''}`;
       if (!unique.has(key)) unique.set(key, item);
     });
@@ -191,11 +191,11 @@ const ItemInputPage: React.FC = () => {
   }, [familyItems]);
 
   const duplicateExists = familyItems.some((item) => {
-    const itemPrice = Number(item.subCode ?? item.costPrice ?? 0);
+    const itemPrice = normalizeStoredAmount(Number(item.subCode ?? item.costPrice ?? 0));
     const sameBase =
       item.branchId === branchId &&
       item.code === familyCode &&
-      Math.abs(itemPrice - subCode) < 0.001 &&
+      Math.abs(itemPrice - parsePriceInput(subCode)) < 0.001 &&
       item.colorId === colorId &&
       item.type === type;
 
@@ -481,14 +481,15 @@ const ItemInputPage: React.FC = () => {
       return alert(t('itemInput.couldNotBuildId'));
     }
 
+    const storedSubCode = parsePriceInput(subCode);
     const payload: Record<string, unknown> = {
       id,
       branchId,
       code: familyCode,
-      subCode,
+      subCode: storedSubCode,
       colorId,
       type: effectiveType,
-      costPrice: subCode,
+      costPrice: storedSubCode,
       qrCodeValue: id,
       description: description.trim() || undefined,
       pictureName: pictureName || undefined,
@@ -552,7 +553,7 @@ const ItemInputPage: React.FC = () => {
       itemId,
       qrDataUrl: dataUrl,
       familyCode,
-      subCode,
+      subCode: parsePriceInput(subCode),
       type,
       typeLabel: getItemTypeLabel(t, type),
       colorName: selectedColor.name,
@@ -627,7 +628,7 @@ const ItemInputPage: React.FC = () => {
                       key={item.id}
                       type="button"
                       onClick={() => {
-                        setSubCode(Number(item.subCode ?? item.costPrice ?? 0));
+                        setSubCode(toPriceInputNumber(item.subCode ?? item.costPrice ?? 0));
                         setColorId(item.colorId);
                         setType(item.type);
                         setDestination(BRANCH_CODE_BY_ID[item.branchId] ?? 'A');
@@ -676,7 +677,7 @@ const ItemInputPage: React.FC = () => {
                 onChange={(e) => setSubCode(Number(e.target.value))}
                 className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
               />
-              <p className="mt-1 text-xs text-gray-500">{t('itemInput.subCodeHint')}</p>
+              <p className="mt-1 text-xs text-gray-500">{t('itemInput.subCodeHint')} {t('currency.thousandsHint')}</p>
             </div>
 
             <div>
@@ -1015,7 +1016,7 @@ const ItemInputPage: React.FC = () => {
                     </div>
                     <div className="flex justify-between">
                       <span>{t('itemInput.subCodeLabel')}</span>
-                      <strong>{formatCurrency(subCode)}</strong>
+                      <strong>{formatCurrency(parsePriceInput(subCode))}</strong>
                     </div>
                     <div className="flex justify-between">
                       <span>{t('itemInput.type')}</span>

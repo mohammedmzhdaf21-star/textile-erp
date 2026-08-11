@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from './prisma';
+import { normalizeStoredAmount } from './currency';
 
 export const COMMISSION_RATE_KEY = 'commission_rate';
 export const ITEM_MINIMUM_PRICES_KEY = 'item_minimum_prices';
@@ -70,7 +71,7 @@ export async function getItemMinimumPrices(): Promise<Record<string, ItemMinimum
     prices[key] = {
       itemId: String(record.itemId || key),
       unit,
-      minimumPrice,
+      minimumPrice: normalizeStoredAmount(minimumPrice),
       updatedAt: String(record.updatedAt || new Date().toISOString()),
     };
   }

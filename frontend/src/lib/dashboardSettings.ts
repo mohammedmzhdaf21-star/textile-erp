@@ -1,3 +1,5 @@
+import { normalizeStoredAmount } from './currency';
+
 export type DashboardSectionKey =
   | 'dashboard'
   | 'itemPricing'
@@ -76,8 +78,14 @@ const writeJson = <T,>(key: string, value: T) => {
 export const readItemMinimumPrices = () =>
   readJson<Record<string, ItemMinimumPrice>>(ITEM_PRICES_KEY, {});
 
-export const getItemMinimumPrice = (itemId: string) =>
-  readItemMinimumPrices()[itemId.trim()];
+export const getItemMinimumPrice = (itemId: string) => {
+  const entry = readItemMinimumPrices()[itemId.trim()];
+  if (!entry) return undefined;
+  return {
+    ...entry,
+    minimumPrice: normalizeStoredAmount(entry.minimumPrice),
+  };
+};
 
 export const saveItemMinimumPrice = (price: ItemMinimumPrice) => {
   const prices = readItemMinimumPrices();

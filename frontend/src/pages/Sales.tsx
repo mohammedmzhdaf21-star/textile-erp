@@ -4,7 +4,7 @@ import QrScanInput from '../components/QrScanInput';
 import api from '../lib/api';
 import { getCurrentUser } from '../lib/auth';
 import { getItemMinimumPrice } from '../lib/dashboardSettings';
-import { formatCurrency } from '../lib/currency';
+import { formatCurrency, parsePriceInput, toPriceInputNumber } from '../lib/currency';
 import { completeCuttingTasksAfterRollToPiece, maybeCreateCuttingTaskAfterPieceSale } from '../lib/cuttingTasks';
 import { sellCutPiece } from '../lib/cutAndSell';
 import { getColorLabel } from '../lib/colorLabels';
@@ -173,8 +173,8 @@ const SalesView: React.FC = () => {
   ]);
 
   const lineTotal = (line: SaleLine) => {
-    if (line.type === 'inventory') return line.quantity * line.price;
-    return line.meters * line.pricePerMeter;
+    if (line.type === 'inventory') return line.quantity * parsePriceInput(line.price);
+    return line.meters * parsePriceInput(line.pricePerMeter);
   };
 
   const saleTotal = useMemo(
@@ -184,7 +184,7 @@ const SalesView: React.FC = () => {
 
   const dueAmount = useMemo(() => {
     if (paymentStatus === 'FULL') return 0;
-    return Math.max(0, saleTotal - Number(amountPaid || 0));
+    return Math.max(0, saleTotal - parsePriceInput(amountPaid || 0));
   }, [saleTotal, paymentStatus, amountPaid]);
 
   const addPlainClothLine = () => {
@@ -209,7 +209,7 @@ const SalesView: React.FC = () => {
       if (savedPrice) {
         setScanState((current) => ({
           ...current,
-          price: Math.max(current.price, savedPrice.minimumPrice),
+          price: Math.max(current.price, toPriceInputNumber(savedPrice.minimumPrice)),
         }));
         setMinimumPriceMessage(
           t('sales.minimumPriceFor', {
@@ -326,7 +326,7 @@ const SalesView: React.FC = () => {
         return alert(t('sales.enterQuantityOrMeters'));
       }
 
-      if (savedPrice && price < savedPrice.minimumPrice) {
+      if (savedPrice && parsePriceInput(price) < savedPrice.minimumPrice) {
         return alert(t('sales.minimumPriceAlert', { price: formatCurrency(savedPrice.minimumPrice) }));
       }
 
@@ -446,7 +446,7 @@ const SalesView: React.FC = () => {
         employeeId: currentUser.id,
         customerName: customerName.trim(),
         customerPhone: customerPhone.trim(),
-        soldPrice: price,
+        soldPrice: parsePriceInput(price),
         rollSourceId: rollCutSource.id,
         qrCodeValue: result.pieceItemId,
         qrCodeDataUrl: result.qrCodeDataUrl,
@@ -517,7 +517,7 @@ const SalesView: React.FC = () => {
     if (!branch) return alert(t('sales.selectBranch'));
     if (cart.length === 0) return alert(t('sales.addLine'));
     if (!customerName.trim() || !customerPhone.trim()) return alert(t('sales.provideCustomer'));
-    if (paymentStatus === 'PARTIAL' && Number(amountPaid) <= 0) return alert(t('sales.enterPartialPayment'));
+    if (paymentStatus === 'PARTIAL' && parsePriceInput(amountPaid) <= 0) return alert(t('sales.enterPartialPayment'));
 
     setIsSubmitting(true);
     setSuccessMessage(null);
@@ -538,7 +538,7 @@ const SalesView: React.FC = () => {
             colorId: line.colorId,
             soldAsUnit: line.soldAsUnit,
             quantitySold: line.quantity,
-            soldPrice: line.price,
+            soldPrice: parsePriceInput(line.price),
             lineDiscount: 0,
           };
           if (line.isPiecePackage) {
@@ -557,7 +557,7 @@ const SalesView: React.FC = () => {
             colorId: 'PLAIN',
             soldAsUnit: 'METER',
             quantitySold: line.meters,
-            soldPrice: line.pricePerMeter,
+            soldPrice: parsePriceInput(line.pricePerMeter),
             lineDiscount: 0,
             plainClothName: line.clothName,
             isPlainCloth: true,
@@ -573,7 +573,7 @@ const SalesView: React.FC = () => {
         items: resolvedItems,
         discount: 0,
         paymentMethod: paymentStatus === 'FULL' ? 'CASH' : 'CREDIT',
-        notes: `Source branch: ${branch}. ${paymentStatus === 'PARTIAL' ? `Paid ${amountPaid} now, due ${dueAmount}.` : 'Fully paid.'}`,
+        notes: `Source branch: ${branch}. ${paymentStatus === 'PARTIAL' ? `Paid ${formatCurrency(parsePriceInput(amountPaid))} now, due ${formatCurrency(dueAmount)}.` : 'Fully paid.'}`,
       };
 
       console.debug('createSale payload', payload);
@@ -1113,8 +1113,8 @@ const SalesView: React.FC = () => {
                       {line.type === 'inventory'
                         ? line.isPiecePackage
                           ? `${line.description}: ${line.packageSummary ?? 'package sale'} — ${formatCurrency(lineTotal(line))}`
-                          : `${line.description}: ${line.quantity} ${line.soldAsUnit === 'PIECE' ? 'pieces' : 'meters'} @ ${formatCurrency(line.price)}/unit`
-                        : `${line.meters} meters @ ${formatCurrency(line.pricePerMeter)}/m`}
+                          : `${line.description}: ${line.quantity} ${line.soldAsUnit === 'PIECE' ? 'pieces' : 'meters'} @ ${formatCurrency(parsePriceInput(line.price))}/unit`
+                        : `${line.meters} meters @ ${formatCurrency(parsePriceInput(line.pricePerMeter))}/m`}
                     </p>
                   </div>
                   <button
