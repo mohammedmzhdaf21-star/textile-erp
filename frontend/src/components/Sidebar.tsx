@@ -9,6 +9,8 @@ import LanguageSwitcher from './LanguageSwitcher';
 
 const navigation = [
   { to: '/dashboard', labelKey: 'nav.dashboard', end: true },
+  { to: '/item-pricing', labelKey: 'nav.itemPricing', end: true, adminOnly: true },
+  { to: '/sales-commission', labelKey: 'nav.salesCommission', end: true, adminOnly: true },
   { to: '/inventory', labelKey: 'nav.inventory', end: true },
   { to: '/inventory/convert', labelKey: 'nav.itemConversion', end: true },
   { to: '/sales', labelKey: 'nav.sales', end: true },

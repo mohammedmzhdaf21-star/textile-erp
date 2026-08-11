@@ -137,6 +137,8 @@
   },
   "nav": {
     "dashboard": "Dashboard",
+    "itemPricing": "Item Pricing",
+    "salesCommission": "Sales Commission",
     "inventory": "Inventory",
     "itemConversion": "Item Conversion",
     "sales": "Sales",
@@ -203,8 +205,8 @@
   },
   "dashboard": {
     "welcome": "Welcome, {{name}}!",
-    "managementTitle": "Dashboard management",
-    "managementDescription": "Manage minimum item prices, employee work access, and commission calculations.",
+    "overviewTitle": "Your workspace",
+    "overviewDescription": "Use the sidebar to open inventory, sales, pricing, commission, employee accounts, and other sections.",
     "priceTitle": "Price",
     "priceDescription": "Scan or enter an item ID and save the minimum sale price per meter or piece.",
     "qrItemId": "QR / Item ID",
@@ -238,6 +240,8 @@
     "enterValidCommission": "Enter a valid commission percent.",
     "sections": {
       "dashboard": "Dashboard",
+      "itemPricing": "Item Pricing",
+      "salesCommission": "Sales Commission",
       "inventory": "Inventory",
       "itemConversion": "Item Conversion",
       "sales": "Sales",
@@ -249,8 +253,16 @@
       "dataAnalysis": "Data Analysis",
       "trusteeCommission": "Trustee Commission",
       "exchange": "Exchange",
-      "itemInput": "New Item"
+      "itemInput": "New Item",
+      "employeeAccounts": "Employee Accounts"
     }
+  },
+  "itemPricing": {
+    "savedPrices": "Saved minimum prices",
+    "noSavedPrices": "No minimum prices saved yet."
+  },
+  "salesCommission": {
+    "noResults": "Run commission to see results. Save item minimum prices first in Item Pricing."
   },
   "inventory": {
     "title": "Inventory",

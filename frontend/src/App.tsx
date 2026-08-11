@@ -17,6 +17,8 @@ import DataAnalysis from './pages/DataAnalysis';
 import TrusteeCommission from './pages/TrusteeCommission';
 import SaleDetail from './pages/SaleDetail';
 import EmployeeAccounts from './pages/EmployeeAccounts';
+import ItemPricing from './pages/ItemPricing';
+import SalesCommission from './pages/SalesCommission';
 import { getCurrentUser, isAuthenticated } from './lib/auth';
 import { canAccessAdminRoute, canAccessRoute } from './lib/dashboardSettings';
 
@@ -49,6 +51,22 @@ function App() {
           element={
             <ProtectedLayout>
               <Dashboard />
+            </ProtectedLayout>
+          }
+        />
+        <Route
+          path="/item-pricing"
+          element={
+            <ProtectedLayout>
+              <ItemPricing />
+            </ProtectedLayout>
+          }
+        />
+        <Route
+          path="/sales-commission"
+          element={
+            <ProtectedLayout>
+              <SalesCommission />
             </ProtectedLayout>
           }
         />
