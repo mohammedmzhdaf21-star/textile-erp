@@ -56,41 +56,43 @@ app.get('/health', async (_req: Request, res: Response) => {
 });
 
 // ============================================================
-// ROOT
+// ROOT (API info in development only)
 // ============================================================
-app.get('/', (_req: Request, res: Response) => {
-  res.status(200).json({
-    message: 'Textile ERP API is running!',
-    version: '1.0.0',
-    endpoints: {
-      health: 'GET /health',
-      auth: {
-        login: 'POST /api/auth/login',
-        refresh: 'POST /api/auth/refresh',
-        logout: 'POST /api/auth/logout',
-        me: 'GET /api/auth/me',
+if (process.env.NODE_ENV !== 'production') {
+  app.get('/', (_req: Request, res: Response) => {
+    res.status(200).json({
+      message: 'Textile ERP API is running!',
+      version: '1.0.0',
+      endpoints: {
+        health: 'GET /health',
+        auth: {
+          login: 'POST /api/auth/login',
+          refresh: 'POST /api/auth/refresh',
+          logout: 'POST /api/auth/logout',
+          me: 'GET /api/auth/me',
+        },
+        inventory: {
+          list: 'GET /api/inventory',
+          get: 'GET /api/inventory/:id',
+          create: 'POST /api/inventory',
+          update: 'PATCH /api/inventory/:id',
+          archive: 'POST /api/inventory/:id/archive',
+          restore: 'POST /api/inventory/:id/restore',
+          delete: 'DELETE /api/inventory/:id',
+          stats: 'GET /api/inventory/stats/summary',
+        },
+        sales: {
+          create: 'POST /api/sales',
+          list: 'GET /api/sales',
+          get: 'GET /api/sales/:id',
+          void: 'POST /api/sales/:id/void',
+          refund: 'POST /api/sales/:id/refund',
+          stats: 'GET /api/sales/stats/summary',
+        },
       },
-      inventory: {
-        list: 'GET /api/inventory',
-        get: 'GET /api/inventory/:id',
-        create: 'POST /api/inventory',
-        update: 'PATCH /api/inventory/:id',
-        archive: 'POST /api/inventory/:id/archive',
-        restore: 'POST /api/inventory/:id/restore',
-        delete: 'DELETE /api/inventory/:id',
-        stats: 'GET /api/inventory/stats/summary',
-      },
-      sales: {
-        create: 'POST /api/sales',
-        list: 'GET /api/sales',
-        get: 'GET /api/sales/:id',
-        void: 'POST /api/sales/:id/void',
-        refund: 'POST /api/sales/:id/refund',
-        stats: 'GET /api/sales/stats/summary',
-      },
-    },
+    });
   });
-});
+}
 
 // ============================================================
 // API ROUTES
@@ -107,6 +109,9 @@ app.use('/api/commissions', commissionsRoutes);
 if (process.env.NODE_ENV === 'production') {
   const frontendDist = path.resolve(__dirname, '../frontend/dist');
   app.use(express.static(frontendDist, { index: false }));
+  app.get('/', (_req: Request, res: Response) => {
+    res.sendFile(path.join(frontendDist, 'index.html'));
+  });
   app.use((req: Request, res: Response, next: NextFunction) => {
     if (req.method !== 'GET' || req.path.startsWith('/api')) {
       return next();
