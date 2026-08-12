@@ -70,13 +70,10 @@ export default function SalesCommission() {
           const minimumPrice = savedPrice.minimumPrice;
           if (quantity <= 0 || soldPrice < minimumPrice - priceEps) return;
 
-          let commission = 0;
-          if (soldPrice <= minimumPrice + priceEps) {
-            commission = baseAmount * quantity;
-          } else {
-            const margin = soldPrice - minimumPrice;
-            commission = margin * quantity * (rate / 100);
-          }
+          const basePart = baseAmount * quantity;
+          const margin = Math.max(0, soldPrice - minimumPrice);
+          const marginPart = margin * quantity * (rate / 100);
+          const commission = basePart + marginPart;
 
           if (commission > 0) {
             rows.push({

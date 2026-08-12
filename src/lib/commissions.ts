@@ -19,15 +19,10 @@ export function calculateLineCommission(
     return 0;
   }
 
-  // Sold at minimum price → flat amount per unit
-  if (soldPrice <= minimumPrice + PRICE_EPS) {
-    return Number((baseAmountPerUnit * quantitySold).toFixed(2));
-  }
-
-  // Sold above minimum → percentage of the amount above minimum (per unit × qty)
-  const margin = soldPrice - minimumPrice;
-  const commission = margin * quantitySold * (ratePercent / 100);
-  return Number(commission.toFixed(2));
+  const baseCommission = baseAmountPerUnit * quantitySold;
+  const margin = Math.max(0, soldPrice - minimumPrice);
+  const marginCommission = margin * quantitySold * (ratePercent / 100);
+  return Number((baseCommission + marginCommission).toFixed(2));
 }
 
 export async function recordCommissionForSaleItem(
