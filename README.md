@@ -56,3 +56,51 @@ cd frontend && npm run dev
 ```
 
 After any schema change: `npx prisma migrate deploy && npx prisma generate` then restart the backend.
+
+## Run 24/7 (production)
+
+For always-on operation with auto-restart on crash and after reboot:
+
+```bash
+git checkout main
+git pull origin main
+npm run install:24-7
+```
+
+This will:
+
+- Build the frontend and serve it from the backend on port **3000** (single process)
+- Install **PM2** (or systemd when available) so processes restart automatically
+- Start a **Cloudflare tunnel** so the app is reachable from the internet
+
+**Useful commands**
+
+```bash
+npx pm2 status                             # app + tunnel status
+npx pm2 logs textile-erp                   # app logs
+npx pm2 logs textile-tunnel                # tunnel logs
+npx pm2 restart all                          # restart after code updates
+cat deploy/public-url.txt                    # current public URL
+curl http://localhost:3000/health            # local health check
+```
+
+On systems with a user systemd session, the installer uses systemd instead of PM2.
+
+**After pulling new code**
+
+```bash
+git pull origin main
+npm run install:24-7
+```
+
+**Permanent public URL**
+
+The free Cloudflare quick tunnel URL changes when the tunnel restarts. For a fixed domain (e.g. `erp.yourshop.com`), create a [named Cloudflare tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) and replace `textile-tunnel.service` with your tunnel token.
+
+**Stop 24/7 mode**
+
+```bash
+npx pm2 delete all
+# or, if using systemd:
+systemctl --user disable --now textile-erp textile-tunnel
+```

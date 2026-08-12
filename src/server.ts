@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import path from 'path';
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -8,6 +9,7 @@ import salesRoutes from './routes/sales.routes';
 import employeesRoutes from './routes/employees.routes';
 import commissionsRoutes from './routes/commissions.routes';
 import { migrateLegacySettingsPrices } from './lib/currency';
+import prisma from './lib/prisma';
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '3000', 10);
@@ -98,6 +100,22 @@ app.use('/api/inventory', inventoryRoutes);
 app.use('/api/sales', salesRoutes);
 app.use('/api/employees', employeesRoutes);
 app.use('/api/commissions', commissionsRoutes);
+
+// ============================================================
+// PRODUCTION FRONTEND (single-process 24/7 deployment)
+// ============================================================
+if (process.env.NODE_ENV === 'production') {
+  const frontendDist = path.resolve(__dirname, '../frontend/dist');
+  app.use(express.static(frontendDist, { index: false }));
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    if (req.method !== 'GET' || req.path.startsWith('/api')) {
+      return next();
+    }
+    res.sendFile(path.join(frontendDist, 'index.html'), (err) => {
+      if (err) next(err);
+    });
+  });
+}
 
 // ============================================================
 // 404 HANDLER
