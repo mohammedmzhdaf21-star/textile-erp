@@ -24,7 +24,9 @@ type Sale = {
 
 export default function SalesCommission() {
   const { t } = useTranslation();
-  const [commissionRate, setCommissionRate] = useState(String(readCommissionSettings().ratePercent));
+  const initialSettings = readCommissionSettings();
+  const [commissionRate, setCommissionRate] = useState(String(initialSettings.ratePercent));
+  const [baseCommission, setBaseCommission] = useState(String(initialSettings.baseAmountPerUnit));
   const [commissionRows, setCommissionRows] = useState<
     Array<{ employee: string; saleId: string; itemId: string; commission: number }>
   >([]);
@@ -37,10 +39,14 @@ export default function SalesCommission() {
 
   async function calculateCommissions() {
     const rate = Number(commissionRate);
+    const baseAmount = Number(baseCommission);
     if (!Number.isFinite(rate) || rate < 0) return alert(t("dashboard.enterValidCommission"));
-    saveCommissionSettings({ ratePercent: rate });
+    if (!Number.isFinite(baseAmount) || baseAmount < 0) {
+      return alert(t("dashboard.enterValidBaseCommission"));
+    }
+    saveCommissionSettings({ ratePercent: rate, baseAmountPerUnit: baseAmount });
     try {
-      await pushCommissionRateToServer(rate);
+      await pushCommissionRateToServer(rate, baseAmount);
     } catch {
       // Rate saved locally; server sync can retry on next save
     }
@@ -51,6 +57,7 @@ export default function SalesCommission() {
       const sales = (response.data?.sales || response.data?.items || []) as Sale[];
       const prices = readItemMinimumPrices();
       const rows: Array<{ employee: string; saleId: string; itemId: string; commission: number }> = [];
+      const priceEps = 0.001;
 
       sales.forEach((sale) => {
         const employee = sale.employee?.name || sale.employeeName || t("common.unknownEmployee");
@@ -60,8 +67,17 @@ export default function SalesCommission() {
           if (!savedPrice) return;
           const soldPrice = Number(item.soldPrice || 0);
           const quantity = Number(item.quantitySold || 0);
-          const margin = Math.max(0, soldPrice - savedPrice.minimumPrice);
-          const commission = margin * quantity * (rate / 100);
+          const minimumPrice = savedPrice.minimumPrice;
+          if (quantity <= 0 || soldPrice < minimumPrice - priceEps) return;
+
+          let commission = 0;
+          if (soldPrice <= minimumPrice + priceEps) {
+            commission = baseAmount * quantity;
+          } else {
+            const margin = soldPrice - minimumPrice;
+            commission = margin * quantity * (rate / 100);
+          }
+
           if (commission > 0) {
             rows.push({
               employee,
@@ -79,6 +95,7 @@ export default function SalesCommission() {
           count: rows.length,
           plural: rows.length === 1 ? "" : "s",
           rate,
+          base: formatCurrency(baseAmount),
         })
       );
     } catch (error: unknown) {
@@ -103,7 +120,20 @@ export default function SalesCommission() {
       </div>
 
       <section className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
-        <label className="block text-sm font-medium text-gray-700">{t("dashboard.commissionPercent")}</label>
+        <label className="block text-sm font-medium text-gray-700">
+          {t("dashboard.commissionBaseAmount")}
+        </label>
+        <p className="mt-1 text-xs text-gray-500">{t("dashboard.commissionBaseAmountHint")}</p>
+        <input
+          type="number"
+          min="0"
+          step="1"
+          value={baseCommission}
+          onChange={(event) => setBaseCommission(event.target.value)}
+          className="mt-2 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
+        />
+        <label className="mt-4 block text-sm font-medium text-gray-700">{t("dashboard.commissionPercent")}</label>
+        <p className="mt-1 text-xs text-gray-500">{t("dashboard.commissionPercentHint")}</p>
         <input
           type="number"
           min="0"

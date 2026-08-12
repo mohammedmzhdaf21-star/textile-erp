@@ -20,7 +20,12 @@ export async function syncCommissionSettingsFromServer() {
     const { rate, prices } = response.data;
 
     if (rate && Number.isFinite(rate.ratePercent)) {
-      saveCommissionSettings({ ratePercent: rate.ratePercent });
+      saveCommissionSettings({
+        ratePercent: rate.ratePercent,
+        baseAmountPerUnit: Number.isFinite(rate.baseAmountPerUnit)
+          ? rate.baseAmountPerUnit
+          : 0,
+      });
     }
 
     if (prices && typeof prices === 'object') {
@@ -38,8 +43,14 @@ export async function syncCommissionSettingsFromServer() {
   }
 }
 
-export async function pushCommissionRateToServer(ratePercent: number) {
-  await api.put('/commissions/settings/rate', { ratePercent });
+export async function pushCommissionRateToServer(
+  ratePercent: number,
+  baseAmountPerUnit?: number
+) {
+  await api.put('/commissions/settings/rate', {
+    ratePercent,
+    ...(baseAmountPerUnit !== undefined ? { baseAmountPerUnit } : {}),
+  });
 }
 
 export async function pushItemMinimumPriceToServer(price: ItemMinimumPrice) {
@@ -54,7 +65,10 @@ export async function pushLocalPricesToServer() {
 
 export async function pushLocalRateToServer() {
   const rate = readCommissionSettings();
-  await api.put('/commissions/settings/rate', { ratePercent: rate.ratePercent });
+  await api.put('/commissions/settings/rate', {
+    ratePercent: rate.ratePercent,
+    baseAmountPerUnit: rate.baseAmountPerUnit,
+  });
 }
 
 export async function ensureCommissionSettingsSynced() {

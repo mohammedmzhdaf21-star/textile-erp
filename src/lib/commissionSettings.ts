@@ -14,34 +14,51 @@ export type ItemMinimumPriceRecord = {
 
 export type CommissionRateRecord = {
   ratePercent: number;
+  /** Flat IQD paid per unit when sold at the item minimum price */
+  baseAmountPerUnit: number;
 };
 
-const defaultRate = (): CommissionRateRecord => ({ ratePercent: 5 });
+const defaultRate = (): CommissionRateRecord => ({ ratePercent: 5, baseAmountPerUnit: 0 });
 
 export async function getCommissionRate(): Promise<CommissionRateRecord> {
   const setting = await prisma.setting.findUnique({ where: { key: COMMISSION_RATE_KEY } });
   if (!setting?.value || typeof setting.value !== 'object') return defaultRate();
   const value = setting.value as Record<string, unknown>;
   const ratePercent = Number(value.ratePercent);
+  const baseAmountPerUnit = Number(value.baseAmountPerUnit ?? 0);
   if (!Number.isFinite(ratePercent) || ratePercent < 0) return defaultRate();
-  return { ratePercent };
+  return {
+    ratePercent,
+    baseAmountPerUnit:
+      Number.isFinite(baseAmountPerUnit) && baseAmountPerUnit >= 0 ? baseAmountPerUnit : 0,
+  };
 }
 
 export async function saveCommissionRate(
   ratePercent: number,
-  updatedById?: string
+  updatedById?: string,
+  baseAmountPerUnit?: number
 ): Promise<CommissionRateRecord> {
   if (!Number.isFinite(ratePercent) || ratePercent < 0) {
     throw new Error('Commission rate must be a non-negative number');
   }
 
-  const value: CommissionRateRecord = { ratePercent };
+  const existing = await getCommissionRate();
+  const resolvedBase =
+    baseAmountPerUnit !== undefined ? baseAmountPerUnit : existing.baseAmountPerUnit;
+
+  if (!Number.isFinite(resolvedBase) || resolvedBase < 0) {
+    throw new Error('Base commission amount must be a non-negative number');
+  }
+
+  const value: CommissionRateRecord = { ratePercent, baseAmountPerUnit: resolvedBase };
   await prisma.setting.upsert({
     where: { key: COMMISSION_RATE_KEY },
     create: {
       key: COMMISSION_RATE_KEY,
       value: value as unknown as Prisma.InputJsonValue,
-      description: 'Employee sales commission rate (percent of margin above minimum price)',
+      description:
+        'Employee commission: base amount at minimum price; percent of margin above minimum',
       updatedById: updatedById || null,
     },
     update: {

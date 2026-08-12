@@ -6,13 +6,26 @@ import {
   getItemMinimumPrices,
 } from './commissionSettings';
 
+const PRICE_EPS = 0.001;
+
 export function calculateLineCommission(
   soldPrice: number,
   minimumPrice: number,
   quantitySold: number,
-  ratePercent: number
+  ratePercent: number,
+  baseAmountPerUnit = 0
 ): number {
-  const margin = Math.max(0, soldPrice - minimumPrice);
+  if (quantitySold <= 0 || soldPrice < minimumPrice - PRICE_EPS) {
+    return 0;
+  }
+
+  // Sold at minimum price → flat amount per unit
+  if (soldPrice <= minimumPrice + PRICE_EPS) {
+    return Number((baseAmountPerUnit * quantitySold).toFixed(2));
+  }
+
+  // Sold above minimum → percentage of the amount above minimum (per unit × qty)
+  const margin = soldPrice - minimumPrice;
   const commission = margin * quantitySold * (ratePercent / 100);
   return Number(commission.toFixed(2));
 }
@@ -38,7 +51,8 @@ export async function recordCommissionForSaleItem(
     params.soldPrice,
     minimum.minimumPrice,
     params.quantitySold,
-    rate.ratePercent
+    rate.ratePercent,
+    rate.baseAmountPerUnit
   );
 
   if (commissionAmount <= 0) return null;
@@ -242,7 +256,8 @@ export async function backfillCommissionEntries() {
         soldPrice,
         minimum.minimumPrice,
         quantitySold,
-        rate.ratePercent
+        rate.ratePercent,
+        rate.baseAmountPerUnit
       );
 
       if (commissionAmount <= 0) continue;

@@ -31,7 +31,15 @@ router.get('/settings', async (_req: Request, res: Response) => {
 router.put('/settings/rate', requireRole('ADMIN', 'MANAGER'), async (req: Request, res: Response) => {
   try {
     const ratePercent = Number(req.body?.ratePercent);
-    const rate = await saveCommissionRate(ratePercent, req.user!.userId);
+    const baseAmountPerUnit =
+      req.body?.baseAmountPerUnit !== undefined
+        ? Number(req.body.baseAmountPerUnit)
+        : undefined;
+    const rate = await saveCommissionRate(
+      ratePercent,
+      req.user!.userId,
+      baseAmountPerUnit
+    );
     return res.status(200).json({ rate });
   } catch (error: any) {
     return res.status(400).json({ error: error.message || 'Failed to save commission rate' });

@@ -35,6 +35,7 @@ export type EmployeeAccessRule = {
 
 export type CommissionSettings = {
   ratePercent: number;
+  baseAmountPerUnit: number;
 };
 
 const ITEM_PRICES_KEY = 'textile-erp-item-minimum-prices';
@@ -146,7 +147,10 @@ export const canAccessAdminRoute = (user: { role?: string } | null | undefined, 
 };
 
 export const readCommissionSettings = () =>
-  readJson<CommissionSettings>(COMMISSION_SETTINGS_KEY, { ratePercent: 5 });
+  readJson<CommissionSettings>(COMMISSION_SETTINGS_KEY, {
+    ratePercent: 5,
+    baseAmountPerUnit: 0,
+  });
 
 export const saveCommissionSettings = (settings: CommissionSettings) => {
   writeJson(COMMISSION_SETTINGS_KEY, settings);
