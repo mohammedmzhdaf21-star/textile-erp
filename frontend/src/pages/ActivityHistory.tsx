@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { getCurrentUser } from '../lib/auth';
 import { fetchAuditEntityTypes, fetchAuditLogs, type AuditLogEntry } from '../lib/auditLogApi';
@@ -27,6 +28,7 @@ const formatDayLabel = (key: string, locale: string) => {
 
 const ActivityHistory: React.FC = () => {
   const { t, i18n } = useTranslation();
+  const navigate = useNavigate();
   const user = getCurrentUser();
   const isAdmin = user?.role === 'ADMIN' || user?.role === 'MANAGER';
   const locale = i18n.language === 'ckb' ? 'ckb-IQ' : 'en-US';
@@ -132,7 +134,11 @@ const ActivityHistory: React.FC = () => {
         typeof value === 'object' ? JSON.stringify(value) : String(value);
       lines.push(`${key}: ${rendered}`);
     }
-    return lines.slice(0, 6);
+    return lines.slice(0, 3);
+  };
+
+  const openDetail = (entryId: string) => {
+    navigate(`/activity-history/${entryId}`);
   };
 
   return (
@@ -242,35 +248,41 @@ const ActivityHistory: React.FC = () => {
                 {bucket.entries.map((entry) => {
                   const details = detailLines(entry);
                   return (
-                    <li
-                      key={entry.id}
-                      className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm"
-                    >
-                      <div className="flex flex-wrap items-start justify-between gap-2">
-                        <p className="font-medium text-gray-900">{describeEntry(entry)}</p>
-                        <time className="shrink-0 text-sm tabular-nums text-gray-500">
-                          {formatTime(entry.createdAt, locale)}
-                        </time>
-                      </div>
-                      <div className="mt-2 flex flex-wrap gap-2 text-xs">
-                        <span className="rounded-full bg-gray-100 px-2 py-1 text-gray-700">
-                          {entry.performedBy?.role ?? '—'}
-                        </span>
-                        {entry.branch?.name && (
-                          <span className="rounded-full bg-blue-50 px-2 py-1 text-blue-800">
-                            {entry.branch.name}
+                    <li key={entry.id}>
+                      <button
+                        type="button"
+                        onClick={() => openDetail(entry.id)}
+                        className="w-full rounded-2xl border border-gray-200 bg-white p-4 text-left shadow-sm transition hover:border-gray-400 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-black/20"
+                      >
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <p className="font-medium text-gray-900">{describeEntry(entry)}</p>
+                          <time className="shrink-0 text-sm tabular-nums text-gray-500">
+                            {formatTime(entry.createdAt, locale)}
+                          </time>
+                        </div>
+                        <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                          <span className="rounded-full bg-gray-100 px-2 py-1 text-gray-700">
+                            {entry.performedBy?.role ?? '—'}
                           </span>
+                          {entry.branch?.name && (
+                            <span className="rounded-full bg-blue-50 px-2 py-1 text-blue-800">
+                              {entry.branch.name}
+                            </span>
+                          )}
+                          <span className="rounded-full bg-amber-50 px-2 py-1 text-amber-900">
+                            {t('activityHistory.tapForDetail')}
+                          </span>
+                        </div>
+                        {details.length > 0 && (
+                          <ul className="mt-2 space-y-1 text-sm text-gray-600">
+                            {details.map((line) => (
+                              <li key={line} className="break-all">
+                                {line}
+                              </li>
+                            ))}
+                          </ul>
                         )}
-                      </div>
-                      {details.length > 0 && (
-                        <ul className="mt-2 space-y-1 text-sm text-gray-600">
-                          {details.map((line) => (
-                            <li key={line} className="break-all">
-                              {line}
-                            </li>
-                          ))}
-                        </ul>
-                      )}
+                      </button>
                     </li>
                   );
                 })}

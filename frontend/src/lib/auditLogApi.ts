@@ -21,6 +21,15 @@ export type AuditLogEntry = {
   createdAt: string;
 };
 
+export type AuditLogDetail = AuditLogEntry & {
+  userAgent: string | null;
+  relatedEntity: {
+    linkPath: string;
+    label: string;
+    snapshot: Record<string, unknown>;
+  } | null;
+};
+
 export type ListAuditLogsResponse = {
   items: AuditLogEntry[];
   pagination: {
@@ -49,4 +58,9 @@ export async function fetchAuditLogs(params: ListAuditLogsParams = {}) {
 export async function fetchAuditEntityTypes() {
   const { data } = await api.get<{ entityTypes: string[] }>('/audit-logs/entity-types');
   return data.entityTypes;
+}
+
+export async function fetchAuditLogById(id: string) {
+  const { data } = await api.get<{ entry: AuditLogDetail }>(`/audit-logs/${encodeURIComponent(id)}`);
+  return data.entry;
 }

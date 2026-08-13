@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { AuditAction } from '@prisma/client';
 import { authenticate } from '../middleware/authenticate';
-import { listAuditLogEntityTypes, listAuditLogs } from '../lib/auditLog';
+import { listAuditLogEntityTypes, listAuditLogs, getAuditLogById } from '../lib/auditLog';
 
 const router = Router();
 
@@ -41,6 +41,18 @@ router.get('/entity-types', async (req: Request, res: Response) => {
     return res.status(200).json({ entityTypes: types });
   } catch (error: any) {
     return res.status(500).json({ error: error.message || 'Failed to list entity types' });
+  }
+});
+
+router.get('/:id', async (req: Request, res: Response) => {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const entry = await getAuditLogById(id, req.user!.userId, req.user!.role);
+    return res.status(200).json({ entry });
+  } catch (error: any) {
+    const msg = error.message || 'Failed to load activity detail';
+    const status = msg.includes('not found') ? 404 : msg.includes('access') ? 403 : 500;
+    return res.status(status).json({ error: msg });
   }
 });
 

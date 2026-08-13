@@ -145,3 +145,148 @@ export async function listAuditLogEntityTypes(viewerId: string, viewerRole: stri
   });
   return rows.map((r) => r.entityType);
 }
+
+function canViewAuditLog(
+  row: { performedById: string | null },
+  viewerId: string,
+  viewerRole: string
+) {
+  const isAdmin = viewerRole === 'ADMIN' || viewerRole === 'MANAGER';
+  return isAdmin || row.performedById === viewerId;
+}
+
+async function enrichAuditEntity(entityType: string, entityId: string) {
+  switch (entityType) {
+    case 'Sale': {
+      const sale = await prisma.sale.findUnique({
+        where: { id: entityId },
+        include: {
+          branch: { select: { id: true, name: true } },
+          employee: { select: { id: true, name: true, email: true } },
+          items: {
+            take: 20,
+            include: { color: { select: { name: true } } },
+          },
+        },
+      });
+      if (!sale) return null;
+      return {
+        linkPath: `/sales/${sale.id}`,
+        label: sale.customerName,
+        snapshot: {
+          customerName: sale.customerName,
+          customerPhone: sale.customerPhone,
+          totalPrice: sale.totalPrice.toString(),
+          paymentMethod: sale.paymentMethod,
+          isVoided: sale.isVoided,
+          itemCount: sale.items.length,
+          employeeName: sale.employee.name,
+          branchName: sale.branch.name,
+          createdAt: sale.createdAt.toISOString(),
+        },
+      };
+    }
+    case 'InventoryItem': {
+      const item = await prisma.inventoryItem.findFirst({
+        where: {
+          OR: [{ id: entityId }, { qrCodeValue: entityId }],
+        },
+        include: {
+          branch: { select: { id: true, name: true } },
+          color: { select: { name: true } },
+        },
+      });
+      if (!item) return null;
+      return {
+        linkPath: '/inventory',
+        label: item.id,
+        snapshot: {
+          id: item.id,
+          code: item.code,
+          subCode: item.subCode.toString(),
+          type: item.type,
+          colorName: item.color.name,
+          branchName: item.branch.name,
+          meters: item.meters?.toString() ?? null,
+          pieceLength: item.pieceLength.toString(),
+          isArchived: item.isArchived,
+        },
+      };
+    }
+    case 'Employee': {
+      const employee = await prisma.employee.findUnique({
+        where: { id: entityId },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true,
+          isActive: true,
+          approvalStatus: true,
+        },
+      });
+      if (!employee) return null;
+      return {
+        linkPath: '/employee-accounts',
+        label: employee.name,
+        snapshot: employee,
+      };
+    }
+    case 'PlainClothPricing': {
+      const row = await prisma.plainClothPricing.findUnique({ where: { id: entityId } });
+      if (!row) return null;
+      return {
+        linkPath: '/plain-cloth',
+        label: row.name,
+        snapshot: {
+          name: row.name,
+          pricePerM: row.pricePerM.toString(),
+          isActive: row.isActive,
+        },
+      };
+    }
+    default:
+      return null;
+  }
+}
+
+export async function getAuditLogById(id: string, viewerId: string, viewerRole: string) {
+  const row = await prisma.auditLog.findUnique({
+    where: { id },
+    include: {
+      performedBy: {
+        select: { id: true, name: true, email: true, role: true },
+      },
+      branch: {
+        select: { id: true, name: true },
+      },
+    },
+  });
+
+  if (!row) {
+    throw new Error('Activity record not found');
+  }
+
+  if (!canViewAuditLog(row, viewerId, viewerRole)) {
+    throw new Error('You do not have access to this activity record');
+  }
+
+  const relatedEntity = await enrichAuditEntity(row.entityType, row.entityId);
+
+  return {
+    id: row.id,
+    entityType: row.entityType,
+    entityId: row.entityId,
+    action: row.action,
+    performedById: row.performedById,
+    performedByEmail: row.performedByEmail,
+    performedBy: row.performedBy,
+    branchId: row.branchId,
+    branch: row.branch,
+    changes: row.changes,
+    ipAddress: row.ipAddress,
+    userAgent: row.userAgent,
+    createdAt: row.createdAt.toISOString(),
+    relatedEntity,
+  };
+}
