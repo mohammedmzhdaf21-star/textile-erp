@@ -12,6 +12,7 @@
     "start:prod": "bash scripts/start-production.sh",
     "deploy": "bash scripts/deploy-update.sh",
     "install:24-7": "bash scripts/install-24-7.sh",
+    "install:tunnel": "bash scripts/install-cloudflared-service.sh",
     "ensure:24-7": "bash scripts/ensure-24-7.sh",
     "setup:boot-persistence": "bash scripts/setup-boot-persistence.sh",
     "build": "tsc",

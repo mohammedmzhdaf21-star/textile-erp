@@ -62,8 +62,10 @@ echo "==> Creating CNAME $HOST -> $TARGET"
 cf_mut POST "/zones/$ZONE/dns_records" \
   "{\"type\":\"CNAME\",\"name\":\"$NAME\",\"content\":\"$TARGET\",\"proxied\":true}" >/dev/null
 
-echo "==> Restarting named tunnel"
-npx pm2 restart textile-tunnel 2>/dev/null || true
+echo "==> Restarting Cloudflare tunnel service"
+bash "$ROOT/scripts/restart-cloudflared-service.sh" 2>/dev/null \
+  || npx pm2 restart textile-tunnel 2>/dev/null \
+  || true
 
 echo ""
 echo "Done. Open in 2-5 min: https://$HOST"

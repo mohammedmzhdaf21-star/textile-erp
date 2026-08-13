@@ -34,7 +34,11 @@ if tunnel_check_public_strict "$PUBLIC_HEALTH"; then
 fi
 
 log "GUARD: public URL failed while app is healthy — restarting tunnel"
-tunnel_pm2_restart textile-tunnel "$LOG_FILE"
+if bash "$ROOT/scripts/restart-cloudflared-service.sh" >>"$LOG_FILE" 2>&1; then
+  :
+elif tunnel_pm2_cmd describe textile-tunnel >/dev/null 2>&1; then
+  tunnel_pm2_restart textile-tunnel "$LOG_FILE"
+fi
 sleep 12
 
 if tunnel_check_public_strict "$PUBLIC_HEALTH"; then
@@ -46,7 +50,8 @@ if [[ -x "$ROOT/scripts/setup-custom-domain.sh" ]] \
   && [[ -n "${CLOUDFLARE_API_TOKEN:-}" && -n "${CLOUDFLARE_ZONE_ID:-}" ]]; then
   log "GUARD: still failing — refreshing DNS + tunnel"
   bash "$ROOT/scripts/setup-custom-domain.sh" >>"$LOG_FILE" 2>&1 || true
-  tunnel_pm2_restart textile-tunnel "$LOG_FILE"
+  bash "$ROOT/scripts/restart-cloudflared-service.sh" >>"$LOG_FILE" 2>&1 \
+    || tunnel_pm2_restart textile-tunnel "$LOG_FILE" 2>/dev/null || true
   sleep 15
 fi
 

@@ -1,9 +1,5 @@
 #!/usr/bin/env bash
-# Start production app + Cloudflare named tunnel. Run after deploy or server reboot.
-#
-# Usage:
-#   ensure-24-7.sh              Ensure both processes are running
-#   ensure-24-7.sh --reload-app Restart app after a code deploy
+# Start production app + verify Cloudflare tunnel service.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -13,11 +9,9 @@ cd "$ROOT"
 source "$ROOT/scripts/lib/tunnel-health.sh"
 
 tunnel_health_load_env "$ROOT"
-tunnel_apply_quic_sysctl
 
 PUBLIC_HEALTH="${ERP_PUBLIC_URL:-https://erp.kutalimzhda.com}/health"
 LOG_FILE="$ROOT/deploy/ensure-24-7.log"
-REQUIRED_APPS=(textile-erp textile-tunnel textile-tunnel-guard)
 
 RELOAD_APP=false
 for arg in "$@"; do
@@ -31,62 +25,42 @@ log() {
 }
 
 pm2_cmd() {
-  if command -v pm2 >/dev/null 2>&1; then
-    pm2 "$@"
-  else
-    npx pm2 "$@"
-  fi
+  command -v pm2 >/dev/null 2>&1 && pm2 "$@" || npx pm2 "$@"
 }
 
-pm2_app_status() {
-  local app="$1"
-  pm2_cmd jlist 2>/dev/null | node -e "
-    const apps=JSON.parse(require('fs').readFileSync(0,'utf8')||'[]');
-    const a=apps.find(x=>x.name===process.argv[1]);
-    process.stdout.write(a?.pm2_env?.status||'');
-  " "$app" 2>/dev/null || echo ""
-}
-
-log "ensure-24-7: starting production stack (app + named tunnel)"
+log "ensure-24-7: checking production stack"
 
 if [[ "$RELOAD_APP" == "true" ]]; then
-  if ! bash "$ROOT/scripts/verify-server-boot.sh"; then
-    log "ensure-24-7: ERROR server boot verification failed"
-    exit 1
-  fi
+  bash "$ROOT/scripts/verify-server-boot.sh" || exit 1
   log "ensure-24-7: deploy — restarting textile-erp"
   tunnel_pm2_restart textile-erp "$LOG_FILE"
 else
-  missing=false
-  for app in "${REQUIRED_APPS[@]}"; do
-    status="$(pm2_app_status "$app")"
-    if [[ "$status" != "online" && "$status" != "launching" ]]; then
-      missing=true
-      break
-    fi
-  done
-  if [[ "$missing" == "true" ]]; then
-    if ! bash "$ROOT/scripts/verify-server-boot.sh"; then
-      log "ensure-24-7: ERROR server boot verification failed"
-      exit 1
-    fi
-    pm2_cmd start "$ROOT/ecosystem.config.cjs" --update-env >>"$LOG_FILE" 2>&1 \
-      || pm2_cmd restart textile-erp textile-tunnel --update-env >>"$LOG_FILE" 2>&1 \
-      || true
+  if ! pm2_cmd describe textile-erp >/dev/null 2>&1; then
+    bash "$ROOT/scripts/verify-server-boot.sh" || exit 1
+    pm2_cmd start "$ROOT/ecosystem.config.cjs" --update-env >>"$LOG_FILE" 2>&1 || true
   fi
 fi
 
-# Remove legacy watchdog processes if they were started by an older install.
-for legacy in textile-tunnel-keepalive textile-tunnel-recovery textile-watchdog; do
+# Remove old PM2 tunnel apps if present (conflicts with system service).
+for legacy in textile-tunnel textile-tunnel-guard textile-tunnel-keepalive textile-tunnel-recovery textile-watchdog; do
   if pm2_cmd describe "$legacy" >/dev/null 2>&1; then
-    log "ensure-24-7: removing legacy monitor $legacy"
+    log "ensure-24-7: removing legacy $legacy (use install-cloudflared-service.sh)"
     pm2_cmd delete "$legacy" >>"$LOG_FILE" 2>&1 || true
   fi
 done
 
 pm2_cmd save >>"$LOG_FILE" 2>&1 || true
 
-log "ensure-24-7: waiting for local app"
+# Ensure official cloudflared service is running.
+if [[ -x /etc/init.d/cloudflared ]]; then
+  if ! pgrep -f "/usr/bin/cloudflared.*tunnel run" >/dev/null 2>&1; then
+    log "ensure-24-7: starting cloudflared system service"
+    sudo /etc/init.d/cloudflared start >>"$LOG_FILE" 2>&1 || true
+  fi
+elif command -v systemctl >/dev/null 2>&1; then
+  sudo systemctl start cloudflared >>"$LOG_FILE" 2>&1 || true
+fi
+
 for _ in $(seq 1 30); do
   tunnel_check_local && break
   sleep 2
@@ -94,25 +68,23 @@ done
 
 if ! tunnel_check_local; then
   log "ensure-24-7: ERROR local app not healthy"
-  pm2_cmd logs textile-erp --lines 20 --nostream >>"$LOG_FILE" 2>&1 || true
   exit 1
 fi
 
 if tunnel_check_public_strict "$PUBLIC_HEALTH"; then
-  log "ensure-24-7: OK local + public ($PUBLIC_HEALTH)"
+  log "ensure-24-7: OK local + public"
   exit 0
 fi
 
-log "ensure-24-7: public URL not ready — restarting tunnel"
-tunnel_pm2_restart textile-tunnel "$LOG_FILE"
+log "ensure-24-7: public failed — restarting cloudflared service"
+bash "$ROOT/scripts/restart-cloudflared-service.sh" >>"$LOG_FILE" 2>&1 || true
 bash "$ROOT/scripts/ensure-tunnel-up.sh" >>"$LOG_FILE" 2>&1 || true
-sleep 10
+sleep 12
 
 if tunnel_check_public_strict "$PUBLIC_HEALTH"; then
-  log "ensure-24-7: OK public=$PUBLIC_HEALTH"
-  exit 0
+  log "ensure-24-7: OK after cloudflared restart"
+else
+  log "ensure-24-7: WARN public still failing — check Zero Trust dashboard"
 fi
 
-log "ensure-24-7: WARN public URL not reachable yet (DNS/tunnel may need a minute)"
-log "ensure-24-7: local app is healthy; named tunnel connector is running"
 exit 0
