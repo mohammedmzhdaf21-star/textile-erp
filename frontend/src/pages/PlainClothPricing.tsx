@@ -6,6 +6,7 @@ import {
   deletePlainClothType,
   fetchPlainClothTypes,
   isPlainClothOfflineMode,
+  reconnectPlainClothApi,
   updatePlainClothType,
   type PlainClothType,
 } from '../lib/plainClothApi';
@@ -40,6 +41,7 @@ export default function PlainClothPricing() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [offline, setOffline] = useState(false);
+  const [reconnecting, setReconnecting] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const loadItems = useCallback(async () => {
@@ -77,6 +79,35 @@ export default function PlainClothPricing() {
     setPricePerMeter(toPriceInput(item.pricePerM));
     setMessage(null);
     setError(null);
+  };
+
+  const handleReconnect = async () => {
+    setReconnecting(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const result = await reconnectPlainClothApi();
+      if (result.online) {
+        setOffline(false);
+        await loadItems();
+        setMessage(
+          result.synced > 0
+            ? t('plainClothPricing.reconnectedSynced', { count: result.synced })
+            : t('plainClothPricing.reconnected')
+        );
+      } else {
+        setOffline(true);
+        setError(t('plainClothPricing.apiUnavailable'));
+      }
+    } catch (reconnectError: unknown) {
+      setError(
+        reconnectError instanceof Error
+          ? reconnectError.message
+          : t('plainClothPricing.loadFailed')
+      );
+    } finally {
+      setReconnecting(false);
+    }
   };
 
   const saveItem = async () => {
@@ -152,9 +183,17 @@ export default function PlainClothPricing() {
           {t('plainClothPricing.backToSales')}
         </Link>
         {offline && (
-          <p className="mt-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-            {t('plainClothPricing.offlineMode')}
-          </p>
+          <div className="mt-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            <p>{t('plainClothPricing.offlineMode')}</p>
+            <button
+              type="button"
+              className="btn-secondary mt-3"
+              disabled={reconnecting}
+              onClick={() => void handleReconnect()}
+            >
+              {reconnecting ? t('common.loading') : t('plainClothPricing.reconnectServer')}
+            </button>
+          </div>
         )}
       </div>
 

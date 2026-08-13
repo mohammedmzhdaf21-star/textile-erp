@@ -41,5 +41,5 @@ fi
 echo ""
 echo "Deploy complete."
 echo "  Local health:  curl -s http://localhost:${PORT:-3000}/health"
-echo "  Plain cloth:   curl -s -o /dev/null -w '%{http_code}' http://localhost:${PORT:-3000}/api/plain-cloth"
-echo "                  (401 = route exists, 404 = server still old — restart again)"
+echo "  Plain cloth:   curl -s -o /dev/null -w '%{http_code}' http://localhost:${PORT:-3000}/api/commissions/plain-cloth"
+echo "                  (401 = route exists, 404 = run npm run deploy again)"

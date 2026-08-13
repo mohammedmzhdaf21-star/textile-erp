@@ -808,7 +808,10 @@
     "confirmDelete": "Delete plain cloth type {{name}}?",
     "loadFailed": "Failed to load plain cloth types.",
     "apiUnavailable": "Plain cloth API is not available on the server (404). Run on the server: npm run deploy — or use this browser until deploy completes (saved locally only).",
-    "offlineMode": "Server API not updated yet. Names you add here are saved in this browser only. On the server run: npm run deploy",
+    "offlineMode": "Server API not updated yet. Names you add here are saved in this browser only. After running npm run deploy on the server, click Reconnect below.",
+    "reconnectServer": "Reconnect to server",
+    "reconnected": "Connected to server. Plain cloth types are now saved in the database.",
+    "reconnectedSynced": "Connected to server and uploaded {{count}} name(s) from this browser.",
     "saveFailed": "Failed to save plain cloth type.",
     "deleteFailed": "Failed to delete plain cloth type.",
     "backToSales": "Back to Sales"

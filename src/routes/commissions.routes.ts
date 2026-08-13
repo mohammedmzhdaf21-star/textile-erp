@@ -15,6 +15,7 @@ import {
   recalculatePendingCommissionEntries,
 } from '../lib/commissions';
 import { roleHasFullAccess } from '../lib/employeeSections';
+import plainClothRoutes from './plainCloth.routes';
 
 const router = Router();
 
@@ -125,5 +126,8 @@ router.post('/backfill', requireRole('ADMIN'), async (_req: Request, res: Respon
     return res.status(500).json({ error: error.message || 'Failed to backfill commissions' });
   }
 });
+
+// Plain cloth pricing (alias — works even if /api/plain-cloth mount is missing)
+router.use('/plain-cloth', plainClothRoutes);
 
 export default router;
