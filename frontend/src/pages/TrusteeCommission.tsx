@@ -5,13 +5,27 @@ import { formatCurrency } from '../lib/currency';
 
 type BranchCode = 'A' | 'B' | 'C' | 'E' | 'F';
 
+type SaleItem = {
+  inventoryItemId?: string | null;
+  plainClothName?: string | null;
+  isPlainCloth?: boolean;
+  color?: { name: string };
+  soldAsUnit?: string;
+  quantitySold?: string | number;
+  soldPrice?: string | number;
+};
+
 type Sale = {
   id: string;
   total?: number | string;
-  totalPrice?: number | string;
+  totalPrice?: string;
   createdAt: string;
   paymentMethod?: string;
   notes?: string;
+  customerName?: string;
+  employee?: { name: string };
+  employeeName?: string;
+  items?: SaleItem[];
 };
 
 type TrusteeRule = {
@@ -46,6 +60,7 @@ type DailyBreakdown = {
   hadSale: boolean;
   salesCount: number;
   revenue: number;
+  sales: Sale[];
 };
 
 const branches: BranchCode[] = ['A', 'B', 'C', 'E', 'F'];
@@ -69,6 +84,21 @@ const formatDate = (date: Date) => {
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const day = String(date.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
+};
+
+const formatTime = (dateString: string) =>
+  new Date(dateString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+const saleItemLabel = (item: SaleItem) => {
+  if (item.isPlainCloth && item.plainClothName) return item.plainClothName;
+  if (item.inventoryItemId) return item.inventoryItemId;
+  return '';
+};
+
+const saleItemLineTotal = (item: SaleItem) => {
+  const qty = Number(item.quantitySold ?? 0);
+  const price = Number(item.soldPrice ?? 0);
+  return qty * price;
 };
 
 const saleCashAmount = (sale: Sale) => {
@@ -140,6 +170,7 @@ const dailyBreakdownForBranch = (
       hadSale: daySales.length > 0,
       salesCount: daySales.length,
       revenue,
+      sales: daySales,
     });
 
     cursor.setDate(cursor.getDate() + 1);
@@ -149,6 +180,9 @@ const dailyBreakdownForBranch = (
 };
 
 const branchExpansionKey = (resultId: string, branch: BranchCode) => `${resultId}:${branch}`;
+
+const dayExpansionKey = (resultId: string, branch: BranchCode, date: string) =>
+  `${resultId}:${branch}:${date}`;
 
 const isBranchCode = (value: unknown): value is BranchCode =>
   typeof value === 'string' && branches.includes(value as BranchCode);
@@ -223,6 +257,7 @@ const TrusteeCommission: React.FC = () => {
   const [message, setMessage] = useState<string | null>(null);
   const [expandedResultId, setExpandedResultId] = useState<string | null>(null);
   const [expandedBranchKey, setExpandedBranchKey] = useState<string | null>(null);
+  const [expandedDayKey, setExpandedDayKey] = useState<string | null>(null);
 
   const activeRules = rules.filter((rule) => rule.isActive);
 
@@ -339,6 +374,7 @@ const TrusteeCommission: React.FC = () => {
     setMessage(null);
     setExpandedResultId(null);
     setExpandedBranchKey(null);
+    setExpandedDayKey(null);
 
     try {
       const start = new Date(fromDate);
@@ -586,6 +622,7 @@ const TrusteeCommission: React.FC = () => {
                               current === result.id ? null : result.id
                             );
                             setExpandedBranchKey(null);
+                            setExpandedDayKey(null);
                           }}
                           aria-expanded={isExpanded}
                           className="w-full rounded-2xl p-4 text-left transition-colors hover:bg-magenta-100/60"
@@ -660,11 +697,12 @@ const TrusteeCommission: React.FC = () => {
                                   <div key={entry.branch} className="overflow-hidden rounded-xl bg-white">
                                     <button
                                       type="button"
-                                      onClick={() =>
+                                      onClick={() => {
                                         setExpandedBranchKey((current) =>
                                           current === branchKey ? null : branchKey
-                                        )
-                                      }
+                                        );
+                                        setExpandedDayKey(null);
+                                      }}
                                       aria-expanded={isBranchExpanded}
                                       className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm hover:bg-gray-50"
                                     >
@@ -698,46 +736,176 @@ const TrusteeCommission: React.FC = () => {
                                         <div className="mb-2 text-xs font-medium text-gray-600">
                                           {t('trusteeCommission.dailyBreakdownTitle')}
                                         </div>
+                                        <p className="mb-2 text-xs text-gray-500">
+                                          {t('trusteeCommission.tapDayForSales')}
+                                        </p>
                                         <div className="max-h-64 space-y-1 overflow-y-auto">
-                                          {dailyBreakdown.map((day) => (
-                                            <div
-                                              key={day.date}
-                                              className={`flex items-center justify-between gap-3 rounded-lg px-2 py-1.5 text-xs ${
-                                                day.hadSale ? 'bg-green-50' : 'bg-gray-50'
-                                              }`}
-                                            >
-                                              <div className="flex min-w-0 items-center gap-2">
-                                                <span
-                                                  className={`inline-block h-2 w-2 shrink-0 rounded-full ${
-                                                    day.hadSale ? 'bg-green-600' : 'bg-gray-300'
-                                                  }`}
-                                                  aria-hidden="true"
-                                                />
-                                                <span className="font-medium text-black">
-                                                  {new Date(`${day.date}T12:00:00`).toLocaleDateString()}
-                                                </span>
-                                              </div>
-                                              <div className="shrink-0 text-right">
-                                                {day.hadSale ? (
-                                                  <>
-                                                    <div className="font-semibold text-green-700">
-                                                      {t('trusteeCommission.dayHadSale')}
-                                                    </div>
-                                                    <div className="text-gray-600">
-                                                      {t('trusteeCommission.daySalesSummary', {
-                                                        count: day.salesCount,
-                                                        amount: formatCurrency(day.revenue),
-                                                      })}
-                                                    </div>
-                                                  </>
-                                                ) : (
-                                                  <span className="text-gray-500">
-                                                    {t('trusteeCommission.dayNoSale')}
+                                          {dailyBreakdown.map((day) => {
+                                            const dayKey = dayExpansionKey(
+                                              result.id,
+                                              entry.branch,
+                                              day.date
+                                            );
+                                            const isDayExpanded = expandedDayKey === dayKey;
+
+                                            const dayContent = (
+                                              <>
+                                                <div className="flex min-w-0 items-center gap-2">
+                                                  <span
+                                                    className={`inline-block h-2 w-2 shrink-0 rounded-full ${
+                                                      day.hadSale ? 'bg-green-600' : 'bg-gray-300'
+                                                    }`}
+                                                    aria-hidden="true"
+                                                  />
+                                                  <span className="font-medium text-black">
+                                                    {new Date(`${day.date}T12:00:00`).toLocaleDateString()}
                                                   </span>
+                                                </div>
+                                                <div className="flex shrink-0 items-center gap-2 text-right">
+                                                  {day.hadSale ? (
+                                                    <>
+                                                      <div>
+                                                        <div className="font-semibold text-green-700">
+                                                          {t('trusteeCommission.dayHadSale')}
+                                                        </div>
+                                                        <div className="text-gray-600">
+                                                          {t('trusteeCommission.daySalesSummary', {
+                                                            count: day.salesCount,
+                                                            amount: formatCurrency(day.revenue),
+                                                          })}
+                                                        </div>
+                                                      </div>
+                                                      <span
+                                                        className={`text-xs text-gray-500 transition-transform ${
+                                                          isDayExpanded ? 'rotate-180' : ''
+                                                        }`}
+                                                        aria-hidden="true"
+                                                      >
+                                                        ▾
+                                                      </span>
+                                                    </>
+                                                  ) : (
+                                                    <span className="text-gray-500">
+                                                      {t('trusteeCommission.dayNoSale')}
+                                                    </span>
+                                                  )}
+                                                </div>
+                                              </>
+                                            );
+
+                                            return (
+                                              <div key={day.date} className="space-y-1">
+                                                {day.hadSale ? (
+                                                  <button
+                                                    type="button"
+                                                    onClick={() =>
+                                                      setExpandedDayKey((current) =>
+                                                        current === dayKey ? null : dayKey
+                                                      )
+                                                    }
+                                                    aria-expanded={isDayExpanded}
+                                                    className="flex w-full items-center justify-between gap-3 rounded-lg bg-green-50 px-2 py-1.5 text-left text-xs hover:bg-green-100/80"
+                                                  >
+                                                    {dayContent}
+                                                  </button>
+                                                ) : (
+                                                  <div className="flex items-center justify-between gap-3 rounded-lg bg-gray-50 px-2 py-1.5 text-xs">
+                                                    {dayContent}
+                                                  </div>
+                                                )}
+
+                                                {day.hadSale && isDayExpanded && (
+                                                  <div className="ml-4 space-y-2 border-l-2 border-green-200 pl-3 pb-1">
+                                                    {day.sales.map((sale) => {
+                                                      const employeeName =
+                                                        sale.employee?.name ||
+                                                        sale.employeeName ||
+                                                        t('common.unknownEmployee');
+                                                      const saleItems = sale.items ?? [];
+
+                                                      return (
+                                                        <div
+                                                          key={sale.id}
+                                                          className="rounded-lg border border-gray-200 bg-white p-2 text-xs"
+                                                        >
+                                                          <div className="flex flex-wrap items-start justify-between gap-2">
+                                                            <div>
+                                                              <div className="font-semibold text-black">
+                                                                {formatTime(sale.createdAt)}
+                                                              </div>
+                                                              <div className="text-gray-500">
+                                                                {t('trusteeCommission.saleByEmployee', {
+                                                                  name: employeeName,
+                                                                })}
+                                                              </div>
+                                                            </div>
+                                                            <div className="font-bold text-magenta-600">
+                                                              {formatCurrency(saleCashAmount(sale))}
+                                                            </div>
+                                                          </div>
+
+                                                          {saleItems.length === 0 ? (
+                                                            <p className="mt-2 text-gray-500">
+                                                              {t('trusteeCommission.noSaleItems')}
+                                                            </p>
+                                                          ) : (
+                                                            <ul className="mt-2 space-y-1">
+                                                              {saleItems.map((item, index) => {
+                                                                const label =
+                                                                  saleItemLabel(item) ||
+                                                                  t('common.unknownItem');
+                                                                const unit =
+                                                                  item.soldAsUnit === 'PIECE'
+                                                                    ? t('common.pieceSingular')
+                                                                    : t('common.meterSingular');
+                                                                const qty = Number(
+                                                                  item.quantitySold ?? 0
+                                                                ).toFixed(2);
+
+                                                                return (
+                                                                  <li
+                                                                    key={`${sale.id}-${index}`}
+                                                                    className="flex items-start justify-between gap-2 rounded-md bg-gray-50 px-2 py-1"
+                                                                  >
+                                                                    <div className="min-w-0">
+                                                                      <div className="break-all font-medium text-black">
+                                                                        {label}
+                                                                      </div>
+                                                                      {item.color?.name && (
+                                                                        <div className="text-gray-500">
+                                                                          {t('saleDetail.colorLabel', {
+                                                                            name: item.color.name,
+                                                                          })}
+                                                                        </div>
+                                                                      )}
+                                                                      <div className="text-gray-500">
+                                                                        {t('trusteeCommission.soldItemDetail', {
+                                                                          qty,
+                                                                          unit,
+                                                                          price: formatCurrency(
+                                                                            item.soldPrice ?? 0
+                                                                          ),
+                                                                        })}
+                                                                      </div>
+                                                                    </div>
+                                                                    <div className="shrink-0 font-semibold text-black">
+                                                                      {formatCurrency(
+                                                                        saleItemLineTotal(item)
+                                                                      )}
+                                                                    </div>
+                                                                  </li>
+                                                                );
+                                                              })}
+                                                            </ul>
+                                                          )}
+                                                        </div>
+                                                      );
+                                                    })}
+                                                  </div>
                                                 )}
                                               </div>
-                                            </div>
-                                          ))}
+                                            );
+                                          })}
                                         </div>
                                       </div>
                                     )}
