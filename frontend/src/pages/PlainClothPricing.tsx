@@ -10,6 +10,25 @@ import {
 } from '../lib/plainClothApi';
 import { formatCurrency, parsePriceInput, toPriceInput } from '../lib/currency';
 
+function getApiErrorMessage(
+  error: unknown,
+  fallback: string,
+  apiUnavailable: string
+): string {
+  if (error && typeof error === 'object' && 'response' in error) {
+    const response = (
+      error as { response?: { status?: number; data?: { error?: string; message?: string } } }
+    ).response;
+    if (response?.status === 404) {
+      return apiUnavailable;
+    }
+    if (response?.data?.error) return response.data.error;
+    if (response?.data?.message) return response.data.message;
+  }
+  if (error instanceof Error && error.message) return error.message;
+  return fallback;
+}
+
 export default function PlainClothPricing() {
   const { t } = useTranslation();
   const [items, setItems] = useState<PlainClothType[]>([]);
@@ -28,9 +47,9 @@ export default function PlainClothPricing() {
       const list = await fetchPlainClothTypes(true);
       setItems(list.filter((item) => item.isActive));
     } catch (loadError: unknown) {
-      const msg =
-        loadError instanceof Error ? loadError.message : t('plainClothPricing.loadFailed');
-      setError(msg);
+      setError(
+        getApiErrorMessage(loadError, t('plainClothPricing.loadFailed'), t('plainClothPricing.apiUnavailable'))
+      );
     } finally {
       setLoading(false);
     }
@@ -87,16 +106,9 @@ export default function PlainClothPricing() {
       resetForm();
       await loadItems();
     } catch (saveError: unknown) {
-      const body =
-        saveError &&
-        typeof saveError === 'object' &&
-        'response' in saveError &&
-        saveError.response &&
-        typeof saveError.response === 'object' &&
-        'data' in saveError.response
-          ? (saveError.response.data as { error?: string })
-          : undefined;
-      setError(body?.error ?? t('plainClothPricing.saveFailed'));
+      setError(
+        getApiErrorMessage(saveError, t('plainClothPricing.saveFailed'), t('plainClothPricing.apiUnavailable'))
+      );
     } finally {
       setSaving(false);
     }
@@ -113,16 +125,13 @@ export default function PlainClothPricing() {
       setMessage(t('plainClothPricing.deleted', { name: item.name }));
       await loadItems();
     } catch (deleteError: unknown) {
-      const body =
-        deleteError &&
-        typeof deleteError === 'object' &&
-        'response' in deleteError &&
-        deleteError.response &&
-        typeof deleteError.response === 'object' &&
-        'data' in deleteError.response
-          ? (deleteError.response.data as { error?: string })
-          : undefined;
-      setError(body?.error ?? t('plainClothPricing.deleteFailed'));
+      setError(
+        getApiErrorMessage(
+          deleteError,
+          t('plainClothPricing.deleteFailed'),
+          t('plainClothPricing.apiUnavailable')
+        )
+      );
     }
   };
 

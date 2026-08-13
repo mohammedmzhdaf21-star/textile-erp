@@ -14,6 +14,7 @@ import signInRequestsRoutes from './routes/signInRequests.routes';
 import plainClothRoutes from './routes/plainCloth.routes';
 import { migrateLegacyCommissionBase, migrateLegacySettingsPrices } from './lib/currency';
 import { backfillCommissionEntries, recalculatePendingCommissionEntries } from './lib/commissions';
+import { recoverPlainClothNamesFromSales } from './lib/plainClothPricing';
 import prisma from './lib/prisma';
 
 const app = express();
@@ -180,6 +181,13 @@ const server = app.listen(PORT, async () => {
     if (backfill.created > 0) {
       console.log(`Backfilled ${backfill.created} missing commission entry(ies).`);
     }
+
+    const plainClothRecovery = await recoverPlainClothNamesFromSales();
+    if (plainClothRecovery.recovered > 0) {
+      console.log(
+        `Recovered ${plainClothRecovery.recovered} plain cloth type(s) from past sales.`
+      );
+    }
   } catch (error) {
     console.warn('Could not migrate legacy price settings:', error);
   }
@@ -191,6 +199,7 @@ const server = app.listen(PORT, async () => {
   console.log(`Listening on:    http://localhost:${PORT}`);
   console.log(`Health check:    http://localhost:${PORT}/health`);
   console.log(`Auth endpoint:   http://localhost:${PORT}/api/auth/login`);
+  console.log(`Plain cloth:       http://localhost:${PORT}/api/plain-cloth`);
   console.log(`Inventory:       http://localhost:${PORT}/api/inventory`);
   console.log(`Sales:           http://localhost:${PORT}/api/sales`);
   if (serveFrontend) {

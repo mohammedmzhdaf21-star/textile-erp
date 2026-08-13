@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import { Prisma } from '@prisma/client';
 import { prisma } from './prisma';
 import { normalizeStoredAmount } from './currency';
@@ -30,13 +31,31 @@ function toRecord(row: {
 }
 
 export function slugPlainClothId(name: string) {
-  const base = name
-    .trim()
+  const trimmed = name.trim();
+  if (!trimmed) {
+    return `PLAIN_${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
+  }
+
+  const hash = crypto
+    .createHash('sha256')
+    .update(trimmed, 'utf8')
+    .digest('hex')
+    .slice(0, 10)
+    .toUpperCase();
+
+  const ascii = trimmed
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
     .toUpperCase()
     .replace(/[^A-Z0-9]+/g, '_')
     .replace(/^_+|_+$/g, '')
-    .slice(0, 45);
-  return base || 'PLAIN_CLOTH';
+    .slice(0, 24);
+
+  if (ascii) {
+    return `${ascii}_${hash}`.slice(0, 50);
+  }
+
+  return `PC_${hash}`.slice(0, 50);
 }
 
 export async function listPlainClothPricing(options?: { includeInactive?: boolean }) {
@@ -140,4 +159,63 @@ export async function deletePlainClothPricing(id: string) {
   });
 
   return { id, deleted: true };
+}
+
+/** Restore plain cloth types from past sales when pricing rows are missing. */
+export async function recoverPlainClothNamesFromSales() {
+  const grouped = await prisma.saleItem.groupBy({
+    by: ['plainClothName'],
+    where: {
+      isPlainCloth: true,
+      plainClothName: { not: null },
+    },
+    _avg: { soldPrice: true },
+  });
+
+  let recovered = 0;
+
+  for (const row of grouped) {
+    const name = row.plainClothName?.trim();
+    if (!name) continue;
+
+    const existing = await prisma.plainClothPricing.findFirst({
+      where: { name: { equals: name, mode: 'insensitive' } },
+    });
+
+    const avgPrice = row._avg.soldPrice
+      ? normalizeStoredAmount(parseFloat(row._avg.soldPrice.toString()))
+      : 0;
+
+    if (existing) {
+      if (!existing.isActive) {
+        await prisma.plainClothPricing.update({
+          where: { id: existing.id },
+          data: {
+            isActive: true,
+            ...(avgPrice > 0 ? { pricePerM: new Prisma.Decimal(avgPrice.toFixed(2)) } : {}),
+          },
+        });
+        recovered += 1;
+      }
+      continue;
+    }
+
+    let id = slugPlainClothId(name);
+    const existingId = await prisma.plainClothPricing.findUnique({ where: { id } });
+    if (existingId) {
+      id = `${id}_${Date.now().toString(36).toUpperCase()}`.slice(0, 50);
+    }
+
+    await prisma.plainClothPricing.create({
+      data: {
+        id,
+        name,
+        pricePerM: new Prisma.Decimal(Math.max(0, avgPrice).toFixed(2)),
+        isActive: true,
+      },
+    });
+    recovered += 1;
+  }
+
+  return { recovered };
 }

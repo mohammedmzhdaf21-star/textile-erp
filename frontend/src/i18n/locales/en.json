@@ -790,11 +790,11 @@
     "defaultTrustee": "Mr. Investor"
   },
   "plainClothPricing": {
-    "subtitle": "Add plain cloth fabrics (Silk, Velvet, etc.) with a saved price per meter for sales.",
+    "subtitle": "Add plain cloth fabrics with a saved price per meter. Names can be in English or Kurdish Sorani.",
     "addTitle": "Add plain cloth type",
     "editTitle": "Edit plain cloth type",
     "clothName": "Fabric name",
-    "namePlaceholder": "e.g. Silk, Velvet, Cotton",
+    "namePlaceholder": "e.g. Silk, Velvet, or Kurdish name like حەریر",
     "saveButton": "Save plain cloth type",
     "updateButton": "Update plain cloth type",
     "savedTypes": "Saved plain cloth types",
@@ -807,6 +807,7 @@
     "deleted": "Removed {{name}}.",
     "confirmDelete": "Delete plain cloth type {{name}}?",
     "loadFailed": "Failed to load plain cloth types.",
+    "apiUnavailable": "Plain cloth API is not available on the server (404). Run: git pull origin main, npm run build:frontend, then pm2 restart textile-erp.",
     "saveFailed": "Failed to save plain cloth type.",
     "deleteFailed": "Failed to delete plain cloth type.",
     "backToSales": "Back to Sales"
