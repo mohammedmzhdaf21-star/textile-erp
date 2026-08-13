@@ -6,8 +6,8 @@ After=network-online.target textile-erp.service textile-tunnel.service
 Type=simple
 WorkingDirectory=@WORKSPACE@
 Environment=ERP_PUBLIC_URL=https://erp.kutalimzhda.com
-Environment=WATCHDOG_INTERVAL_SEC=45
-Environment=WATCHDOG_FAIL_THRESHOLD=2
+Environment=WATCHDOG_INTERVAL_SEC=15
+Environment=WATCHDOG_FAIL_THRESHOLD=1
 ExecStart=@WORKSPACE@/scripts/tunnel-watchdog.sh
 Restart=always
 RestartSec=15

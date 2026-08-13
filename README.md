@@ -89,10 +89,12 @@ This will:
 
 - Build the frontend and serve it from the backend on port **3000**
 - Start the **named Cloudflare tunnel** for `https://erp.kutalimzhda.com` (stable URL)
-- Run a **health watchdog** that restarts the app/tunnel if the public site returns errors (prevents Cloudflare 530)
+- Run a **health watchdog** that restarts the app/tunnel if the public site returns errors (prevents Cloudflare **1033** / **530**)
 - Install **PM2** (or systemd) so processes restart automatically after reboot
 
 **Do not use** `trycloudflare.com` backup URLs in production — they expire when the tunnel restarts and cause **530** errors.
+
+If you see **Error 1033** (tunnel unreachable), the watchdog auto-recovers within ~15 seconds. Manual fix: `npx pm2 restart textile-tunnel`.
 
 **Useful commands**
 
