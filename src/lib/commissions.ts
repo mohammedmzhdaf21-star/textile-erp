@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from './prisma';
+import { normalizeStoredAmount } from './currency';
 import {
   getCommissionRate,
   getItemMinimumPrice,
@@ -8,6 +9,38 @@ import {
 import { getPlainClothPricingByName } from './plainClothPricing';
 
 const PRICE_EPS = 0.001;
+
+async function resolveMinimumPriceForCommission(
+  tx: Prisma.TransactionClient,
+  params: {
+    inventoryItemId?: string | null;
+    isPlainCloth?: boolean;
+    plainClothName?: string | null;
+  }
+): Promise<number | null> {
+  if (params.isPlainCloth && params.plainClothName) {
+    const plainCloth = await getPlainClothPricingByName(params.plainClothName);
+    return plainCloth?.pricePerM ?? null;
+  }
+
+  if (!params.inventoryItemId) return null;
+
+  const savedMinimum = await getItemMinimumPrice(params.inventoryItemId);
+  if (savedMinimum) return savedMinimum.minimumPrice;
+
+  const inv = await tx.inventoryItem.findUnique({
+    where: { id: params.inventoryItemId },
+    select: { costPrice: true, subCode: true },
+  });
+  if (!inv) return null;
+
+  const costPrice = inv.costPrice ? parseFloat(inv.costPrice.toString()) : 0;
+  const subCode = inv.subCode != null ? Number(inv.subCode) : 0;
+  const fallback = costPrice > 0 ? costPrice : subCode;
+  if (!Number.isFinite(fallback) || fallback <= 0) return null;
+
+  return normalizeStoredAmount(fallback);
+}
 
 export function calculateLineCommission(
   soldPrice: number,
@@ -39,19 +72,12 @@ export async function recordCommissionForSaleItem(
     plainClothName?: string | null;
   }
 ) {
-  let minimumPrice: number;
-
-  if (params.isPlainCloth && params.plainClothName) {
-    const plainCloth = await getPlainClothPricingByName(params.plainClothName);
-    if (!plainCloth) return null;
-    minimumPrice = plainCloth.pricePerM;
-  } else {
-    if (!params.inventoryItemId) return null;
-
-    const minimum = await getItemMinimumPrice(params.inventoryItemId);
-    if (!minimum) return null;
-    minimumPrice = minimum.minimumPrice;
-  }
+  const minimumPrice = await resolveMinimumPriceForCommission(tx, {
+    inventoryItemId: params.inventoryItemId,
+    isPlainCloth: params.isPlainCloth,
+    plainClothName: params.plainClothName,
+  });
+  if (minimumPrice == null) return null;
 
   const rate = await getCommissionRate();
   const commissionAmount = calculateLineCommission(
@@ -280,9 +306,8 @@ export async function recalculatePendingCommissionEntries() {
 }
 
 export async function backfillCommissionEntries() {
-  const [rate, prices, sales] = await Promise.all([
+  const [rate, sales] = await Promise.all([
     getCommissionRate(),
-    getItemMinimumPrices(),
     prisma.sale.findMany({
       where: { isVoided: false },
       include: { items: true },
@@ -299,15 +324,11 @@ export async function backfillCommissionEntries() {
       });
       if (existing) continue;
 
-      let minimumPrice: number | null = null;
-
-      if (item.isPlainCloth && item.plainClothName) {
-        const plainCloth = await getPlainClothPricingByName(item.plainClothName);
-        minimumPrice = plainCloth?.pricePerM ?? null;
-      } else if (item.inventoryItemId) {
-        minimumPrice = prices[item.inventoryItemId]?.minimumPrice ?? null;
-      }
-
+      const minimumPrice = await resolveMinimumPriceForCommission(prisma, {
+        inventoryItemId: item.inventoryItemId,
+        isPlainCloth: item.isPlainCloth,
+        plainClothName: item.plainClothName,
+      });
       if (minimumPrice == null) continue;
 
       const soldPrice = parseFloat(item.soldPrice.toString());
