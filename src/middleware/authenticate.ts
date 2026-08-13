@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { verifyAccessToken, JwtPayload } from '../lib/jwt';
+import { checkEmployeeAccess } from '../lib/employeeAccess';
 
 // ============================================================
 // 🛡️ AUTHENTICATION MIDDLEWARE
@@ -9,13 +10,12 @@ import { verifyAccessToken, JwtPayload } from '../lib/jwt';
 // If invalid, returns 401 Unauthorized
 // ============================================================
 
-export function authenticate(
+export async function authenticate(
   req: Request,
   res: Response,
   next: NextFunction
-): void {
+): Promise<void> {
   try {
-    // ---- 1. Get token from header ----
     const authHeader = req.headers.authorization;
 
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -26,35 +26,48 @@ export function authenticate(
       return;
     }
 
-    const token = authHeader.substring(7); // remove "Bearer "
+    const token = authHeader.substring(7);
 
     if (!token) {
       res.status(401).json({ error: 'No token provided' });
       return;
     }
 
-    // ---- 2. Verify token ----
-    const payload: JwtPayload = verifyAccessToken(token);
+    let payload: JwtPayload;
+    try {
+      payload = verifyAccessToken(token);
+    } catch (error: any) {
+      if (error.name === 'TokenExpiredError') {
+        res.status(401).json({
+          error: 'Token expired',
+          hint: 'Use /api/auth/refresh to get a new token',
+        });
+        return;
+      }
 
-    // ---- 3. Attach user to request ----
-    req.user = payload;
+      if (error.name === 'JsonWebTokenError') {
+        res.status(401).json({ error: 'Invalid token' });
+        return;
+      }
 
-    // ---- 4. Continue to the actual route handler ----
+      res.status(401).json({ error: 'Authentication failed' });
+      return;
+    }
+
+    const access = await checkEmployeeAccess(payload.userId);
+    if (!access.ok) {
+      res.status(access.status).json({ error: access.error });
+      return;
+    }
+
+    req.user = {
+      userId: access.employee.id,
+      email: access.employee.email,
+      role: access.employee.role,
+    };
+
     next();
-  } catch (error: any) {
-    if (error.name === 'TokenExpiredError') {
-      res.status(401).json({
-        error: 'Token expired',
-        hint: 'Use /api/auth/refresh to get a new token',
-      });
-      return;
-    }
-
-    if (error.name === 'JsonWebTokenError') {
-      res.status(401).json({ error: 'Invalid token' });
-      return;
-    }
-
+  } catch {
     res.status(401).json({ error: 'Authentication failed' });
   }
 }

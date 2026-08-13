@@ -102,8 +102,12 @@ router.post('/refresh', async (req: Request, res: Response) => {
       ...result,
     });
   } catch (error: any) {
+    const msg = error.message || 'Token refresh failed';
+    if (msg.includes('pending') || msg.includes('rejected') || msg.includes('inactive')) {
+      return res.status(403).json({ error: msg });
+    }
     return res.status(401).json({
-      error: error.message || 'Token refresh failed',
+      error: msg,
     });
   }
 });

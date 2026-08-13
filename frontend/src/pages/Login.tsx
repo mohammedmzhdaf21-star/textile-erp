@@ -1,15 +1,22 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { login } from "../lib/auth";
 import LanguageSwitcher from "../components/LanguageSwitcher";
 
 export default function Login() {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const [email, setEmail] = useState("admin@textile.com");
-  const [password, setPassword] = useState("admin123");
+  const location = useLocation();
+  const registrationPending = Boolean(
+    (location.state as { registrationPending?: boolean } | null)?.registrationPending
+  );
+  const registeredEmail =
+    (location.state as { email?: string } | null)?.email ?? "";
+
+  const [email, setEmail] = useState(registeredEmail);
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -99,6 +106,14 @@ export default function Login() {
                 className="input-field"
               />
             </div>
+
+            {registrationPending && (
+              <div className="bg-amber-50 border-l-4 border-amber-500 p-4 rounded animate-fade-in">
+                <p className="text-amber-800 text-sm font-medium">
+                  {t("login.registrationPending")}
+                </p>
+              </div>
+            )}
 
             {error && (
               <div className="bg-magenta-50 border-l-4 border-magenta-500 p-4 rounded animate-fade-in">

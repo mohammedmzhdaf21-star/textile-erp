@@ -47,7 +47,13 @@ export default function Register() {
         registrationNote: registrationNote || undefined,
       });
       setSuccess(result.message || t("register.successMessage"));
-      setTimeout(() => navigate("/login"), 3000);
+      setTimeout(
+        () =>
+          navigate("/login", {
+            state: { registrationPending: true, email: email.trim() },
+          }),
+        1500
+      );
     } catch (err: any) {
       setError(err?.response?.data?.error || err?.message || t("register.failed"));
     } finally {

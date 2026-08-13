@@ -130,6 +130,8 @@ export async function createEmployee(input: {
       phone: input.phone?.trim() || null,
       role: input.role,
       passwordHash,
+      isActive: true,
+      approvalStatus: 'APPROVED',
       assignedWork: input.assignedWork?.trim() || null,
       allowedSections: sections,
       branches: input.branchIds?.length
@@ -180,6 +182,10 @@ export async function updateEmployee(
   });
   if (!existing) {
     throw new Error('Employee not found');
+  }
+
+  if (input.isActive === true && existing.approvalStatus !== 'APPROVED') {
+    throw new Error('Employee must be approved before the account can be activated');
   }
 
   const nextRole = input.role ?? existing.role;

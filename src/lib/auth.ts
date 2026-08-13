@@ -10,6 +10,7 @@ import {
 import { getEmployeeAuthProfile } from './employees';
 import { DEFAULT_EMPLOYEE_SECTIONS } from './employeeSections';
 import { notifyAdminsOfRegistration } from './notifications';
+import { assertEmployeeRecordCanSignIn, checkEmployeeAccess } from './employeeAccess';
 
 const MAX_FAILED_ATTEMPTS = 5;
 const LOCKOUT_DURATION_MINUTES = 15;
@@ -117,17 +118,7 @@ export async function loginUser(
     throw new Error('Invalid email or password');
   }
 
-  if (employee.approvalStatus === 'PENDING') {
-    throw new Error('Account pending admin approval');
-  }
-
-  if (employee.approvalStatus === 'REJECTED') {
-    throw new Error('Registration was rejected. Contact your administrator.');
-  }
-
-  if (!employee.isActive || employee.deletedAt) {
-    throw new Error('Account is inactive');
-  }
+  assertEmployeeRecordCanSignIn(employee);
 
   if (employee.lockedUntil && employee.lockedUntil > new Date()) {
     const minutesLeft = Math.ceil(
@@ -248,10 +239,15 @@ export async function refreshAccessToken(refreshToken: string) {
     throw new Error('Session has expired');
   }
 
+  const access = await checkEmployeeAccess(payload.userId);
+  if (!access.ok) {
+    throw new Error(access.error);
+  }
+
   const newAccessToken = generateAccessToken({
-    userId: payload.userId,
-    email: payload.email,
-    role: payload.role,
+    userId: access.employee.id,
+    email: access.employee.email,
+    role: access.employee.role,
   });
 
   return { accessToken: newAccessToken };

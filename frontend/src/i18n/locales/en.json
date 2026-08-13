@@ -205,6 +205,7 @@
     "passwordLabel": "Password",
     "passwordPlaceholder": "Enter your password",
     "loginFailed": "Login failed. Please try again.",
+    "registrationPending": "Your registration was submitted. You cannot sign in until a system administrator approves your account on the dashboard.",
     "newEmployee": "New employee on this device?",
     "demoCredentials": "DEMO CREDENTIALS",
     "admin": "Admin",
