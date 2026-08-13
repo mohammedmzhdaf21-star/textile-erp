@@ -51,8 +51,14 @@ const navigation: Array<NavItem | NavGroup> = [
       { to: '/exchange', labelKey: 'nav.exchange', end: true },
     ],
   },
-  { to: '/tasks', labelKey: 'nav.tasks', end: true },
-  { to: '/task-employee', labelKey: 'nav.taskEmployee', end: true },
+  {
+    id: 'tasks',
+    labelKey: 'nav.tasks',
+    items: [
+      { to: '/tasks', labelKey: 'nav.taskInput', end: true },
+      { to: '/task-employee', labelKey: 'nav.taskEmployee', end: true },
+    ],
+  },
   { to: '/analytics', labelKey: 'nav.dataAnalysis', end: true },
   {
     id: 'item-input',
@@ -172,7 +178,17 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onNavigate }) => {
                       : 'text-gray-700 hover:bg-gray-100'
                   }`}
                 >
-                  <span>{t(nav.labelKey)}</span>
+                  <span className="flex items-center gap-2">
+                    <span>{t(nav.labelKey)}</span>
+                    {nav.id === 'tasks' && openTaskCount > 0 && (
+                      <span
+                        className="inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-red-600 px-1.5 text-[11px] font-bold leading-none text-white"
+                        aria-label={t('nav.openTasksBadge', { count: openTaskCount })}
+                      >
+                        {openTaskCount > 99 ? '99+' : openTaskCount}
+                      </span>
+                    )}
+                  </span>
                   <span
                     className={`text-xs transition-transform ${groupExpanded ? 'rotate-180' : ''}`}
                     aria-hidden="true"
@@ -194,7 +210,17 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onNavigate }) => {
                             : 'block rounded-md px-3 py-2 text-sm text-gray-700 transition-colors hover:bg-gray-100'
                         }
                       >
-                        {t(item.labelKey)}
+                        <span className="flex items-center justify-between gap-2">
+                          <span>{t(item.labelKey)}</span>
+                          {item.to === '/task-employee' && openTaskCount > 0 && (
+                            <span
+                              className="inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-red-600 px-1.5 text-[11px] font-bold leading-none text-white"
+                              aria-label={t('nav.openTasksBadge', { count: openTaskCount })}
+                            >
+                              {openTaskCount > 99 ? '99+' : openTaskCount}
+                            </span>
+                          )}
+                        </span>
                       </NavLink>
                     ))}
                   </div>
@@ -229,14 +255,6 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onNavigate }) => {
                 }`}
               >
                 <span>{t(nav.labelKey)}</span>
-                {nav.to === '/task-employee' && openTaskCount > 0 && (
-                  <span
-                    className="inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-red-600 px-1.5 text-[11px] font-bold leading-none text-white"
-                    aria-label={t('nav.openTasksBadge', { count: openTaskCount })}
-                  >
-                    {openTaskCount > 99 ? '99+' : openTaskCount}
-                  </span>
-                )}
               </span>
             </NavLink>
           );
