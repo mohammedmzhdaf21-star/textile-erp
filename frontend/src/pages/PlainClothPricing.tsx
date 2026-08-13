@@ -56,7 +56,11 @@ export default function PlainClothPricing() {
       }
     } catch (loadError: unknown) {
       setError(
-        getApiErrorMessage(loadError, t('plainClothPricing.loadFailed'), t('plainClothPricing.apiUnavailable'))
+        getApiErrorMessage(
+          loadError,
+          t('plainClothPricing.loadFailed'),
+          t('plainClothPricing.apiUnavailable')
+        )
       );
     } finally {
       setLoading(false);
@@ -97,7 +101,7 @@ export default function PlainClothPricing() {
         );
       } else {
         setOffline(true);
-        setError(t('plainClothPricing.apiUnavailable'));
+        setError(t('plainClothPricing.refreshBrowser'));
       }
     } catch (reconnectError: unknown) {
       setError(
@@ -134,10 +138,15 @@ export default function PlainClothPricing() {
       } else {
         await createPlainClothType(trimmedName, storedPrice);
         setMessage(
-          t('plainClothPricing.saved', {
-            name: trimmedName,
-            price: formatCurrency(storedPrice),
-          })
+          isPlainClothOfflineMode()
+            ? t('plainClothPricing.savedLocal', {
+                name: trimmedName,
+                price: formatCurrency(storedPrice),
+              })
+            : t('plainClothPricing.saved', {
+                name: trimmedName,
+                price: formatCurrency(storedPrice),
+              })
         );
       }
       resetForm();

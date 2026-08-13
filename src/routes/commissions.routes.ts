@@ -14,6 +14,12 @@ import {
   markEmployeeCommissionsPaid,
   recalculatePendingCommissionEntries,
 } from '../lib/commissions';
+import {
+  createPlainClothPricing,
+  deletePlainClothPricing,
+  listPlainClothPricing,
+  updatePlainClothPricing,
+} from '../lib/plainClothPricing';
 import { roleHasFullAccess } from '../lib/employeeSections';
 import plainClothRoutes from './plainCloth.routes';
 
@@ -23,8 +29,12 @@ router.use(authenticate);
 
 router.get('/settings', async (_req: Request, res: Response) => {
   try {
-    const [rate, prices] = await Promise.all([getCommissionRate(), getItemMinimumPrices()]);
-    return res.status(200).json({ rate, prices });
+    const [rate, prices, plainClothTypes] = await Promise.all([
+      getCommissionRate(),
+      getItemMinimumPrices(),
+      listPlainClothPricing({ includeInactive: true }).catch(() => []),
+    ]);
+    return res.status(200).json({ rate, prices, plainClothTypes });
   } catch (error: any) {
     return res.status(500).json({ error: error.message || 'Failed to load commission settings' });
   }
@@ -71,6 +81,44 @@ router.put('/settings/prices', requireRole('ADMIN', 'MANAGER'), async (req: Requ
     return res.status(400).json({ error: 'Provide price or prices in request body' });
   } catch (error: any) {
     return res.status(400).json({ error: error.message || 'Failed to save item prices' });
+  }
+});
+
+router.post('/settings/plain-cloth', requireRole('ADMIN', 'MANAGER'), async (req: Request, res: Response) => {
+  try {
+    const item = await createPlainClothPricing({
+      name: String(req.body?.name ?? ''),
+      pricePerM: Number(req.body?.pricePerM),
+    });
+    return res.status(201).json({ item });
+  } catch (error: any) {
+    return res.status(400).json({ error: error.message || 'Failed to create plain cloth type' });
+  }
+});
+
+router.put('/settings/plain-cloth/:id', requireRole('ADMIN', 'MANAGER'), async (req: Request, res: Response) => {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const item = await updatePlainClothPricing(id, {
+      name: req.body?.name !== undefined ? String(req.body.name) : undefined,
+      pricePerM: req.body?.pricePerM !== undefined ? Number(req.body.pricePerM) : undefined,
+      isActive: req.body?.isActive !== undefined ? Boolean(req.body.isActive) : undefined,
+    });
+    return res.status(200).json({ item });
+  } catch (error: any) {
+    const status = error.message?.includes('not found') ? 404 : 400;
+    return res.status(status).json({ error: error.message || 'Failed to update plain cloth type' });
+  }
+});
+
+router.delete('/settings/plain-cloth/:id', requireRole('ADMIN', 'MANAGER'), async (req: Request, res: Response) => {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const result = await deletePlainClothPricing(id);
+    return res.status(200).json(result);
+  } catch (error: any) {
+    const status = error.message?.includes('not found') ? 404 : 400;
+    return res.status(status).json({ error: error.message || 'Failed to delete plain cloth type' });
   }
 });
 
