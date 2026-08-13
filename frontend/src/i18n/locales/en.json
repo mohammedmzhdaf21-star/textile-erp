@@ -775,7 +775,10 @@
     "cuttingTaskTitle": "Cutting the fabric roll for code {{code}}",
     "manualCuttingNote": "Manual cutting task created by admin/owner.",
     "createdTask": "Created {{title}} for Branch {{branch}}.",
-    "cuttingNote": "Piece {{soldItemId}} was sold. Cut another shelf piece from roll {{sourceItemId}}{{color, select, undefined {} other { ({{color}})}}}."
+    "cuttingNote": "Piece {{soldItemId}} was sold. Cut another shelf piece from roll {{sourceItemId}}{{color, select, undefined {} other { ({{color}})}}}.",
+    "loadFailed": "Could not load tasks.",
+    "saveFailed": "Could not save task.",
+    "deleteConfirm": "Delete this task?"
   },
   "taskEmployee": {
     "title": "Task Employee",
@@ -788,7 +791,9 @@
     "assignedTo": "{{schedule}} · Assigned to {{name}}",
     "autoCompleteHint": "This cutting task is completed automatically in Item Conversion when the roll is cut into a shelf piece.",
     "checkedBy": "Checked by {{name}} at {{date}}",
-    "checkedDone": "Checked \"{{title}}\" in Branch {{branch}} as done."
+    "checkedDone": "Checked \"{{title}}\" in Branch {{branch}} as done.",
+    "loadFailed": "Could not load your tasks.",
+    "saveFailed": "Could not update task."
   },
   "dataAnalysis": {
     "title": "Data Analysis",

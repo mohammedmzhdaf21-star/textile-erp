@@ -94,6 +94,8 @@ model Branch {
   sales              Sale[]
   inventory          InventoryItem[]
   tasks              Task[]
+  branchTaskEntries  BranchTaskEntry[]
+  branchTaskAssignments BranchTaskAssignment[]
   permissions        TrusteePermission[]
   employees          BranchEmployee[]
   notifications      Notification[]
@@ -331,6 +333,53 @@ model Task {
   @@map("tasks")
 }
 
+model BranchTaskEntry {
+  id              String    @id @default(uuid())
+  branchId        String    @db.VarChar(5)
+  branch          Branch    @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  templateKey     String    @db.VarChar(50)
+  title           String    @db.Text
+  assignedToEmail String    @db.VarChar(255)
+  assignedToId    String?
+  assignedTo      Employee? @relation("BranchTaskAssignedTo", fields: [assignedToId], references: [id], onDelete: SetNull)
+  note            String    @default("") @db.Text
+  schedule        String    @db.VarChar(20)
+  status          String    @default("TODO") @db.VarChar(10)
+  checkedBy       String?   @db.VarChar(255)
+  checkedAt       DateTime?
+  dueAt           DateTime?
+  sourceSaleId    String?   @db.VarChar(100)
+  sourceItemId    String?   @db.VarChar(100)
+  code            Int?
+  colorName       String?   @db.VarChar(100)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([branchId, status])
+  @@index([assignedToId, status])
+  @@index([assignedToEmail])
+  @@index([templateKey])
+  @@map("branch_task_entries")
+}
+
+model BranchTaskAssignment {
+  id              String    @id @default(uuid())
+  branchId        String    @db.VarChar(5)
+  branch          Branch    @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  templateKey     String    @db.VarChar(50)
+  title           String    @db.Text
+  assignedToEmail String    @db.VarChar(255)
+  assignedToId    String?
+  assignedTo      Employee? @relation("BranchTaskAssignmentAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+  note            String    @default("") @db.Text
+  schedule        String    @db.VarChar(20)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@unique([branchId, templateKey])
+  @@map("branch_task_assignments")
+}
+
 model Employee {
   id                  String    @id @default(uuid())
   name                String    @db.VarChar(100)
@@ -365,6 +414,8 @@ model Employee {
   branches         BranchEmployee[]
   tasksDone        Task[]                          @relation("TaskCompletedBy")
   tasksAssigned    Task[]                          @relation("TaskAssignedTo")
+  branchTasksAssigned BranchTaskEntry[]            @relation("BranchTaskAssignedTo")
+  branchTaskAssignments BranchTaskAssignment[]     @relation("BranchTaskAssignmentAssignee")
   refundsProcessed Refund[]
   notifications    Notification[]
   auditLogs        AuditLog[]

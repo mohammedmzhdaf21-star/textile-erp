@@ -561,7 +561,7 @@ const SalesView: React.FC = () => {
         branchId: rollCutSource.branchId,
       });
 
-      completeCuttingTasksAfterRollToPiece({
+      await completeCuttingTasksAfterRollToPiece({
         rollItemId: rollCutSource.id,
         branchId: rollCutSource.branchId,
         code: rollCutSource.code,

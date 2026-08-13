@@ -1,13 +1,12 @@
 import api from './api';
 import { BRANCH_CODE_BY_ID } from './inventoryCodes';
+import type { BranchCode, BranchTask } from './taskSettings';
 import {
-  completeTask,
-  createCuttingTaskFromSale,
-  isTaskComplete,
-  readTasks,
-  type BranchCode,
-  type BranchTask,
-} from './taskSettings';
+  completeCuttingTasksApi,
+  createTaskApi,
+  hasOpenCuttingTaskApi,
+  notifyTasksUpdated,
+} from './tasksApi';
 
 export const isAutoManagedCuttingTask = (task: BranchTask) =>
   task.templateKey === 'CUTTING_FABRIC_ROLL';
@@ -34,25 +33,12 @@ export const findRollsWithStock = (items: InventoryItemForCutting[]) =>
     .filter((item) => item.type === 'ROLL' && Number(item.meters ?? 0) > 0)
     .sort((a, b) => Number(b.meters ?? 0) - Number(a.meters ?? 0));
 
-export const hasOpenCuttingTaskFor = (input: {
-  branch: BranchCode;
-  code?: number;
-  colorName?: string;
-}) =>
-  readTasks().some(
-    (task: BranchTask) =>
-      !isTaskComplete(task) &&
-      task.templateKey === 'CUTTING_FABRIC_ROLL' &&
-      task.branch === input.branch &&
-      task.code === input.code &&
-      (task.colorName ?? '') === (input.colorName ?? '')
-  );
-
 export const maybeCreateCuttingTaskAfterPieceSale = async (input: {
   soldItemId: string;
   saleId?: string;
   branchCode?: BranchCode;
   assignedTo?: string;
+  t?: (key: string, params?: Record<string, unknown>) => string;
 }) => {
   const itemResponse = await api.get(`/inventory/${encodeURIComponent(input.soldItemId)}`);
   const soldItem = itemResponse.data as InventoryItemForCutting & {
@@ -88,23 +74,46 @@ export const maybeCreateCuttingTaskAfterPieceSale = async (input: {
   }
 
   const colorName = soldItem.color?.name;
-  if (hasOpenCuttingTaskFor({ branch, code: soldItem.code, colorName })) {
+  const alreadyOpen = await hasOpenCuttingTaskApi({
+    branch,
+    code: soldItem.code,
+    colorName,
+  });
+  if (alreadyOpen) {
     return null;
   }
 
   const roll = rolls[0];
-  return createCuttingTaskFromSale({
+  const codeText = soldItem.code !== undefined ? String(soldItem.code) : 'unknown';
+  const title = input.t
+    ? input.t('taskTemplates.CUTTING_FABRIC_ROLL', { code: codeText })
+    : `Cutting the fabric roll for code ${codeText}`;
+  const note = input.t
+    ? input.t('tasks.cuttingNote', {
+        soldItemId: input.soldItemId,
+        sourceItemId: roll.id,
+        color: colorName,
+      })
+    : `Piece ${input.soldItemId} was sold. Cut another shelf piece from roll ${roll.id}${colorName ? ` (${colorName})` : ''}.`;
+
+  const task = await createTaskApi({
     branch,
+    templateKey: 'CUTTING_FABRIC_ROLL',
+    title,
+    assignedTo: input.assignedTo || 'Inventory team',
+    note,
+    schedule: 'ON_DEMAND',
+    sourceSaleId: input.saleId,
+    sourceItemId: roll.id,
     code: soldItem.code,
     colorName,
-    sourceItemId: roll.id,
-    soldItemId: input.soldItemId,
-    saleId: input.saleId,
-    assignedTo: input.assignedTo,
   });
+
+  notifyTasksUpdated();
+  return task;
 };
 
-export const completeCuttingTasksAfterRollToPiece = (input: {
+export const completeCuttingTasksAfterRollToPiece = async (input: {
   rollItemId: string;
   branchId: string;
   code: number;
@@ -114,18 +123,13 @@ export const completeCuttingTasksAfterRollToPiece = (input: {
   const branch = BRANCH_CODE_BY_ID[input.branchId] as BranchCode | undefined;
   if (!branch) return [];
 
-  const matching = readTasks().filter(
-    (task) =>
-      !isTaskComplete(task) &&
-      task.templateKey === 'CUTTING_FABRIC_ROLL' &&
-      task.branch === branch &&
-      (task.sourceItemId === input.rollItemId ||
-        (task.code === input.code && (task.colorName ?? '') === (input.colorName ?? '')))
-  );
-
-  matching.forEach((task) => {
-    completeTask(task.id, 'System (item conversion)');
+  const tasks = await completeCuttingTasksApi({
+    branch,
+    rollItemId: input.rollItemId,
+    code: input.code,
+    colorName: input.colorName,
   });
 
-  return matching;
+  notifyTasksUpdated();
+  return tasks;
 };

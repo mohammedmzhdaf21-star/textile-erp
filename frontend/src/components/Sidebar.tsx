@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { NavLink, useLocation } from 'react-router-dom';
 import { canAccessRoute } from '../lib/dashboardSettings';
 import { canManageEmployeeAccounts, getCurrentUser } from '../lib/auth';
-import { countOpenTasks } from '../lib/taskSettings';
+import { fetchOpenTaskCount } from '../lib/tasksApi';
 import LanguageSwitcher from './LanguageSwitcher';
 
 type NavItem = {
@@ -99,7 +99,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onNavigate }) => {
   const { t } = useTranslation();
   const location = useLocation();
   const user = getCurrentUser();
-  const [openTaskCount, setOpenTaskCount] = useState(() => countOpenTasks());
+  const [openTaskCount, setOpenTaskCount] = useState(0);
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>(() =>
     initialExpandedGroups(location.pathname)
   );
@@ -134,11 +134,16 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onNavigate }) => {
   }, [location.pathname]);
 
   useEffect(() => {
-    const refreshCount = () => setOpenTaskCount(countOpenTasks());
+    const refreshCount = () => {
+      const mine = !(user?.role === 'ADMIN' || user?.role === 'MANAGER');
+      void fetchOpenTaskCount(mine)
+        .then(setOpenTaskCount)
+        .catch(() => setOpenTaskCount(0));
+    };
     refreshCount();
     window.addEventListener('branch-tasks-updated', refreshCount);
     return () => window.removeEventListener('branch-tasks-updated', refreshCount);
-  }, []);
+  }, [user?.role]);
 
   const handleNavigate = () => {
     if (window.innerWidth < 1024) {

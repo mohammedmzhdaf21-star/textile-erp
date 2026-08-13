@@ -13,6 +13,7 @@ import notificationsRoutes from './routes/notifications.routes';
 import signInRequestsRoutes from './routes/signInRequests.routes';
 import plainClothRoutes from './routes/plainCloth.routes';
 import auditLogRoutes from './routes/auditLog.routes';
+import tasksRoutes from './routes/tasks.routes';
 import { migrateLegacyCommissionBase, migrateLegacySettingsPrices } from './lib/currency';
 import { backfillCommissionEntries, recalculatePendingCommissionEntries } from './lib/commissions';
 import { recoverPlainClothNamesFromSales, ensureDefaultPlainClothTypes } from './lib/plainClothPricing';
@@ -136,6 +137,7 @@ app.use('/api/notifications', notificationsRoutes);
 app.use('/api/sign-in-requests', signInRequestsRoutes);
 app.use('/api/plain-cloth', plainClothRoutes);
 app.use('/api/audit-logs', auditLogRoutes);
+app.use('/api/tasks', tasksRoutes);
 
 // ============================================================
 // FRONTEND SPA (serve built app for /login, /register, etc.)

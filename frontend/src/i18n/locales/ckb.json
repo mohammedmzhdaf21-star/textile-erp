@@ -772,7 +772,10 @@
     "cuttingPrompt": "کۆدی تۆپی قوماش بنووسە بۆ بڕین",
     "cuttingTaskTitle": "بڕینی تۆپی قوماش بۆ کۆد {{code}}",
     "manualCuttingNote": "ئەرکی بڕینی دەستی لەلایەن بەڕێوەبەر/خاوەن دروست کرا.",
-    "createdTask": "{{title}} بۆ لقی {{branch}} دروست کرا."
+    "createdTask": "{{title}} بۆ لقی {{branch}} دروست کرا.",
+    "loadFailed": "نەتوانرا ئەرکەکان بار بکرێن.",
+    "saveFailed": "نەتوانرا ئەرک پاشەکەوت بکرێت.",
+    "deleteConfirm": "ئەم ئەرکە بسڕدرێتەوە؟"
   },
   "taskEmployee": {
     "title": "ئەرکی کارمەند",
@@ -785,7 +788,9 @@
     "assignedTo": "{{schedule}} · دیاریکراو بۆ {{name}}",
     "autoCompleteHint": "ئەم ئەرکی بڕینە خۆکارانە لە گۆڕینی بەرهەم تەواو دەبێت کاتێک تۆپ دەبڕدرێت بۆ پارچەی ڕەف.",
     "checkedBy": "پشکنین کرا لەلایەن {{name}} لە {{date}}",
-    "checkedDone": "\"{{title}}\" لە لقی {{branch}} وەک تەواو نیشان کرا."
+    "checkedDone": "\"{{title}}\" لە لقی {{branch}} وەک تەواو نیشان کرا.",
+    "loadFailed": "نەتوانرا ئەرکەکانت بار بکرێن.",
+    "saveFailed": "نەتوانرا ئەرک نوێ بکرێتەوە."
   },
   "dataAnalysis": {
     "title": "شیکردنەوەی داتا",

@@ -350,7 +350,7 @@ const ItemConversion: React.FC = () => {
             ? `Cut ${amount.toFixed(2)} meters into a remnant (under 2 m rule).`
             : `Cut ${amount.toFixed(2)} meters into one new piece with code ${rollSource.code} and color ${rollSource.color?.name || rollSource.colorId}.`,
       });
-      const completedTasks = completeCuttingTasksAfterRollToPiece({
+      const completedTasks = await completeCuttingTasksAfterRollToPiece({
         rollItemId: rollSource.id,
         branchId: rollSource.branchId,
         code: rollSource.code,

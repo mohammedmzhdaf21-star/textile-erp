@@ -1,24 +1,38 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { getCurrentUser } from '../lib/auth';
 import { isAutoManagedCuttingTask } from '../lib/cuttingTasks';
+import { BRANCH_CODE_BY_ID } from '../lib/inventoryCodes';
 import {
   branches,
-  completeTask,
   getScheduleLabel,
   getTaskDisplayTitle,
   isTaskComplete,
-  readTasks,
   type BranchCode,
   type BranchTask,
 } from '../lib/taskSettings';
+import { completeTaskApi, fetchTasks, notifyTasksUpdated } from '../lib/tasksApi';
+
+const defaultBranchForUser = (branchIds?: string[]): BranchCode => {
+  if (branchIds?.length) {
+    const code = BRANCH_CODE_BY_ID[branchIds[0]];
+    if (code && branches.includes(code as BranchCode)) {
+      return code as BranchCode;
+    }
+  }
+  return 'A';
+};
 
 const TaskEmployee: React.FC = () => {
   const { t } = useTranslation();
   const user = getCurrentUser();
-  const [selectedBranch, setSelectedBranch] = useState<BranchCode>('A');
-  const [tasks, setTasks] = useState<BranchTask[]>(() => readTasks());
+  const [selectedBranch, setSelectedBranch] = useState<BranchCode>(() =>
+    defaultBranchForUser(user?.branchIds)
+  );
+  const [tasks, setTasks] = useState<BranchTask[]>([]);
+  const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const employeeName = user?.name || user?.email || t('common.employeeRole');
   const employeeEmail = user?.email || employeeName;
@@ -28,6 +42,31 @@ const TaskEmployee: React.FC = () => {
       ? new Date(dateString).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })
       : t('common.notCheckedYet');
 
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const rows = await fetchTasks({ branch: selectedBranch, mine: true });
+      setTasks(rows);
+    } catch (loadError: unknown) {
+      setError(loadError instanceof Error ? loadError.message : t('taskEmployee.loadFailed'));
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedBranch, t]);
+
+  useEffect(() => {
+    void loadData();
+  }, [loadData]);
+
+  useEffect(() => {
+    const onTasksUpdated = () => {
+      void loadData();
+    };
+    window.addEventListener('branch-tasks-updated', onTasksUpdated);
+    return () => window.removeEventListener('branch-tasks-updated', onTasksUpdated);
+  }, [loadData]);
+
   const branchTasks = useMemo(
     () => tasks.filter((task) => task.branch === selectedBranch),
     [selectedBranch, tasks]
@@ -35,24 +74,22 @@ const TaskEmployee: React.FC = () => {
   const openTasks = branchTasks.filter((task) => !isTaskComplete(task));
   const doneTasks = branchTasks.filter(isTaskComplete);
 
-  const refresh = () => setTasks(readTasks());
-
-  useEffect(() => {
-    const onTasksUpdated = () => refresh();
-    window.addEventListener('branch-tasks-updated', onTasksUpdated);
-    return () => window.removeEventListener('branch-tasks-updated', onTasksUpdated);
-  }, []);
-
-  const markDone = (task: BranchTask) => {
+  const markDone = async (task: BranchTask) => {
     const checkedBy = `${employeeName} (${employeeEmail})`;
-    completeTask(task.id, checkedBy);
-    refresh();
-    setMessage(
-      t('taskEmployee.checkedDone', {
-        title: getTaskDisplayTitle(t, task),
-        branch: task.branch,
-      })
-    );
+    setError(null);
+    try {
+      const updated = await completeTaskApi(task.id, checkedBy);
+      setTasks((current) => current.map((item) => (item.id === task.id ? updated : item)));
+      notifyTasksUpdated();
+      setMessage(
+        t('taskEmployee.checkedDone', {
+          title: getTaskDisplayTitle(t, task),
+          branch: task.branch,
+        })
+      );
+    } catch (completeError: unknown) {
+      setError(completeError instanceof Error ? completeError.message : t('taskEmployee.saveFailed'));
+    }
   };
 
   return (
@@ -83,6 +120,7 @@ const TaskEmployee: React.FC = () => {
       </section>
 
       {message && <div className="mt-4 rounded-2xl border border-green-200 bg-green-50 p-4 text-sm text-green-700">{message}</div>}
+      {error && <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>}
 
       <div className="mt-8 grid gap-4 sm:grid-cols-2">
         <div className="rounded-3xl border border-red-200 bg-red-50 p-5">
@@ -97,7 +135,9 @@ const TaskEmployee: React.FC = () => {
 
       <section className="mt-6 rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
         <h3 className="text-xl font-semibold text-black">{t('taskEmployee.checklistTitle', { branch: selectedBranch })}</h3>
-        {branchTasks.length === 0 ? (
+        {loading ? (
+          <p className="mt-4 text-sm text-gray-500">{t('common.loading')}</p>
+        ) : branchTasks.length === 0 ? (
           <div className="mt-4 rounded-2xl bg-gray-50 p-4 text-sm text-gray-600">{t('taskEmployee.noTasks')}</div>
         ) : (
           <div className="mt-4 space-y-3">
@@ -147,7 +187,7 @@ const TaskEmployee: React.FC = () => {
                   {!isAutoManagedCuttingTask(task) && (
                     <button
                       type="button"
-                      onClick={() => markDone(task)}
+                      onClick={() => void markDone(task)}
                       disabled={isTaskComplete(task)}
                       className={`rounded-xl px-4 py-2 text-sm font-semibold ${
                         isTaskComplete(task)
