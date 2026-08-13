@@ -50,6 +50,53 @@ type PendingGroup = {
   entries: PendingLine[];
 };
 
+type RawPendingLine = Omit<PendingLine, "sale" | "item"> & {
+  sale?: PendingCommissionSaleDetail | null;
+  item?: PendingCommissionItemDetail | null;
+};
+
+type RawPendingGroup = Omit<PendingGroup, "entries"> & {
+  entries: RawPendingLine[];
+};
+
+function normalizePendingLine(entry: RawPendingLine): PendingLine {
+  const soldPrice = Number(entry.soldPrice || 0);
+  const quantitySold = Number(entry.quantitySold || 0);
+  const fallbackLineTotal = (soldPrice * quantitySold).toFixed(2);
+
+  const item: PendingCommissionItemDetail = entry.item ?? {
+    description: entry.inventoryItemId || "Sale item",
+    isPlainCloth: false,
+    plainClothName: null,
+    soldAsUnit: "METER",
+    lineTotal: fallbackLineTotal,
+    colorName: null,
+  };
+
+  const sale: PendingCommissionSaleDetail = entry.sale ?? {
+    customerName: "—",
+    customerPhone: "—",
+    totalPrice: item.lineTotal,
+    paymentMethod: "CASH",
+    branchId: "",
+    branchName: "—",
+    notes: null,
+  };
+
+  return {
+    ...entry,
+    sale,
+    item,
+  };
+}
+
+function normalizePendingGroups(groups: RawPendingGroup[]): PendingGroup[] {
+  return groups.map((group) => ({
+    ...group,
+    entries: (group.entries ?? []).map(normalizePendingLine),
+  }));
+}
+
 export default function CommissionPayouts() {
   const { t } = useTranslation();
   const user = getCurrentUser();
@@ -69,8 +116,8 @@ export default function CommissionPayouts() {
     setLoading(true);
     setError(null);
     try {
-      const response = await api.get<{ groups: PendingGroup[] }>("/commissions/pending");
-      setGroups(response.data.groups || []);
+      const response = await api.get<{ groups: RawPendingGroup[] }>("/commissions/pending");
+      setGroups(normalizePendingGroups(response.data.groups || []));
     } catch (loadError: unknown) {
       const msg =
         loadError instanceof Error ? loadError.message : t("commissionPayouts.loadFailed");
