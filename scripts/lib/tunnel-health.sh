@@ -71,8 +71,21 @@ tunnel_recover() {
   local root="${1:-$(tunnel_health_root)}"
   local log_file="${2:-$root/deploy/watchdog.log}"
   local public_health="${3:-${ERP_PUBLIC_URL:-https://erp.kutalimzhda.com}/health}"
+  local cooldown_sec="${TUNNEL_RECOVERY_COOLDOWN_SEC:-90}"
+  local cooldown_file="$root/deploy/last-tunnel-recovery.ts"
 
   tunnel_health_load_env "$root"
+
+  if [[ -f "$cooldown_file" ]]; then
+    local last now
+    last="$(tr -d '[:space:]' < "$cooldown_file" 2>/dev/null || echo 0)"
+    now=$(date +%s)
+    if [[ "$last" =~ ^[0-9]+$ ]] && (( now - last < cooldown_sec )); then
+      printf '%s %s\n' "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" "RECOVER: skipped (cooldown ${cooldown_sec}s)" >>"$log_file"
+      return 0
+    fi
+  fi
+  date +%s > "$cooldown_file"
 
   printf '%s %s\n' "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" "RECOVER: restarting tunnel (1033 prevention)" >>"$log_file"
 

@@ -24,40 +24,28 @@ npx prisma generate
 echo "==> Building frontend"
 npm run build:frontend
 
-echo "==> Restarting app"
-if command -v pm2 >/dev/null 2>&1 && pm2 describe textile-erp >/dev/null 2>&1; then
-  pm2 restart textile-erp
-  echo "    PM2 restarted textile-erp"
-elif npx pm2 describe textile-erp >/dev/null 2>&1; then
-  npx pm2 restart textile-erp
-  echo "    PM2 restarted textile-erp"
-elif systemctl --user is-active textile-erp.service >/dev/null 2>&1; then
-  systemctl --user restart textile-erp.service
-  echo "    systemd restarted textile-erp.service"
-else
-  echo "WARN: Could not find PM2 or systemd service. Start manually:"
-  echo "      npm run start:prod"
-fi
-
-sleep 2
+echo "==> Ensuring 24/7 stack (app + tunnel + watchdog + keepalive)"
+bash "$ROOT/scripts/ensure-24-7.sh"
 
 echo ""
 echo "==> Verifying deploy"
 VERSION_CODE=$(curl -s -o /dev/null -w '%{http_code}' "http://localhost:${PORT}/api/version" || echo "000")
 PLAIN_CODE=$(curl -s -o /dev/null -w '%{http_code}' "http://localhost:${PORT}/api/commissions/plain-cloth" || echo "000")
+PUBLIC_CODE=$(curl -s -o /dev/null -w '%{http_code}' "${ERP_PUBLIC_URL:-https://erp.kutalimzhda.com}/health" || echo "000")
 HEALTH=$(curl -s "http://localhost:${PORT}/health" || echo "{}")
 
 echo "  /api/version HTTP ${VERSION_CODE} (expect 200)"
 echo "  /api/commissions/plain-cloth HTTP ${PLAIN_CODE} (expect 401 without login)"
+echo "  public /health HTTP ${PUBLIC_CODE} (expect 200)"
 echo "  /health: ${HEALTH}"
 
-if [[ "${VERSION_CODE}" == "200" ]]; then
+if [[ "${VERSION_CODE}" == "200" && "${PUBLIC_CODE}" == "200" ]]; then
   echo ""
-  echo "Deploy OK — plain cloth API is available."
-  echo "Hard-refresh your browser (Ctrl+Shift+R), then click Reconnect on Plain Cloth Pricing."
+  echo "Deploy OK — app and public URL are healthy."
+  echo "Hard-refresh your browser (Ctrl+Shift+R) if needed."
 else
   echo ""
-  echo "WARN: Deploy may be incomplete. /api/version did not return 200."
-  echo "Try: pm2 logs textile-erp --lines 50"
+  echo "WARN: Deploy verification failed."
+  echo "Try: bash scripts/ensure-24-7.sh && npx pm2 logs textile-tunnel --lines 30"
   exit 1
 fi

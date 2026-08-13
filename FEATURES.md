@@ -132,10 +132,11 @@ Deploy and develop from `main` so nothing is lost when starting a new session or
 
 ## Production & Deploy
 
-- **24/7 stack:** PM2 + Cloudflare named tunnel (`https://erp.kutalimzhda.com`)
-- One-command deploy: `npm run deploy` (pull main, migrate, build frontend, restart PM2)
-- Health check: `GET /health` (includes feature flags)
-- Version check: `GET /api/version`
+- **24/7 autonomous stack:** app + tunnel + keepalive + watchdog + recovery (PM2)
+- **Self-healing:** auto-fixes Cloudflare Error 1033 within ~30 seconds — no manual steps
+- One-command deploy: `npm run deploy` (restarts full stack + verifies public URL)
+- Health check: `GET /health` | Version: `GET /api/version`
+- If anything breaks: `npm run ensure:24-7`
 
 ---
 

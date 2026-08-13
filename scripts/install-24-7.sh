@@ -47,6 +47,8 @@ chmod +x \
   "$ROOT/scripts/tunnel-keepalive.sh" \
   "$ROOT/scripts/ensure-tunnel-healthy.sh" \
   "$ROOT/scripts/ensure-tunnel-loop.sh" \
+  "$ROOT/scripts/ensure-24-7.sh" \
+  "$ROOT/scripts/pm2-boot.sh" \
   "$ROOT/scripts/setup-custom-domain.sh"
 
 if [[ -n "${CLOUDFLARE_API_TOKEN:-}" && -n "${CLOUDFLARE_ZONE_ID:-}" ]]; then
@@ -75,17 +77,18 @@ if [[ "$use_systemd" == "true" ]]; then
   MANAGER="systemd"
 else
   echo "==> Installing PM2 process manager (auto-restart 24/7)"
-  npx pm2 delete textile-erp textile-tunnel textile-tunnel-named textile-watchdog 2>/dev/null || true
-  npx pm2 start "$ROOT/ecosystem.config.cjs"
-  npx pm2 save
+  bash "$ROOT/scripts/ensure-24-7.sh"
 
   if command -v crontab >/dev/null 2>&1; then
-    CRON_REBOOT="@reboot cd $ROOT && npx pm2 resurrect >> $DEPLOY_DIR/pm2-reboot.log 2>&1"
+    CRON_REBOOT="@reboot bash $ROOT/scripts/pm2-boot.sh"
     CRON_TUNNEL="*/2 * * * * flock -n $DEPLOY_DIR/tunnel-recovery.lock bash $ROOT/scripts/ensure-tunnel-healthy.sh >> $DEPLOY_DIR/tunnel-recovery.log 2>&1"
-    (crontab -l 2>/dev/null | grep -v "pm2 resurrect" | grep -v "ensure-tunnel-healthy" || true
+    (crontab -l 2>/dev/null | grep -v "pm2-boot.sh" | grep -v "pm2 resurrect" | grep -v "ensure-tunnel-healthy" || true
      echo "$CRON_REBOOT"
      echo "$CRON_TUNNEL") | crontab -
-    echo "==> Added @reboot PM2 + 2-minute tunnel recovery cron"
+    echo "==> Added @reboot pm2-boot + 2-minute tunnel recovery cron"
+  else
+    echo "WARN: crontab not available — PM2 recovery loop handles tunnel health."
+    echo "      After server reboot run: npm run ensure:24-7"
   fi
 
   MANAGER="pm2"

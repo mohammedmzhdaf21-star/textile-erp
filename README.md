@@ -96,17 +96,37 @@ This will:
 
 ### Permanent fix for Cloudflare Error 1033
 
-Production runs **four layers** so the tunnel never stays down:
+You should **never need to fix 1033 manually again**. Production is fully autonomous:
 
 | Layer | What it does |
 |-------|----------------|
-| **QUIC tunnel** | 4 HA connections to Cloudflare edge (not a single HTTP/2 link) |
-| **Keepalive** | Pings public URL every 30s so connections never idle-timeout |
-| **Watchdog (PM2)** | Every 10s: if public fails or HA connections drop below 2 → restart tunnel |
-| **Cron backup** | Every 2 min: same recovery even if PM2 watchdog stops |
-| **Scheduled refresh** | Tunnel restarts every 2 hours before stale sessions drop |
+| **QUIC tunnel** | 4 HA connections to Cloudflare edge |
+| **Keepalive** | Pings public URL every 30s (prevents idle timeout) |
+| **Watchdog** | Every 10s: auto-restart tunnel if public fails |
+| **Recovery loop** | Every 2 min backup check |
+| **Scheduled refresh** | Tunnel restarts every 2 hours proactively |
+| **`npm run deploy`** | Restarts the **full** 24/7 stack and verifies public URL |
+| **`npm run ensure:24-7`** | One command to fix everything if needed |
 
-If you ever see 1033, wait 10–30 seconds — it should recover automatically. Manual fix: `npx pm2 restart textile-tunnel`.
+**One-time server setup** (if not done yet):
+
+```bash
+npm run install:24-7
+```
+
+**Every deploy** (already runs `ensure:24-7` automatically):
+
+```bash
+npm run deploy
+```
+
+If the site ever looks down, wait 30 seconds first. Only if still broken:
+
+```bash
+npm run ensure:24-7
+```
+
+That single command starts all 5 PM2 processes, recovers the tunnel, and verifies `https://erp.kutalimzhda.com/health` returns 200.
 
 **Useful commands**
 
