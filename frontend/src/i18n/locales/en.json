@@ -142,6 +142,7 @@
   },
   "nav": {
     "dashboard": "Dashboard",
+    "pricing": "Pricing",
     "itemPricing": "Item Pricing",
     "commission": "Commission",
     "salesCommission": "Sales Commission",

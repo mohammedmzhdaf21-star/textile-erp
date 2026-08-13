@@ -15,16 +15,23 @@ type NavItem = {
 };
 
 type NavGroup = {
+  id: string;
   labelKey: string;
   items: NavItem[];
 };
 
-const COMMISSION_ROUTES = ['/sales-commission', '/commission-payouts', '/trustee-commission'];
-
 const navigation: Array<NavItem | NavGroup> = [
   { to: '/dashboard', labelKey: 'nav.dashboard', end: true },
-  { to: '/item-pricing', labelKey: 'nav.itemPricing', end: true, adminOnly: true },
   {
+    id: 'pricing',
+    labelKey: 'nav.pricing',
+    items: [
+      { to: '/item-pricing', labelKey: 'nav.itemPricing', end: true, adminOnly: true },
+      { to: '/plain-cloth', labelKey: 'nav.plainClothPricing', end: true, adminOnly: true },
+    ],
+  },
+  {
+    id: 'commission',
     labelKey: 'nav.commission',
     items: [
       { to: '/sales-commission', labelKey: 'nav.salesCommission', end: true, adminOnly: true },
@@ -35,7 +42,6 @@ const navigation: Array<NavItem | NavGroup> = [
   { to: '/inventory', labelKey: 'nav.inventory', end: true },
   { to: '/inventory/convert', labelKey: 'nav.itemConversion', end: true },
   { to: '/sales', labelKey: 'nav.sales', end: true },
-  { to: '/plain-cloth', labelKey: 'nav.plainClothPricing', end: true, adminOnly: true },
   { to: '/sales/daily', labelKey: 'nav.dailySales', end: true },
   { to: '/sales/history', labelKey: 'nav.historySales', end: true },
   { to: '/sales/owed', labelKey: 'nav.owedMoney', end: true },
@@ -51,6 +57,20 @@ function isNavGroup(entry: NavItem | NavGroup): entry is NavGroup {
   return 'items' in entry;
 }
 
+function isGroupActive(pathname: string, group: NavGroup) {
+  return group.items.some((item) => pathname.startsWith(item.to));
+}
+
+function initialExpandedGroups(pathname: string) {
+  const expanded: Record<string, boolean> = {};
+  for (const entry of navigation) {
+    if (isNavGroup(entry) && isGroupActive(pathname, entry)) {
+      expanded[entry.id] = true;
+    }
+  }
+  return expanded;
+}
+
 type SidebarProps = {
   isOpen: boolean;
   onNavigate?: () => void;
@@ -61,8 +81,8 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onNavigate }) => {
   const location = useLocation();
   const user = getCurrentUser();
   const [openTaskCount, setOpenTaskCount] = useState(() => countOpenTasks());
-  const [commissionExpanded, setCommissionExpanded] = useState(() =>
-    COMMISSION_ROUTES.some((route) => location.pathname.startsWith(route))
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>(() =>
+    initialExpandedGroups(location.pathname)
   );
 
   const canSeeNavItem = (nav: NavItem) => {
@@ -83,9 +103,15 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onNavigate }) => {
   }, [user]);
 
   useEffect(() => {
-    if (COMMISSION_ROUTES.some((route) => location.pathname.startsWith(route))) {
-      setCommissionExpanded(true);
-    }
+    setExpandedGroups((current) => {
+      const next = { ...current };
+      for (const entry of navigation) {
+        if (isNavGroup(entry) && isGroupActive(location.pathname, entry)) {
+          next[entry.id] = true;
+        }
+      }
+      return next;
+    });
   }, [location.pathname]);
 
   useEffect(() => {
@@ -101,9 +127,9 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onNavigate }) => {
     }
   };
 
-  const commissionGroupActive = COMMISSION_ROUTES.some((route) =>
-    location.pathname.startsWith(route)
-  );
+  const toggleGroup = (groupId: string) => {
+    setExpandedGroups((current) => ({ ...current, [groupId]: !current[groupId] }));
+  };
 
   return (
     <aside
@@ -115,31 +141,34 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onNavigate }) => {
       <nav className="sidebar-panel__nav">
         {visibleNavigation.map((nav, index) => {
           if (isNavGroup(nav)) {
+            const groupExpanded = Boolean(expandedGroups[nav.id]);
+            const groupActive = isGroupActive(location.pathname, nav);
+
             return (
               <div
-                key={nav.labelKey}
+                key={nav.id}
                 style={{ transitionDelay: isOpen ? `${index * 35}ms` : '0ms' }}
                 className="sidebar-nav-item"
               >
                 <button
                   type="button"
-                  onClick={() => setCommissionExpanded((open) => !open)}
-                  aria-expanded={commissionExpanded}
+                  onClick={() => toggleGroup(nav.id)}
+                  aria-expanded={groupExpanded}
                   className={`flex w-full items-center justify-between rounded-md px-3 py-2 text-left transition-colors ${
-                    commissionGroupActive
+                    groupActive
                       ? 'bg-gray-900 text-white font-semibold'
                       : 'text-gray-700 hover:bg-gray-100'
                   }`}
                 >
                   <span>{t(nav.labelKey)}</span>
                   <span
-                    className={`text-xs transition-transform ${commissionExpanded ? 'rotate-180' : ''}`}
+                    className={`text-xs transition-transform ${groupExpanded ? 'rotate-180' : ''}`}
                     aria-hidden="true"
                   >
                     ▾
                   </span>
                 </button>
-                {commissionExpanded && (
+                {groupExpanded && (
                   <div className="mt-1 space-y-1 border-l-2 border-gray-200 pl-2 ml-2">
                     {nav.items.map((item) => (
                       <NavLink
