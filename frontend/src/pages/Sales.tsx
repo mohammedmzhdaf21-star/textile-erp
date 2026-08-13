@@ -40,7 +40,7 @@ type InventorySaleLine = {
   colorId: string;
   soldAsUnit: 'METER' | 'PIECE';
   quantity: number;
-  price: number;
+  linePrice: number;
   sourceItemId?: string | null;
   code?: number;
   colorName?: string;
@@ -79,12 +79,6 @@ type InventoryLookupItem = {
 
 import type { TFunction } from 'i18next';
 
-const packagePriceLabel = (t: TFunction, isPiecePackage?: boolean, mode?: PackageSaleMode) => {
-  if (isPiecePackage && mode === 'FULL') return t('sales.pricePerPackage');
-  if (isPiecePackage && mode === 'PARTIAL') return t('sales.salePriceTotal');
-  return t('sales.unitPrice');
-};
-
 const branchOptions = ['A', 'B', 'C', 'E', 'F'];
 // Map UI branch codes to backend IDs (match seeded branches)
 const BRANCH_MAP: Record<string, string> = {
@@ -114,10 +108,13 @@ const buildInitialPackageSelection = (components: PackageComponent[]): PackageCo
 const plainClothLinePriceShorthand = (pricePerM: number, meters: number) =>
   toPriceInputNumber(pricePerM * meters);
 
-const plainClothPricePerMeter = (linePriceShorthand: number, meters: number) => {
-  if (meters <= 0) return 0;
-  return parsePriceInput(linePriceShorthand) / meters;
+const lineUnitPrice = (linePriceShorthand: number, quantity: number) => {
+  if (quantity <= 0) return 0;
+  return parsePriceInput(linePriceShorthand) / quantity;
 };
+
+const plainClothPricePerMeter = (linePriceShorthand: number, meters: number) =>
+  lineUnitPrice(linePriceShorthand, meters);
 
 const SalesView: React.FC = () => {
   const { t } = useTranslation();
@@ -130,7 +127,7 @@ const SalesView: React.FC = () => {
   const [amountPaid, setAmountPaid] = useState('0');
   const [plainCloth, setPlainCloth] = useState({ clothName: '', meters: 1, linePrice: 0 });
   const [plainClothTypes, setPlainClothTypes] = useState<PlainClothType[]>([]);
-  const [scanState, setScanState] = useState({ inventoryItemId: '', sourceBranch: branch, amount: 1, price: 15 });
+  const [scanState, setScanState] = useState({ inventoryItemId: '', sourceBranch: branch, amount: 1, linePrice: 15 });
   const [detectedScanItem, setDetectedScanItem] = useState<InventoryLookupItem | null>(null);
   const [packageSaleMode, setPackageSaleMode] = useState<PackageSaleMode>('FULL');
   const [packageComponentsSold, setPackageComponentsSold] = useState<PackageComponentSold[]>([]);
@@ -213,7 +210,7 @@ const SalesView: React.FC = () => {
   ]);
 
   const lineTotal = (line: SaleLine) => {
-    if (line.type === 'inventory') return line.quantity * parsePriceInput(line.price);
+    if (line.type === 'inventory') return parsePriceInput(line.linePrice);
     return parsePriceInput(line.linePrice);
   };
 
@@ -251,10 +248,16 @@ const SalesView: React.FC = () => {
       const components = parsePackageComponents(item.packageComponents);
       const savedPrice = getItemMinimumPrice(item.id);
       if (savedPrice) {
-        setScanState((current) => ({
-          ...current,
-          price: Math.max(current.price, toPriceInputNumber(savedPrice.minimumPrice)),
-        }));
+        setScanState((current) => {
+          const amount = Math.max(current.amount || 1, 1);
+          return {
+            ...current,
+            linePrice: Math.max(
+              current.linePrice,
+              toPriceInputNumber(savedPrice.minimumPrice * amount)
+            ),
+          };
+        });
         setMinimumPriceMessage(
           t('sales.minimumPriceFor', {
             id: item.id,
@@ -328,7 +331,7 @@ const SalesView: React.FC = () => {
     if (!inventoryItemId) {
       return alert(t('sales.enterItemId'));
     }
-    if (scanState.price <= 0) {
+    if (scanState.linePrice <= 0) {
       return alert(t('sales.enterValidPrice'));
     }
 
@@ -336,12 +339,11 @@ const SalesView: React.FC = () => {
       const item = detectedScanItem?.id === inventoryItemId ? detectedScanItem : await detectScanItem();
       if (!item) return;
       const soldAsUnit = soldAsUnitForItem(item);
-      const savedPrice = getItemMinimumPrice(item.id);
       const components = parsePackageComponents(item.packageComponents);
       const isPiecePackage = Boolean(item.isPiecePackage && components.length > 0);
 
       let quantity = soldAsUnit === 'PIECE' ? Math.floor(scanState.amount) : scanState.amount;
-      const price = scanState.price;
+      const linePrice = scanState.linePrice;
       let description = t('sales.descriptionInventory', { type: item.type, branch: scanState.sourceBranch });
       let packageSummary = '';
       let linePackageMode: PackageSaleMode | undefined;
@@ -370,10 +372,6 @@ const SalesView: React.FC = () => {
         return alert(t('sales.enterQuantityOrMeters'));
       }
 
-      if (savedPrice && parsePriceInput(price) < savedPrice.minimumPrice) {
-        return alert(t('sales.minimumPriceAlert', { price: formatCurrency(savedPrice.minimumPrice) }));
-      }
-
       setCart((current) => [
         ...current,
         {
@@ -384,7 +382,7 @@ const SalesView: React.FC = () => {
           colorId: item.colorId,
           soldAsUnit,
           quantity,
-          price,
+          linePrice,
           sourceItemId: item.sourceItemId,
           code: item.code,
           colorName: item.color?.name,
@@ -582,7 +580,7 @@ const SalesView: React.FC = () => {
             colorId: line.colorId,
             soldAsUnit: line.soldAsUnit,
             quantitySold: line.quantity,
-            soldPrice: parsePriceInput(line.price),
+            soldPrice: lineUnitPrice(line.linePrice, line.quantity),
             lineDiscount: 0,
           };
           if (line.isPiecePackage) {
@@ -799,16 +797,19 @@ const SalesView: React.FC = () => {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">
-                  {packagePriceLabel(t, detectedScanItem?.isPiecePackage, packageSaleMode)}
+                  {detectedScanItem?.isPiecePackage && packageSaleMode === 'PARTIAL'
+                    ? t('sales.salePriceTotal')
+                    : t('sales.scanLinePrice')}
                 </label>
                 <input
                   type="number"
                   min="0.01"
                   step="0.01"
-                  value={scanState.price}
-                  onChange={(e) => setScanState((s) => ({ ...s, price: Number(e.target.value) }))}
+                  value={scanState.linePrice}
+                  onChange={(e) => setScanState((s) => ({ ...s, linePrice: Number(e.target.value) }))}
                   className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
                 />
+                <p className="mt-1 text-xs text-gray-500">{t('currency.thousandsHint')}</p>
               </div>
             </div>
 
@@ -1196,7 +1197,7 @@ const SalesView: React.FC = () => {
                       {line.type === 'inventory'
                         ? line.isPiecePackage
                           ? `${line.description}: ${line.packageSummary ?? 'package sale'} — ${formatCurrency(lineTotal(line))}`
-                          : `${line.description}: ${line.quantity} ${line.soldAsUnit === 'PIECE' ? 'pieces' : 'meters'} @ ${formatCurrency(parsePriceInput(line.price))}/unit`
+                          : `${line.description}: ${line.quantity} ${line.soldAsUnit === 'PIECE' ? 'pieces' : 'meters'} — ${formatCurrency(parsePriceInput(line.linePrice))} (${formatCurrency(lineUnitPrice(line.linePrice, line.quantity))}/${line.soldAsUnit === 'PIECE' ? 'pc' : 'm'})`
                         : `${line.meters} meters — ${formatCurrency(parsePriceInput(line.linePrice))} (${formatCurrency(plainClothPricePerMeter(line.linePrice, line.meters))}/m)`}
                     </p>
                   </div>
