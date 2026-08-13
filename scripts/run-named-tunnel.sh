@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Permanent Cloudflare named tunnel (erp.kutalimzhda.com).
-# Requires CLOUDFLARE_TUNNEL_TOKEN in .env — never use the ephemeral quick tunnel in production.
+# Uses QUIC with 4 HA connections + fixed metrics port for health monitoring.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -16,12 +16,12 @@ fi
 TOKEN="${CLOUDFLARE_TUNNEL_TOKEN:-}"
 PORT="${PORT:-3000}"
 PUBLIC_URL="${ERP_PUBLIC_URL:-https://erp.kutalimzhda.com}"
-# HTTP/2 is more stable than QUIC on cloud VMs (avoids UDP buffer / idle timeout 1033 errors).
-TUNNEL_PROTOCOL="${CLOUDFLARE_TUNNEL_PROTOCOL:-http2}"
+METRICS_PORT="${TUNNEL_METRICS_PORT:-20241}"
+# QUIC opens 4 edge connections (more resilient than HTTP/2's single connection).
+TUNNEL_PROTOCOL="${CLOUDFLARE_TUNNEL_PROTOCOL:-quic}"
 
 if [[ -z "$TOKEN" ]]; then
   echo "ERROR: CLOUDFLARE_TUNNEL_TOKEN is missing from .env"
-  echo "Create a named tunnel in Cloudflare Zero Trust and paste the run token."
   exit 1
 fi
 
@@ -30,12 +30,18 @@ if ! command -v cloudflared >/dev/null 2>&1; then
   exit 1
 fi
 
-# Larger UDP receive buffer reduces QUIC instability when protocol is quic.
+# Reduce QUIC drops on cloud VMs (Cloudflare docs recommend larger UDP buffers).
 if [[ -w /proc/sys/net/core/rmem_max ]]; then
   echo 8388608 > /proc/sys/net/core/rmem_max 2>/dev/null || true
+  echo 8388608 > /proc/sys/net/core/wmem_max 2>/dev/null || true
 fi
 if command -v sysctl >/dev/null 2>&1; then
-  sysctl -w net.core.rmem_max=8388608 net.core.rmem_default=8388608 2>/dev/null || true
+  sysctl -w \
+    net.core.rmem_max=8388608 \
+    net.core.rmem_default=8388608 \
+    net.core.wmem_max=8388608 \
+    net.core.wmem_default=8388608 \
+    2>/dev/null || true
 fi
 
 echo "==> Waiting for app on http://127.0.0.1:${PORT}/health"
@@ -53,8 +59,14 @@ fi
 
 mkdir -p "$ROOT/deploy"
 printf '%s\n' "$PUBLIC_URL" > "$ROOT/deploy/public-url.txt"
+printf '%s\n' "$METRICS_PORT" > "$ROOT/deploy/tunnel-metrics.port"
 
 echo "==> Starting named Cloudflare tunnel"
 echo "    Public URL: $PUBLIC_URL"
-echo "    Protocol:   $TUNNEL_PROTOCOL"
-exec cloudflared tunnel run --token "$TOKEN" --protocol "$TUNNEL_PROTOCOL"
+echo "    Protocol:   $TUNNEL_PROTOCOL (4 HA connections)"
+echo "    Metrics:    localhost:${METRICS_PORT}/metrics"
+
+exec cloudflared tunnel run \
+  --token "$TOKEN" \
+  --protocol "$TUNNEL_PROTOCOL" \
+  --metrics "127.0.0.1:${METRICS_PORT}"

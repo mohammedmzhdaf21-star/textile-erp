@@ -44,6 +44,8 @@ chmod +x \
   "$ROOT/scripts/start-production.sh" \
   "$ROOT/scripts/run-named-tunnel.sh" \
   "$ROOT/scripts/tunnel-watchdog.sh" \
+  "$ROOT/scripts/tunnel-keepalive.sh" \
+  "$ROOT/scripts/ensure-tunnel-healthy.sh" \
   "$ROOT/scripts/setup-custom-domain.sh"
 
 if [[ -n "${CLOUDFLARE_API_TOKEN:-}" && -n "${CLOUDFLARE_ZONE_ID:-}" ]]; then
@@ -77,9 +79,12 @@ else
   npx pm2 save
 
   if command -v crontab >/dev/null 2>&1; then
-    CRON_CMD="@reboot cd $ROOT && npx pm2 resurrect >> $DEPLOY_DIR/pm2-reboot.log 2>&1"
-    (crontab -l 2>/dev/null | grep -v "pm2 resurrect" || true; echo "$CRON_CMD") | crontab -
-    echo "==> Added @reboot cron job for PM2"
+    CRON_REBOOT="@reboot cd $ROOT && npx pm2 resurrect >> $DEPLOY_DIR/pm2-reboot.log 2>&1"
+    CRON_TUNNEL="*/2 * * * * flock -n $DEPLOY_DIR/tunnel-recovery.lock bash $ROOT/scripts/ensure-tunnel-healthy.sh >> $DEPLOY_DIR/tunnel-recovery.log 2>&1"
+    (crontab -l 2>/dev/null | grep -v "pm2 resurrect" | grep -v "ensure-tunnel-healthy" || true
+     echo "$CRON_REBOOT"
+     echo "$CRON_TUNNEL") | crontab -
+    echo "==> Added @reboot PM2 + 2-minute tunnel recovery cron"
   fi
 
   MANAGER="pm2"
@@ -100,6 +105,7 @@ if [[ "$MANAGER" == "pm2" ]]; then
   echo "  App logs:       npx pm2 logs textile-erp"
   echo "  Tunnel logs:    npx pm2 logs textile-tunnel"
   echo "  Watchdog logs:  tail -f deploy/watchdog.log"
+  echo "  Recovery logs:  tail -f deploy/tunnel-recovery.log"
   echo "  Restart all:    npx pm2 restart all"
 else
   echo "  App status:     systemctl --user status textile-erp"

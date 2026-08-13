@@ -11,3 +11,4 @@ deploy/public-url.history
 deploy/tunnel.log
 deploy/watchdog.log
 deploy/pm2-reboot.log
+deploy/tunnel-metrics.port
