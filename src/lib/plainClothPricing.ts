@@ -47,6 +47,16 @@ export async function listPlainClothPricing(options?: { includeInactive?: boolea
   return rows.map(toRecord);
 }
 
+export async function getPlainClothPricingByName(name: string) {
+  const trimmed = name?.trim();
+  if (!trimmed) return null;
+
+  const row = await prisma.plainClothPricing.findFirst({
+    where: { name: { equals: trimmed, mode: 'insensitive' }, isActive: true },
+  });
+  return row ? toRecord(row) : null;
+}
+
 export async function createPlainClothPricing(input: { name: string; pricePerM: number }) {
   const name = input.name?.trim();
   if (!name) throw new Error('Plain cloth name is required');

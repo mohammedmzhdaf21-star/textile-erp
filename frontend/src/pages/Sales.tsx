@@ -55,7 +55,7 @@ type PlainClothSaleLine = {
   type: 'plain';
   clothName: string;
   meters: number;
-  pricePerMeter: number;
+  linePrice: number;
 };
 
 type SaleLine = InventorySaleLine | PlainClothSaleLine;
@@ -111,6 +111,14 @@ const amountLabelForUnit = (
 const buildInitialPackageSelection = (components: PackageComponent[]): PackageComponentSold[] =>
   components.map((component) => ({ name: component.name, quantity: 0 }));
 
+const plainClothLinePriceShorthand = (pricePerM: number, meters: number) =>
+  toPriceInputNumber(pricePerM * meters);
+
+const plainClothPricePerMeter = (linePriceShorthand: number, meters: number) => {
+  if (meters <= 0) return 0;
+  return parsePriceInput(linePriceShorthand) / meters;
+};
+
 const SalesView: React.FC = () => {
   const { t } = useTranslation();
   const [branch, setBranch] = useState<string>('A');
@@ -120,7 +128,7 @@ const SalesView: React.FC = () => {
   const [paymentStatus, setPaymentStatus] = useState<'FULL' | 'PARTIAL'>('FULL');
   const [paymentChannel, setPaymentChannel] = useState<SalePaymentChannel>('CASH');
   const [amountPaid, setAmountPaid] = useState('0');
-  const [plainCloth, setPlainCloth] = useState({ clothName: '', meters: 1, pricePerMeter: 0 });
+  const [plainCloth, setPlainCloth] = useState({ clothName: '', meters: 1, linePrice: 0 });
   const [plainClothTypes, setPlainClothTypes] = useState<PlainClothType[]>([]);
   const [scanState, setScanState] = useState({ inventoryItemId: '', sourceBranch: branch, amount: 1, price: 15 });
   const [detectedScanItem, setDetectedScanItem] = useState<InventoryLookupItem | null>(null);
@@ -148,10 +156,10 @@ const SalesView: React.FC = () => {
           setPlainCloth((current) => ({
             ...current,
             clothName: current.clothName || items[0].name,
-            pricePerMeter:
-              current.pricePerMeter > 0
-                ? current.pricePerMeter
-                : toPriceInputNumber(items[0].pricePerM),
+            linePrice:
+              current.linePrice > 0
+                ? current.linePrice
+                : plainClothLinePriceShorthand(items[0].pricePerM, current.meters || 1),
           }));
         }
       })
@@ -163,7 +171,9 @@ const SalesView: React.FC = () => {
     setPlainCloth((current) => ({
       ...current,
       clothName,
-      pricePerMeter: selected ? toPriceInputNumber(selected.pricePerM) : current.pricePerMeter,
+      linePrice: selected
+        ? plainClothLinePriceShorthand(selected.pricePerM, current.meters)
+        : current.linePrice,
     }));
   };
 
@@ -204,7 +214,7 @@ const SalesView: React.FC = () => {
 
   const lineTotal = (line: SaleLine) => {
     if (line.type === 'inventory') return line.quantity * parsePriceInput(line.price);
-    return line.meters * parsePriceInput(line.pricePerMeter);
+    return parsePriceInput(line.linePrice);
   };
 
   const saleTotal = useMemo(
@@ -219,7 +229,7 @@ const SalesView: React.FC = () => {
 
   const addPlainClothLine = () => {
     if (!plainCloth.clothName.trim()) return alert(t('plainClothPricing.enterName'));
-    if (plainCloth.meters <= 0 || plainCloth.pricePerMeter <= 0) {
+    if (plainCloth.meters <= 0 || plainCloth.linePrice <= 0) {
       return alert(t('sales.enterValidPlainCloth'));
     }
     setCart((current) => [
@@ -228,8 +238,7 @@ const SalesView: React.FC = () => {
         type: 'plain',
         clothName: plainCloth.clothName.trim(),
         meters: plainCloth.meters,
-        // Store shorthand like inventory line.price; parsePriceInput runs at display/submit time.
-        pricePerMeter: plainCloth.pricePerMeter,
+        linePrice: plainCloth.linePrice,
       },
     ]);
   };
@@ -587,12 +596,13 @@ const SalesView: React.FC = () => {
           }
           resolvedItems.push(payload);
         } else {
+          const soldPricePerMeter = plainClothPricePerMeter(line.linePrice, line.meters);
           resolvedItems.push({
             inventoryItemId: undefined,
             colorId: 'PLAIN',
             soldAsUnit: 'METER',
             quantitySold: line.meters,
-            soldPrice: parsePriceInput(line.pricePerMeter),
+            soldPrice: soldPricePerMeter,
             lineDiscount: 0,
             plainClothName: line.clothName,
             isPlainCloth: true,
@@ -1043,13 +1053,13 @@ const SalesView: React.FC = () => {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700">{t('sales.pricePerMeter')}</label>
+                <label className="block text-sm font-medium text-gray-700">{t('sales.plainClothLinePrice')}</label>
                 <input
                   type="number"
                   min="0"
                   step="1"
-                  value={plainCloth.pricePerMeter}
-                  onChange={(e) => setPlainCloth((current) => ({ ...current, pricePerMeter: Number(e.target.value) }))}
+                  value={plainCloth.linePrice}
+                  onChange={(e) => setPlainCloth((current) => ({ ...current, linePrice: Number(e.target.value) }))}
                   className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
                 />
                 <p className="mt-1 text-xs text-gray-500">{t('currency.thousandsHint')}</p>
@@ -1187,7 +1197,7 @@ const SalesView: React.FC = () => {
                         ? line.isPiecePackage
                           ? `${line.description}: ${line.packageSummary ?? 'package sale'} — ${formatCurrency(lineTotal(line))}`
                           : `${line.description}: ${line.quantity} ${line.soldAsUnit === 'PIECE' ? 'pieces' : 'meters'} @ ${formatCurrency(parsePriceInput(line.price))}/unit`
-                        : `${line.meters} meters @ ${formatCurrency(parsePriceInput(line.pricePerMeter))}/m`}
+                        : `${line.meters} meters — ${formatCurrency(parsePriceInput(line.linePrice))} (${formatCurrency(plainClothPricePerMeter(line.linePrice, line.meters))}/m)`}
                     </p>
                   </div>
                   <button

@@ -370,6 +370,8 @@ export async function createSale(
         inventoryItemId: item.inventoryItemId,
         soldPrice: item.soldPrice,
         quantitySold: item.quantitySold,
+        isPlainCloth: item.isPlainCloth,
+        plainClothName: item.plainClothName,
       });
     }
 
@@ -650,6 +652,8 @@ export async function processExchange(
         inventoryItemId: item.inventoryItemId,
         soldPrice: item.soldPrice,
         quantitySold: item.quantitySold,
+        isPlainCloth: item.isPlainCloth,
+        plainClothName: item.plainClothName,
       });
     }
 

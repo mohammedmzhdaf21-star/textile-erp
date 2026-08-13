@@ -5,6 +5,7 @@ import {
   getItemMinimumPrice,
   getItemMinimumPrices,
 } from './commissionSettings';
+import { getPlainClothPricingByName } from './plainClothPricing';
 
 const PRICE_EPS = 0.001;
 
@@ -34,17 +35,28 @@ export async function recordCommissionForSaleItem(
     inventoryItemId?: string | null;
     soldPrice: number;
     quantitySold: number;
+    isPlainCloth?: boolean;
+    plainClothName?: string | null;
   }
 ) {
-  if (!params.inventoryItemId) return null;
+  let minimumPrice: number;
 
-  const minimum = await getItemMinimumPrice(params.inventoryItemId);
-  if (!minimum) return null;
+  if (params.isPlainCloth && params.plainClothName) {
+    const plainCloth = await getPlainClothPricingByName(params.plainClothName);
+    if (!plainCloth) return null;
+    minimumPrice = plainCloth.pricePerM;
+  } else {
+    if (!params.inventoryItemId) return null;
+
+    const minimum = await getItemMinimumPrice(params.inventoryItemId);
+    if (!minimum) return null;
+    minimumPrice = minimum.minimumPrice;
+  }
 
   const rate = await getCommissionRate();
   const commissionAmount = calculateLineCommission(
     params.soldPrice,
-    minimum.minimumPrice,
+    minimumPrice,
     params.quantitySold,
     rate.ratePercent,
     rate.baseAmountPerUnit
@@ -57,9 +69,9 @@ export async function recordCommissionForSaleItem(
       employeeId: params.employeeId,
       saleId: params.saleId,
       saleItemId: params.saleItemId,
-      inventoryItemId: params.inventoryItemId,
+      inventoryItemId: params.inventoryItemId ?? null,
       soldPrice: new Prisma.Decimal(params.soldPrice.toFixed(2)),
-      minimumPrice: new Prisma.Decimal(minimum.minimumPrice.toFixed(2)),
+      minimumPrice: new Prisma.Decimal(minimumPrice.toFixed(2)),
       quantitySold: new Prisma.Decimal(params.quantitySold.toFixed(2)),
       ratePercent: new Prisma.Decimal(rate.ratePercent.toFixed(2)),
       commissionAmount: new Prisma.Decimal(commissionAmount.toFixed(2)),
@@ -282,21 +294,27 @@ export async function backfillCommissionEntries() {
 
   for (const sale of sales) {
     for (const item of sale.items) {
-      if (!item.inventoryItemId) continue;
-
       const existing = await prisma.employeeCommissionEntry.findUnique({
         where: { saleItemId: item.id },
       });
       if (existing) continue;
 
-      const minimum = prices[item.inventoryItemId];
-      if (!minimum) continue;
+      let minimumPrice: number | null = null;
+
+      if (item.isPlainCloth && item.plainClothName) {
+        const plainCloth = await getPlainClothPricingByName(item.plainClothName);
+        minimumPrice = plainCloth?.pricePerM ?? null;
+      } else if (item.inventoryItemId) {
+        minimumPrice = prices[item.inventoryItemId]?.minimumPrice ?? null;
+      }
+
+      if (minimumPrice == null) continue;
 
       const soldPrice = parseFloat(item.soldPrice.toString());
       const quantitySold = parseFloat(item.quantitySold.toString());
       const commissionAmount = calculateLineCommission(
         soldPrice,
-        minimum.minimumPrice,
+        minimumPrice,
         quantitySold,
         rate.ratePercent,
         rate.baseAmountPerUnit
@@ -311,7 +329,7 @@ export async function backfillCommissionEntries() {
           saleItemId: item.id,
           inventoryItemId: item.inventoryItemId,
           soldPrice: item.soldPrice,
-          minimumPrice: new Prisma.Decimal(minimum.minimumPrice.toFixed(2)),
+          minimumPrice: new Prisma.Decimal(minimumPrice.toFixed(2)),
           quantitySold: item.quantitySold,
           ratePercent: new Prisma.Decimal(rate.ratePercent.toFixed(2)),
           commissionAmount: new Prisma.Decimal(commissionAmount.toFixed(2)),
