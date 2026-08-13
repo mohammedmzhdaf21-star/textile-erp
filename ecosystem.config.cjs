@@ -43,7 +43,7 @@ module.exports = {
       cwd: root,
       env: {
         ERP_PUBLIC_URL: 'https://erp.kutalimzhda.com',
-        TUNNEL_KEEPALIVE_SEC: '30',
+        TUNNEL_KEEPALIVE_SEC: '20',
       },
       autorestart: true,
       max_restarts: 200,
@@ -55,7 +55,8 @@ module.exports = {
       interpreter: 'bash',
       cwd: root,
       env: {
-        TUNNEL_RECOVERY_INTERVAL_SEC: '120',
+        TUNNEL_RECOVERY_INTERVAL_SEC: '60',
+        TUNNEL_RECOVERY_COOLDOWN_SEC: '45',
       },
       autorestart: true,
       max_restarts: 200,
@@ -68,8 +69,9 @@ module.exports = {
       cwd: root,
       env: {
         ERP_PUBLIC_URL: 'https://erp.kutalimzhda.com',
-        WATCHDOG_INTERVAL_SEC: '10',
+        WATCHDOG_INTERVAL_SEC: '5',
         TUNNEL_MIN_HA_CONNECTIONS: '1',
+        TUNNEL_RECOVERY_COOLDOWN_SEC: '45',
       },
       autorestart: true,
       max_restarts: 200,

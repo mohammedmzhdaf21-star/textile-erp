@@ -59,19 +59,28 @@ tunnel_check_public() {
   [[ "$code" == "200" ]]
 }
 
+tunnel_pm2_cmd() {
+  if command -v pm2 >/dev/null 2>&1; then
+    pm2 "$@"
+  elif command -v npx >/dev/null 2>&1; then
+    npx pm2 "$@"
+  else
+    return 1
+  fi
+}
+
 tunnel_pm2_restart() {
   local target="$1"
   local log_file="${2:-/dev/null}"
-  if command -v npx >/dev/null 2>&1; then
-    npx pm2 restart "$target" >>"$log_file" 2>&1 || true
-  fi
+  tunnel_pm2_cmd restart "$target" --update-env >>"$log_file" 2>&1 || \
+    tunnel_pm2_cmd start "$target" --update-env >>"$log_file" 2>&1 || true
 }
 
 tunnel_recover() {
   local root="${1:-$(tunnel_health_root)}"
   local log_file="${2:-$root/deploy/watchdog.log}"
   local public_health="${3:-${ERP_PUBLIC_URL:-https://erp.kutalimzhda.com}/health}"
-  local cooldown_sec="${TUNNEL_RECOVERY_COOLDOWN_SEC:-90}"
+  local cooldown_sec="${TUNNEL_RECOVERY_COOLDOWN_SEC:-45}"
   local cooldown_file="$root/deploy/last-tunnel-recovery.ts"
 
   tunnel_health_load_env "$root"
@@ -90,7 +99,7 @@ tunnel_recover() {
   printf '%s %s\n' "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" "RECOVER: restarting tunnel (1033 prevention)" >>"$log_file"
 
   tunnel_pm2_restart textile-tunnel "$log_file"
-  sleep 15
+  sleep 10
 
   if ! tunnel_check_public "$public_health"; then
     printf '%s %s\n' "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" "RECOVER: public still down — refreshing DNS" >>"$log_file"

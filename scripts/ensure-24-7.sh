@@ -58,12 +58,24 @@ log "ensure-24-7: checking production stack"
 
 if ! pm2_all_running; then
   log "ensure-24-7: starting/reloading full PM2 ecosystem"
+  if ! bash "$ROOT/scripts/verify-server-boot.sh"; then
+    log "ensure-24-7: ERROR server boot verification failed — not reloading textile-erp"
+    tunnel_pm2_restart textile-tunnel "$LOG_FILE"
+    exit 1
+  fi
   pm2_cmd start "$ROOT/ecosystem.config.cjs" --update-env 2>/dev/null \
     || pm2_cmd reload "$ROOT/ecosystem.config.cjs" --update-env 2>/dev/null \
     || pm2_cmd restart all 2>/dev/null \
     || true
 else
-  log "ensure-24-7: all PM2 apps present — reloading config"
+  log "ensure-24-7: all PM2 apps present — verifying boot before reload"
+  if ! bash "$ROOT/scripts/verify-server-boot.sh"; then
+    log "ensure-24-7: ERROR server boot verification failed — restarting existing app only"
+    tunnel_pm2_restart textile-erp "$LOG_FILE"
+    tunnel_recover "$ROOT" "$LOG_FILE" "$PUBLIC_HEALTH" || true
+    exit 1
+  fi
+  log "ensure-24-7: boot OK — reloading config"
   pm2_cmd reload "$ROOT/ecosystem.config.cjs" --update-env 2>/dev/null \
     || pm2_cmd restart all 2>/dev/null \
     || true
