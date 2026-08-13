@@ -220,6 +220,53 @@ export async function markEmployeeCommissionsPaid(
   });
 }
 
+export async function recalculatePendingCommissionEntries() {
+  const rate = await getCommissionRate();
+  const pending = await prisma.employeeCommissionEntry.findMany({
+    where: { status: 'PENDING', sale: { isVoided: false } },
+  });
+
+  let updated = 0;
+  let removed = 0;
+
+  for (const entry of pending) {
+    const soldPrice = parseFloat(entry.soldPrice.toString());
+    const minimumPrice = parseFloat(entry.minimumPrice.toString());
+    const quantitySold = parseFloat(entry.quantitySold.toString());
+    const commissionAmount = calculateLineCommission(
+      soldPrice,
+      minimumPrice,
+      quantitySold,
+      rate.ratePercent,
+      rate.baseAmountPerUnit
+    );
+
+    if (commissionAmount <= 0) {
+      await prisma.employeeCommissionEntry.delete({ where: { id: entry.id } });
+      removed += 1;
+      continue;
+    }
+
+    const nextAmount = commissionAmount.toFixed(2);
+    const nextRate = rate.ratePercent.toFixed(2);
+    if (
+      entry.commissionAmount.toString() !== nextAmount ||
+      entry.ratePercent.toString() !== nextRate
+    ) {
+      await prisma.employeeCommissionEntry.update({
+        where: { id: entry.id },
+        data: {
+          commissionAmount: new Prisma.Decimal(nextAmount),
+          ratePercent: new Prisma.Decimal(nextRate),
+        },
+      });
+      updated += 1;
+    }
+  }
+
+  return { updated, removed };
+}
+
 export async function backfillCommissionEntries() {
   const [rate, prices, sales] = await Promise.all([
     getCommissionRate(),

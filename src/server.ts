@@ -8,7 +8,8 @@ import inventoryRoutes from './routes/inventory.routes';
 import salesRoutes from './routes/sales.routes';
 import employeesRoutes from './routes/employees.routes';
 import commissionsRoutes from './routes/commissions.routes';
-import { migrateLegacySettingsPrices } from './lib/currency';
+import { migrateLegacyCommissionBase, migrateLegacySettingsPrices } from './lib/currency';
+import { backfillCommissionEntries, recalculatePendingCommissionEntries } from './lib/commissions';
 import prisma from './lib/prisma';
 
 const app = express();
@@ -152,6 +153,24 @@ const server = app.listen(PORT, async () => {
     const result = await migrateLegacySettingsPrices();
     if (result.updated > 0) {
       console.log(`Migrated ${result.updated} legacy minimum price setting(s) to full IQD.`);
+    }
+
+    const baseMigration = await migrateLegacyCommissionBase();
+    if (baseMigration.updated) {
+      console.log(
+        `Migrated commission base amount from ${baseMigration.from} to ${baseMigration.to} IQD.`
+      );
+      const recalc = await recalculatePendingCommissionEntries();
+      if (recalc.updated > 0 || recalc.removed > 0) {
+        console.log(
+          `Recalculated ${recalc.updated} pending commission(s) after base amount migration.`
+        );
+      }
+    }
+
+    const backfill = await backfillCommissionEntries();
+    if (backfill.created > 0) {
+      console.log(`Backfilled ${backfill.created} missing commission entry(ies).`);
     }
   } catch (error) {
     console.warn('Could not migrate legacy price settings:', error);

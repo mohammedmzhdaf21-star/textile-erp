@@ -22,9 +22,9 @@ export async function syncCommissionSettingsFromServer() {
     if (rate && Number.isFinite(rate.ratePercent)) {
       saveCommissionSettings({
         ratePercent: rate.ratePercent,
-        baseAmountPerUnit: Number.isFinite(rate.baseAmountPerUnit)
-          ? rate.baseAmountPerUnit
-          : 0,
+        baseAmountPerUnit: normalizeStoredAmount(
+          Number.isFinite(rate.baseAmountPerUnit) ? rate.baseAmountPerUnit : 0
+        ),
       });
     }
 

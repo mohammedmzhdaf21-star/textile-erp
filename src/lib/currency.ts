@@ -51,3 +51,32 @@ export async function migrateLegacySettingsPrices() {
 
   return { updated };
 }
+
+export async function migrateLegacyCommissionBase() {
+  const { prisma } = await import('./prisma');
+  const setting = await prisma.setting.findUnique({
+    where: { key: 'commission_rate' },
+  });
+  if (!setting?.value || typeof setting.value !== 'object' || Array.isArray(setting.value)) {
+    return { updated: false as const };
+  }
+
+  const value = { ...(setting.value as Record<string, unknown>) };
+  const baseAmountPerUnit = Number(value.baseAmountPerUnit ?? 0);
+  if (!Number.isFinite(baseAmountPerUnit) || baseAmountPerUnit <= 0) {
+    return { updated: false as const };
+  }
+
+  const normalized = normalizeStoredAmount(baseAmountPerUnit);
+  if (normalized === baseAmountPerUnit) {
+    return { updated: false as const };
+  }
+
+  value.baseAmountPerUnit = normalized;
+  await prisma.setting.update({
+    where: { key: 'commission_rate' },
+    data: { value: value as object },
+  });
+
+  return { updated: true as const, from: baseAmountPerUnit, to: normalized };
+}

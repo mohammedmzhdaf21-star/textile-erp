@@ -7,7 +7,7 @@ import {
   saveCommissionSettings,
 } from "../lib/dashboardSettings";
 import { pushCommissionRateToServer } from "../lib/commissionSettingsApi";
-import { formatCurrency } from "../lib/currency";
+import { formatCurrency, parsePriceInput, toPriceInput } from "../lib/currency";
 
 type SaleItem = {
   inventoryItemId?: string | null;
@@ -26,7 +26,9 @@ export default function SalesCommission() {
   const { t } = useTranslation();
   const initialSettings = readCommissionSettings();
   const [commissionRate, setCommissionRate] = useState(String(initialSettings.ratePercent));
-  const [baseCommission, setBaseCommission] = useState(String(initialSettings.baseAmountPerUnit));
+  const [baseCommission, setBaseCommission] = useState(
+    toPriceInput(initialSettings.baseAmountPerUnit)
+  );
   const [commissionRows, setCommissionRows] = useState<
     Array<{ employee: string; saleId: string; itemId: string; commission: number }>
   >([]);
@@ -39,9 +41,9 @@ export default function SalesCommission() {
 
   async function calculateCommissions() {
     const rate = Number(commissionRate);
-    const baseAmount = Number(baseCommission);
+    const baseAmount = parsePriceInput(baseCommission);
     if (!Number.isFinite(rate) || rate < 0) return alert(t("dashboard.enterValidCommission"));
-    if (!Number.isFinite(baseAmount) || baseAmount < 0) {
+    if (!Number.isFinite(Number(baseCommission)) || Number(baseCommission) < 0) {
       return alert(t("dashboard.enterValidBaseCommission"));
     }
     saveCommissionSettings({ ratePercent: rate, baseAmountPerUnit: baseAmount });
@@ -120,7 +122,9 @@ export default function SalesCommission() {
         <label className="block text-sm font-medium text-gray-700">
           {t("dashboard.commissionBaseAmount")}
         </label>
-        <p className="mt-1 text-xs text-gray-500">{t("dashboard.commissionBaseAmountHint")}</p>
+        <p className="mt-1 text-xs text-gray-500">
+          {t("dashboard.commissionBaseAmountHint")} {t("common.thousandsHint")}
+        </p>
         <input
           type="number"
           min="0"

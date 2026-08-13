@@ -12,6 +12,7 @@ import {
   backfillCommissionEntries,
   listPendingCommissions,
   markEmployeeCommissionsPaid,
+  recalculatePendingCommissionEntries,
 } from '../lib/commissions';
 import { roleHasFullAccess } from '../lib/employeeSections';
 
@@ -40,6 +41,7 @@ router.put('/settings/rate', requireRole('ADMIN', 'MANAGER'), async (req: Reques
       req.user!.userId,
       baseAmountPerUnit
     );
+    await recalculatePendingCommissionEntries();
     return res.status(200).json({ rate });
   } catch (error: any) {
     return res.status(400).json({ error: error.message || 'Failed to save commission rate' });
@@ -55,12 +57,14 @@ router.put('/settings/prices', requireRole('ADMIN', 'MANAGER'), async (req: Requ
 
     if (price) {
       const saved = await saveItemMinimumPrice(price, req.user!.userId);
-      return res.status(200).json({ price: saved });
+      const backfill = await backfillCommissionEntries();
+      return res.status(200).json({ price: saved, backfillCreated: backfill.created });
     }
 
     if (prices && typeof prices === 'object') {
       const saved = await saveItemMinimumPricesBulk(prices, req.user!.userId);
-      return res.status(200).json({ prices: saved });
+      const backfill = await backfillCommissionEntries();
+      return res.status(200).json({ prices: saved, backfillCreated: backfill.created });
     }
 
     return res.status(400).json({ error: 'Provide price or prices in request body' });

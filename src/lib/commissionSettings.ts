@@ -30,7 +30,9 @@ export async function getCommissionRate(): Promise<CommissionRateRecord> {
   return {
     ratePercent,
     baseAmountPerUnit:
-      Number.isFinite(baseAmountPerUnit) && baseAmountPerUnit >= 0 ? baseAmountPerUnit : 0,
+      Number.isFinite(baseAmountPerUnit) && baseAmountPerUnit >= 0
+        ? normalizeStoredAmount(baseAmountPerUnit)
+        : 0,
   };
 }
 
@@ -44,8 +46,9 @@ export async function saveCommissionRate(
   }
 
   const existing = await getCommissionRate();
-  const resolvedBase =
+  const rawBase =
     baseAmountPerUnit !== undefined ? baseAmountPerUnit : existing.baseAmountPerUnit;
+  const resolvedBase = normalizeStoredAmount(rawBase);
 
   if (!Number.isFinite(resolvedBase) || resolvedBase < 0) {
     throw new Error('Base commission amount must be a non-negative number');

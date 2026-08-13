@@ -146,11 +146,16 @@ export const canAccessAdminRoute = (user: { role?: string } | null | undefined, 
   return user?.role === 'ADMIN' || user?.role === 'MANAGER';
 };
 
-export const readCommissionSettings = () =>
-  readJson<CommissionSettings>(COMMISSION_SETTINGS_KEY, {
+export const readCommissionSettings = () => {
+  const settings = readJson<CommissionSettings>(COMMISSION_SETTINGS_KEY, {
     ratePercent: 5,
     baseAmountPerUnit: 0,
   });
+  return {
+    ...settings,
+    baseAmountPerUnit: normalizeStoredAmount(settings.baseAmountPerUnit),
+  };
+};
 
 export const saveCommissionSettings = (settings: CommissionSettings) => {
   writeJson(COMMISSION_SETTINGS_KEY, settings);
