@@ -185,10 +185,6 @@ export async function updateEmployee(
     throw new Error('Employee not found');
   }
 
-  if (input.isActive === true && existing.approvalStatus !== 'APPROVED') {
-    throw new Error('Employee must be approved before the account can be activated');
-  }
-
   const nextRole = input.role ?? existing.role;
   let nextSections: EmployeeSectionKey[] | null = null;
   if (roleHasFullAccess(nextRole)) {
@@ -291,7 +287,6 @@ export async function approveEmployee(
   await prisma.employee.update({
     where: { id },
     data: {
-      isActive: true,
       approvalStatus: 'APPROVED',
       approvedAt: new Date(),
       approvedById: input.performedById,
@@ -353,7 +348,6 @@ export async function rejectEmployee(
     where: { id },
     data: {
       approvalStatus: 'REJECTED',
-      isActive: false,
       approvedAt: new Date(),
       approvedById: input.performedById,
       registrationNote: input.reason?.trim()

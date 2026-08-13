@@ -289,15 +289,21 @@ export default function EmployeeAccounts() {
                 {t("employeeAccounts.deviceSignInNotice")}
               </div>
             )}
-            <label className="flex items-center gap-3 rounded-xl bg-gray-50 px-4 py-3 text-sm md:col-span-2">
+            <label className="flex items-start gap-3 rounded-xl bg-gray-50 px-4 py-3 text-sm md:col-span-2">
               <input
                 type="checkbox"
+                className="mt-0.5"
                 checked={form.isActive}
                 onChange={(event) =>
                   setForm((current) => ({ ...current, isActive: event.target.checked }))
                 }
               />
-              <span className="font-medium text-gray-700">{t("employeeAccounts.activeAccount")}</span>
+              <span>
+                <span className="font-medium text-gray-700">{t("employeeAccounts.activeAccount")}</span>
+                <span className="mt-0.5 block text-xs text-gray-500">
+                  {t("employeeAccounts.activeAccountHint")}
+                </span>
+              </span>
             </label>
           </div>
 

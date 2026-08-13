@@ -1,4 +1,3 @@
-import { EmployeeApprovalStatus } from '@prisma/client';
 import { prisma } from './prisma';
 
 export type EmployeeAccessCheck = {
@@ -8,7 +7,6 @@ export type EmployeeAccessCheck = {
     email: string;
     role: string;
     isActive: boolean;
-    approvalStatus: EmployeeApprovalStatus;
   };
 };
 
@@ -28,20 +26,11 @@ export async function checkEmployeeAccess(
       email: true,
       role: true,
       isActive: true,
-      approvalStatus: true,
     },
   });
 
   if (!employee) {
     return { ok: false, error: 'Account not found', status: 401 };
-  }
-
-  if (employee.approvalStatus === 'REJECTED') {
-    return {
-      ok: false,
-      error: 'Registration was rejected. Contact your administrator.',
-      status: 403,
-    };
   }
 
   if (!employee.isActive) {
@@ -54,12 +43,7 @@ export async function checkEmployeeAccess(
 export function assertEmployeeRecordCanSignIn(employee: {
   isActive: boolean;
   deletedAt: Date | null;
-  approvalStatus: EmployeeApprovalStatus;
 }) {
-  if (employee.approvalStatus === 'REJECTED') {
-    throw new Error('Registration was rejected. Contact your administrator.');
-  }
-
   if (!employee.isActive || employee.deletedAt) {
     throw new Error('Account is inactive');
   }
