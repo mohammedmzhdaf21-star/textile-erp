@@ -42,13 +42,19 @@ const navigation: Array<NavItem | NavGroup> = [
   { to: '/inventory', labelKey: 'nav.inventory', end: true },
   { to: '/inventory/convert', labelKey: 'nav.itemConversion', end: true },
   { to: '/sales', labelKey: 'nav.sales', end: true },
-  { to: '/sales/daily', labelKey: 'nav.dailySales', end: true },
-  { to: '/sales/history', labelKey: 'nav.historySales', end: true },
-  { to: '/sales/owed', labelKey: 'nav.owedMoney', end: true },
+  {
+    id: 'accounting',
+    labelKey: 'nav.accounting',
+    items: [
+      { to: '/sales/daily', labelKey: 'nav.dailySales', end: true },
+      { to: '/sales/history', labelKey: 'nav.historySales', end: true },
+      { to: '/sales/owed', labelKey: 'nav.owedMoney', end: true },
+      { to: '/exchange', labelKey: 'nav.exchange', end: true },
+    ],
+  },
   { to: '/tasks', labelKey: 'nav.tasks', end: true },
   { to: '/task-employee', labelKey: 'nav.taskEmployee', end: true },
   { to: '/analytics', labelKey: 'nav.dataAnalysis', end: true },
-  { to: '/exchange', labelKey: 'nav.exchange', end: true },
   { to: '/item-input', labelKey: 'nav.newItem', end: true },
   { to: '/employee-accounts', labelKey: 'nav.employeeAccounts', end: true, adminOnly: true },
 ];
