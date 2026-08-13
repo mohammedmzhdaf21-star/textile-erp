@@ -10,6 +10,7 @@ import {
   approveEmployee,
   rejectEmployee,
   updateEmployee,
+  deleteEmployee,
 } from '../lib/employees';
 import {
   EMPLOYEE_SECTION_KEYS,
@@ -169,6 +170,25 @@ router.patch('/:id', requireRole('ADMIN'), async (req: Request, res: Response) =
   } catch (error: any) {
     const status = error.message === 'Employee not found' ? 404 : 400;
     return res.status(status).json({ error: error.message || 'Failed to update employee' });
+  }
+});
+
+router.delete('/:id', requireRole('ADMIN'), async (req: Request, res: Response) => {
+  try {
+    await deleteEmployee(singleParam(req.params.id) ?? '', {
+      performedById: req.user!.userId,
+      performedByEmail: req.user!.email,
+    });
+    return res.status(200).json({ message: 'Employee account deleted' });
+  } catch (error: any) {
+    const msg = error.message || 'Failed to delete employee';
+    const status =
+      msg === 'Employee not found'
+        ? 404
+        : msg.includes('cannot delete') || msg.includes('Cannot delete')
+          ? 400
+          : 400;
+    return res.status(status).json({ error: msg });
   }
 });
 

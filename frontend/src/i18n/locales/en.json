@@ -261,7 +261,10 @@
     "loadFailed": "Could not load employee accounts.",
     "adminOnly": "Only admins and managers can open Employee Accounts.",
     "createdAwaitingDeviceSignIn": "Employee account created. They must sign in on their device — you will approve that device sign-in request on the dashboard.",
-    "deviceSignInNotice": "The employee can sign in from their device. You will approve each device when they try to sign in."
+    "deviceSignInNotice": "The employee can sign in from their device. You will approve each device when they try to sign in.",
+    "deleteConfirm": "Delete {{name}} ({{email}})? They will be signed out immediately and will not be able to sign in again.",
+    "deleted": "Employee account deleted.",
+    "deleteFailed": "Could not delete employee account."
   },
   "sidebar": {
     "menu": "Menu",

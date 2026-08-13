@@ -55,6 +55,7 @@ export default function EmployeeAccounts() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm);
 
   const roleOptions: UserRole[] = useMemo(
@@ -188,6 +189,44 @@ export default function EmployeeAccounts() {
       setError(responseError);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleDelete = async (employee: EmployeeRecord) => {
+    if (!canEdit || employee.id === currentUser?.id) return;
+
+    const confirmed = window.confirm(
+      t("employeeAccounts.deleteConfirm", { name: employee.name, email: employee.email })
+    );
+    if (!confirmed) return;
+
+    setDeletingId(employee.id);
+    setMessage(null);
+    setError(null);
+
+    try {
+      await api.delete(`/employees/${employee.id}`);
+      if (editingId === employee.id) {
+        resetForm();
+      }
+      setMessage(t("employeeAccounts.deleted"));
+      await loadData();
+    } catch (deleteError: unknown) {
+      const responseError =
+        deleteError &&
+        typeof deleteError === "object" &&
+        "response" in deleteError &&
+        deleteError.response &&
+        typeof deleteError.response === "object" &&
+        "data" in deleteError.response &&
+        deleteError.response.data &&
+        typeof deleteError.response.data === "object" &&
+        "error" in deleteError.response.data
+          ? String(deleteError.response.data.error)
+          : t("employeeAccounts.deleteFailed");
+      setError(responseError);
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -440,9 +479,19 @@ export default function EmployeeAccounts() {
                     </div>
                   </div>
                   {canEdit && employee.id !== currentUser?.id && (
-                    <button type="button" className="btn-outline shrink-0" onClick={() => startEdit(employee)}>
-                      {t("common.edit")}
-                    </button>
+                    <div className="flex shrink-0 flex-wrap gap-2">
+                      <button type="button" className="btn-outline" onClick={() => startEdit(employee)}>
+                        {t("common.edit")}
+                      </button>
+                      <button
+                        type="button"
+                        className="rounded-xl border border-red-300 bg-white px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:opacity-50"
+                        disabled={deletingId === employee.id}
+                        onClick={() => void handleDelete(employee)}
+                      >
+                        {deletingId === employee.id ? t("common.removing") : t("common.delete")}
+                      </button>
+                    </div>
                   )}
                 </div>
               </article>

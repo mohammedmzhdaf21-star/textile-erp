@@ -251,6 +251,83 @@ export async function updateEmployee(
   return formatEmployee(refreshed);
 }
 
+export async function deleteEmployee(
+  id: string,
+  input: {
+    performedById: string;
+    performedByEmail: string;
+  }
+) {
+  if (id === input.performedById) {
+    throw new Error('You cannot delete your own account');
+  }
+
+  const existing = await prisma.employee.findFirst({
+    where: { id, deletedAt: null },
+    include: employeeInclude,
+  });
+  if (!existing) {
+    throw new Error('Employee not found');
+  }
+
+  if (existing.role === 'ADMIN') {
+    const otherAdmins = await prisma.employee.count({
+      where: {
+        role: 'ADMIN',
+        deletedAt: null,
+        isActive: true,
+        id: { not: id },
+      },
+    });
+    if (otherAdmins === 0) {
+      throw new Error('Cannot delete the last active admin account');
+    }
+  }
+
+  const now = new Date();
+  const tombstoneEmail = `deleted.${existing.id}.${now.getTime()}@removed.local`;
+
+  await prisma.$transaction([
+    prisma.session.updateMany({
+      where: { employeeId: id, revokedAt: null },
+      data: { revokedAt: now },
+    }),
+    prisma.deviceSignInRequest.deleteMany({
+      where: { employeeId: id },
+    }),
+    prisma.branchEmployee.updateMany({
+      where: { employeeId: id, isActive: true },
+      data: { isActive: false, deactivatedAt: now },
+    }),
+    prisma.employee.update({
+      where: { id },
+      data: {
+        deletedAt: now,
+        isActive: false,
+        email: tombstoneEmail,
+        failedLoginAttempts: 0,
+        lockedUntil: null,
+      },
+    }),
+    prisma.auditLog.create({
+      data: {
+        entityType: 'Employee',
+        entityId: id,
+        action: 'DELETE',
+        performedById: input.performedById,
+        performedByEmail: input.performedByEmail,
+        changes: {
+          name: existing.name,
+          email: existing.email,
+          role: existing.role,
+        },
+      },
+    }),
+  ]);
+
+  return { success: true };
+}
+
 export async function getEmployeeAuthProfile(employeeId: string) {
   const employee = await prisma.employee.findFirst({
     where: {
