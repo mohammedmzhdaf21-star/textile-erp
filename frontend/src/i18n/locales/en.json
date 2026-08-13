@@ -711,6 +711,9 @@
     "chooseBranch": "Choose at least one branch for this trustee.",
     "enterValidPercent": "Enter a valid trustee commission percent.",
     "savedRule": "Saved {{rate}}% trustee commission for {{name}} on Branches {{branches}}.",
+    "updateRule": "Update trustee rule",
+    "confirmDeleteRule": "Delete trustee account for {{name}}?",
+    "deletedRule": "Deleted trustee account {{name}}.",
     "invalidDateRange": "From date must be before or equal to To date.",
     "defaultTrustee": "Mr. Investor"
   },

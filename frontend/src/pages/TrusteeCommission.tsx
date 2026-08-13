@@ -142,6 +142,7 @@ const TrusteeCommission: React.FC = () => {
   const [contactInfo, setContactInfo] = useState('investor@example.com');
   const [assignedBranches, setAssignedBranches] = useState<BranchCode[]>(['A', 'C', 'E']);
   const [percentage, setPercentage] = useState('15');
+  const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
   const [salesByBranch, setSalesByBranch] = useState<Record<BranchCode, Sale[]>>({
     A: [],
     B: [],
@@ -198,6 +199,34 @@ const TrusteeCommission: React.FC = () => {
     );
   };
 
+  const resetRuleForm = () => {
+    setTrusteeName('');
+    setContactInfo('');
+    setAssignedBranches([]);
+    setPercentage('0');
+    setEditingRuleId(null);
+  };
+
+  const startEditRule = (rule: TrusteeRule) => {
+    setTrusteeName(rule.trusteeName);
+    setContactInfo(rule.contactInfo);
+    setAssignedBranches([...rule.branches]);
+    setPercentage(String(rule.percentage));
+    setEditingRuleId(rule.id);
+    setMessage(null);
+  };
+
+  const deleteRule = (rule: TrusteeRule) => {
+    const confirmed = window.confirm(t('trusteeCommission.confirmDeleteRule', { name: rule.trusteeName }));
+    if (!confirmed) return;
+
+    saveRules(rules.filter((existing) => existing.id !== rule.id));
+    if (editingRuleId === rule.id) {
+      resetRuleForm();
+    }
+    setMessage(t('trusteeCommission.deletedRule', { name: rule.trusteeName }));
+  };
+
   const saveRule = () => {
     const parsedPercentage = Number(percentage);
     if (!trusteeName.trim()) return alert(t('trusteeCommission.enterTrusteeName'));
@@ -208,7 +237,9 @@ const TrusteeCommission: React.FC = () => {
 
     const normalizedBranches = uniqueBranches(assignedBranches);
     const rule: TrusteeRule = {
-      id: `${trusteeName.trim().toLowerCase().replace(/\s+/g, '-')}-${normalizedBranches.join('')}`,
+      id:
+        editingRuleId ??
+        `${trusteeName.trim().toLowerCase().replace(/\s+/g, '-')}-${normalizedBranches.join('')}-${Date.now()}`,
       trusteeName: trusteeName.trim(),
       contactInfo: contactInfo.trim(),
       branches: normalizedBranches,
@@ -217,14 +248,19 @@ const TrusteeCommission: React.FC = () => {
       updatedAt: new Date().toISOString(),
     };
 
-    const nextRules = [
-      ...rules.filter((existing) => existing.id !== rule.id),
-      rule,
-    ];
+    const nextRules = editingRuleId
+      ? rules.map((existing) => (existing.id === editingRuleId ? rule : existing))
+      : [...rules.filter((existing) => existing.id !== rule.id), rule];
+
     saveRules(nextRules);
     setMessage(
-      `Saved ${rule.percentage}% trustee commission for ${rule.trusteeName} on Branches ${rule.branches.join(', ')}.`
+      t('trusteeCommission.savedRule', {
+        rate: rule.percentage,
+        name: rule.trusteeName,
+        branches: rule.branches.join(', '),
+      })
     );
+    resetRuleForm();
   };
 
   const loadCommissions = async () => {
@@ -296,7 +332,7 @@ const TrusteeCommission: React.FC = () => {
           </p>
         </div>
         <button type="button" onClick={loadCommissions} className="btn-primary">
-          Load trustee commission
+          {t('trusteeCommission.loadCommission')}
         </button>
       </div>
 
@@ -353,30 +389,62 @@ const TrusteeCommission: React.FC = () => {
             className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
           />
 
-          <button type="button" onClick={saveRule} className="btn-primary mt-4 w-full">
-            Save trustee rule
-          </button>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <button type="button" onClick={saveRule} className="btn-primary flex-1 min-w-[10rem]">
+              {editingRuleId ? t('trusteeCommission.updateRule') : t('trusteeCommission.saveRule')}
+            </button>
+            {editingRuleId && (
+              <button type="button" onClick={resetRuleForm} className="btn-secondary">
+                {t('common.cancel')}
+              </button>
+            )}
+          </div>
           {message && <p className="mt-3 text-sm text-magenta-600">{message}</p>}
 
           <div className="mt-5 space-y-3">
             {rules.length === 0 ? (
               <div className="rounded-2xl bg-gray-50 p-4 text-sm text-gray-600">
-                No trustee rules saved yet.
+                {t('trusteeCommission.noRules')}
               </div>
             ) : (
               rules.map((rule) => (
-                <div key={rule.id} className="rounded-2xl border border-green-300 bg-green-50 p-4">
+                <div
+                  key={rule.id}
+                  className={`rounded-2xl border p-4 ${
+                    editingRuleId === rule.id
+                      ? 'border-magenta-500 bg-magenta-50'
+                      : 'border-green-300 bg-green-50'
+                  }`}
+                >
                   <div className="flex items-start justify-between gap-3">
-                    <div>
+                    <div className="min-w-0">
                       <div className="font-semibold text-black">{rule.trusteeName}</div>
                       <div className="text-sm text-gray-600">{rule.contactInfo || t('common.noContact')}</div>
                       <div className="mt-1 text-sm font-semibold text-magenta-600">
                         {t('trusteeCommission.trusteeRate', { rate: rule.percentage, branches: rule.branches.join(', ') })}
                       </div>
                     </div>
-                    <span className="rounded-xl bg-black px-3 py-2 text-xs font-semibold text-white">
-                      Active
-                    </span>
+                    <div className="flex shrink-0 flex-col items-end gap-2">
+                      <span className="rounded-xl bg-black px-3 py-2 text-xs font-semibold text-white">
+                        {t('trusteeCommission.active')}
+                      </span>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => startEditRule(rule)}
+                          className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+                        >
+                          {t('common.edit')}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => deleteRule(rule)}
+                          className="rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50"
+                        >
+                          {t('common.delete')}
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 </div>
               ))
@@ -418,7 +486,7 @@ const TrusteeCommission: React.FC = () => {
 
           {loading ? (
             <div className="rounded-3xl border border-gray-200 bg-white p-6 text-gray-600 shadow-sm">
-              Loading trustee commission...
+              {t('trusteeCommission.loading')}
             </div>
           ) : error ? (
             <div className="rounded-3xl border border-red-200 bg-red-50 p-6 text-red-700 shadow-sm">
@@ -429,7 +497,7 @@ const TrusteeCommission: React.FC = () => {
               <h3 className="text-xl font-semibold text-black">{t('trusteeCommission.resultsTitle')}</h3>
               {trusteeResults.length === 0 ? (
                 <div className="mt-4 rounded-2xl bg-gray-50 p-4 text-sm text-gray-600">
-                  Add a trustee rule, then load commission.
+                  {t('trusteeCommission.addRuleThenLoad')}
                 </div>
               ) : (
                 <div className="mt-4 space-y-3">
