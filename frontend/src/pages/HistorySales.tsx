@@ -4,6 +4,7 @@ import api from '../lib/api';
 import { useTranslation } from 'react-i18next';
 import { formatCurrency, formatSignedCurrency } from '../lib/currency';
 import { isImmediatePaymentMethod, resolveSalePaymentLabel } from '../lib/paymentMethod';
+import { BRANCH_ID_BY_CODE } from '../lib/inventoryCodes';
 
 type Sale = {
   id: string;
@@ -44,14 +45,6 @@ type DateBucket = {
 
 const branches = ['A', 'B', 'C', 'E', 'F'] as const;
 type BranchId = typeof branches[number];
-
-const BRANCH_MAP: Record<BranchId, string> = {
-  A: 'B001',
-  B: 'B002',
-  C: 'B003',
-  E: 'B001',
-  F: 'B002',
-};
 
 const HISTORY_DAYS = 10;
 
@@ -226,7 +219,7 @@ const HistorySales: React.FC = () => {
         nextBuckets.map(async (bucket) => {
           const response = await api.get('/sales', {
             params: {
-              branchId: BRANCH_MAP[branch],
+              branchId: BRANCH_ID_BY_CODE[branch],
               fromDate: bucket.fromDate,
               toDate: bucket.toDate,
             },
@@ -270,7 +263,7 @@ const HistorySales: React.FC = () => {
       const response = await api.get('/sales', {
         params: {
           search: query,
-          branchId: selectedBranch ? BRANCH_MAP[selectedBranch] : undefined,
+          branchId: selectedBranch ? BRANCH_ID_BY_CODE[selectedBranch] : undefined,
           pageSize: 100,
         },
       });

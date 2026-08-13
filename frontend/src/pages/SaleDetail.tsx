@@ -134,11 +134,11 @@ const SaleDetail: React.FC = () => {
                   </div>
                   <div>
                     <div className="text-sm text-gray-500">{t('saleDetail.branch')}</div>
-                    <div className="text-lg font-semibold text-black">{sale.branch.name}</div>
+                    <div className="text-lg font-semibold text-black">{sale.branch?.name ?? '—'}</div>
                   </div>
                   <div>
                     <div className="text-sm text-gray-500">{t('saleDetail.employee')}</div>
-                    <div className="text-lg font-semibold text-black">{sale.employee.name}</div>
+                    <div className="text-lg font-semibold text-black">{sale.employee?.name ?? '—'}</div>
                   </div>
                   <div>
                     <div className="text-sm text-gray-500">{t('saleDetail.customer')}</div>
@@ -214,7 +214,7 @@ const SaleDetail: React.FC = () => {
           <div className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
             <h3 className="text-lg font-semibold text-black">{t('saleDetail.lineItems')}</h3>
             <div className="mt-4 space-y-4">
-              {sale.items.map((item) => (
+              {(sale.items ?? []).map((item) => (
                 <div key={item.id} className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
                   <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                     <div className="flex-1">

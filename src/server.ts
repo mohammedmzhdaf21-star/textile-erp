@@ -4,6 +4,20 @@ import path from 'path';
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
+
+function validateRequiredEnv() {
+  const missing: string[] = [];
+  if (!process.env.DATABASE_URL) missing.push('DATABASE_URL');
+  if (!process.env.JWT_ACCESS_SECRET) missing.push('JWT_ACCESS_SECRET');
+  if (!process.env.JWT_REFRESH_SECRET) missing.push('JWT_REFRESH_SECRET');
+  if (missing.length > 0) {
+    console.error(`Missing required environment variables: ${missing.join(', ')}`);
+    process.exit(1);
+  }
+}
+
+validateRequiredEnv();
+
 import authRoutes from './routes/auth.routes';
 import inventoryRoutes from './routes/inventory.routes';
 import salesRoutes from './routes/sales.routes';
@@ -147,7 +161,11 @@ if (serveFrontend) {
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
     res.setHeader('Pragma', 'no-cache');
     res.setHeader('Expires', '0');
-    res.sendFile(path.join(frontendDist, 'index.html'));
+    res.sendFile(path.join(frontendDist, 'index.html'), (err) => {
+      if (err && !res.headersSent) {
+        res.status(500).json({ error: 'Frontend unavailable' });
+      }
+    });
   };
 
   app.use(express.static(frontendDist, { index: false, maxAge: '7d' }));
@@ -188,43 +206,40 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
 // START SERVER
 // ============================================================
 const server = app.listen(PORT, async () => {
-  try {
-    const result = await migrateLegacySettingsPrices();
-    if (result.updated > 0) {
-      console.log(`Migrated ${result.updated} legacy minimum price setting(s) to full IQD.`);
-    }
+  const migrationSteps: Array<[string, () => Promise<unknown>]> = [
+    ['legacy settings prices', migrateLegacySettingsPrices],
+    ['legacy commission base', migrateLegacyCommissionBase],
+    ['commission backfill', backfillCommissionEntries],
+    ['plain cloth recovery', recoverPlainClothNamesFromSales],
+    ['plain cloth defaults', ensureDefaultPlainClothTypes],
+  ];
 
-    const baseMigration = await migrateLegacyCommissionBase();
-    if (baseMigration.updated) {
-      console.log(
-        `Migrated commission base amount from ${baseMigration.from} to ${baseMigration.to} IQD.`
-      );
-      const recalc = await recalculatePendingCommissionEntries();
-      if (recalc.updated > 0 || recalc.removed > 0) {
-        console.log(
-          `Recalculated ${recalc.updated} pending commission(s) after base amount migration.`
-        );
+  for (const [name, step] of migrationSteps) {
+    try {
+      const result = await step();
+      if (name === 'legacy settings prices' && result && typeof result === 'object' && 'updated' in result && Number((result as { updated: number }).updated) > 0) {
+        console.log(`Migrated ${(result as { updated: number }).updated} legacy minimum price setting(s) to full IQD.`);
       }
+      if (name === 'legacy commission base' && result && typeof result === 'object' && 'updated' in result && (result as { updated?: boolean }).updated) {
+        const baseMigration = result as { from?: unknown; to?: unknown; updated?: boolean };
+        console.log(`Migrated commission base amount from ${baseMigration.from} to ${baseMigration.to} IQD.`);
+        const recalc = await recalculatePendingCommissionEntries();
+        if (recalc.updated > 0 || recalc.removed > 0) {
+          console.log(`Recalculated ${recalc.updated} pending commission(s) after base amount migration.`);
+        }
+      }
+      if (name === 'commission backfill' && result && typeof result === 'object' && 'created' in result && Number((result as { created: number }).created) > 0) {
+        console.log(`Backfilled ${(result as { created: number }).created} missing commission entry(ies).`);
+      }
+      if (name === 'plain cloth recovery' && result && typeof result === 'object' && 'recovered' in result && Number((result as { recovered: number }).recovered) > 0) {
+        console.log(`Recovered ${(result as { recovered: number }).recovered} plain cloth type(s) from past sales.`);
+      }
+      if (name === 'plain cloth defaults' && result && typeof result === 'object' && 'ensured' in result && Number((result as { ensured: number }).ensured) > 0) {
+        console.log(`Ensured ${(result as { ensured: number }).ensured} default plain cloth type(s).`);
+      }
+    } catch (error) {
+      console.warn(`Startup migration step failed (${name}):`, error);
     }
-
-    const backfill = await backfillCommissionEntries();
-    if (backfill.created > 0) {
-      console.log(`Backfilled ${backfill.created} missing commission entry(ies).`);
-    }
-
-    const plainClothRecovery = await recoverPlainClothNamesFromSales();
-    if (plainClothRecovery.recovered > 0) {
-      console.log(
-        `Recovered ${plainClothRecovery.recovered} plain cloth type(s) from past sales.`
-      );
-    }
-
-    const plainClothDefaults = await ensureDefaultPlainClothTypes();
-    if (plainClothDefaults.ensured > 0) {
-      console.log(`Ensured ${plainClothDefaults.ensured} default plain cloth type(s).`);
-    }
-  } catch (error) {
-    console.warn('Could not migrate legacy price settings:', error);
   }
 
   console.log('');
@@ -247,13 +262,28 @@ const server = app.listen(PORT, async () => {
   console.log('');
 });
 
+server.on('error', (err: NodeJS.ErrnoException) => {
+  console.error('Failed to start server:', err);
+  process.exit(1);
+});
+
 // ============================================================
 // GRACEFUL SHUTDOWN
 // ============================================================
-const shutdown = async (signal: string) => {
+const shutdown = (signal: string) => {
   console.log(`\n${signal} received. Shutting down gracefully...`);
+  const forceTimer = setTimeout(() => {
+    console.error('Forced shutdown after timeout');
+    process.exit(1);
+  }, 10000);
+  forceTimer.unref();
+
   server.close(async () => {
-    await prisma.$disconnect();
+    try {
+      await prisma.$disconnect();
+    } catch (error) {
+      console.warn('Error disconnecting prisma:', error);
+    }
     console.log('Server closed. Goodbye!');
     process.exit(0);
   });
@@ -261,3 +291,10 @@ const shutdown = async (signal: string) => {
 
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT', () => shutdown('SIGINT'));
+process.on('unhandledRejection', (reason) => {
+  console.error('Unhandled promise rejection:', reason);
+});
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught exception:', error);
+  shutdown('UNCAUGHT_EXCEPTION');
+});

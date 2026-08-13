@@ -233,13 +233,15 @@ const ActivityHistoryDetail: React.FC = () => {
                 <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500">
                   {t('activityHistory.detail.relatedRecord')}
                 </h2>
-                <Link
-                  to={entry.relatedEntity.linkPath}
-                  state={{ returnTo: `/activity-history/${entry.id}` }}
-                  className="rounded-xl bg-black px-4 py-2 text-sm font-semibold text-white hover:bg-gray-800"
-                >
-                  {t('activityHistory.detail.openRecord')}
-                </Link>
+                {entry.relatedEntity.linkPath && (
+                  <Link
+                    to={entry.relatedEntity.linkPath}
+                    state={{ returnTo: `/activity-history/${entry.id}` }}
+                    className="rounded-xl bg-black px-4 py-2 text-sm font-semibold text-white hover:bg-gray-800"
+                  >
+                    {t('activityHistory.detail.openRecord')}
+                  </Link>
+                )}
               </div>
               {snapshotRows.length > 0 ? (
                 <dl className="grid gap-2 text-sm sm:grid-cols-2">

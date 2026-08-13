@@ -64,10 +64,11 @@ const ActivityHistory: React.FC = () => {
           entityType: entityType || undefined,
           search: search.trim() || undefined,
         });
-        setEntries((prev) => (append ? [...prev, ...data.items] : data.items));
-        setPage(data.pagination.page);
-        setTotalPages(data.pagination.totalPages);
-        setTotal(data.pagination.total);
+        const items = data.items ?? [];
+        setEntries((prev) => (append ? [...prev, ...items] : items));
+        setPage(data.pagination?.page ?? pageNum);
+        setTotalPages(data.pagination?.totalPages ?? 1);
+        setTotal(data.pagination?.total ?? items.length);
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : t('activityHistory.loadError');
         setError(msg);

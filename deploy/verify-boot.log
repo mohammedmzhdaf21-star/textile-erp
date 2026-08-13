@@ -1,0 +1,80 @@
+2026-08-13T17:08:09Z verify-boot: starting temporary server on port 3099
+
+============================================================
+Textile ERP Server
+============================================================
+Listening on:    http://localhost:3099
+Health check:    http://localhost:3099/health
+Auth endpoint:   http://localhost:3099/api/auth/login
+Plain cloth:       http://localhost:3099/api/plain-cloth
+Inventory:       http://localhost:3099/api/inventory
+Sales:           http://localhost:3099/api/sales
+Frontend:        http://localhost:3099/login
+Environment:     production
+============================================================
+
+[2026-08-13T17:08:10.636Z] GET /health
+2026-08-13T17:08:10Z verify-boot: OK
+
+SIGTERM received. Shutting down gracefully...
+Server closed. Goodbye!
+2026-08-13T17:08:15Z verify-boot: starting temporary server on port 3099
+
+============================================================
+Textile ERP Server
+============================================================
+Listening on:    http://localhost:3099
+Health check:    http://localhost:3099/health
+Auth endpoint:   http://localhost:3099/api/auth/login
+Plain cloth:       http://localhost:3099/api/plain-cloth
+Inventory:       http://localhost:3099/api/inventory
+Sales:           http://localhost:3099/api/sales
+Frontend:        http://localhost:3099/login
+Environment:     production
+============================================================
+
+[2026-08-13T17:08:16.567Z] GET /health
+2026-08-13T17:08:16Z verify-boot: OK
+
+SIGTERM received. Shutting down gracefully...
+Server closed. Goodbye!
+2026-08-13T17:14:50Z verify-boot: starting temporary server on port 3099
+
+============================================================
+Textile ERP Server
+============================================================
+Listening on:    http://localhost:3099
+Health check:    http://localhost:3099/health
+Auth endpoint:   http://localhost:3099/api/auth/login
+Plain cloth:       http://localhost:3099/api/plain-cloth
+Inventory:       http://localhost:3099/api/inventory
+Sales:           http://localhost:3099/api/sales
+Frontend:        http://localhost:3099/login
+Environment:     production
+============================================================
+
+[2026-08-13T17:14:51.945Z] GET /health
+2026-08-13T17:14:51Z verify-boot: OK
+
+SIGTERM received. Shutting down gracefully...
+Server closed. Goodbye!
+2026-08-13T17:15:21Z verify-boot: starting temporary server on port 3099
+
+============================================================
+Textile ERP Server
+============================================================
+Listening on:    http://localhost:3099
+Health check:    http://localhost:3099/health
+Auth endpoint:   http://localhost:3099/api/auth/login
+Plain cloth:       http://localhost:3099/api/plain-cloth
+Inventory:       http://localhost:3099/api/inventory
+Sales:           http://localhost:3099/api/sales
+Frontend:        http://localhost:3099/login
+Environment:     production
+============================================================
+
+[2026-08-13T17:15:22.398Z] GET /health
+2026-08-13T17:15:22Z verify-boot: OK
+
+SIGTERM received. Shutting down gracefully...
+Server closed. Goodbye!

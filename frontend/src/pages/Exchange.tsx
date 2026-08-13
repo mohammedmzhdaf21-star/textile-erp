@@ -6,6 +6,7 @@ import { formatCurrency, parsePriceInput, toPriceInputNumber } from '../lib/curr
 import { fetchPlainClothTypes, type PlainClothType } from '../lib/plainClothApi';
 import QrScanInput from '../components/QrScanInput';
 import { resolveInventoryItem } from '../lib/inventoryLookup';
+import { BRANCH_ID_BY_CODE } from '../lib/inventoryCodes';
 
 type BranchCode = 'A' | 'B' | 'C' | 'E' | 'F';
 
@@ -55,14 +56,6 @@ type InventoryLookupItem = {
 };
 
 const branchOptions: BranchCode[] = ['A', 'B', 'C', 'E', 'F'];
-const BRANCH_MAP: Record<BranchCode, string> = {
-  A: 'B001',
-  B: 'B002',
-  C: 'B003',
-  E: 'B001',
-  F: 'B002',
-};
-
 const soldAsUnitForItem = (item: InventoryLookupItem): 'METER' | 'PIECE' =>
   item.type === 'PIECE' ? 'PIECE' : 'METER';
 
@@ -194,7 +187,7 @@ const ExchangePage: React.FC = () => {
   }, [amountPaid, netDue, paymentStatus]);
 
   const detectReturnedItemForCode = async (inventoryItemId: string, sourceBranch: BranchCode) => {
-    const item = await resolveInventoryItem<InventoryLookupItem>(inventoryItemId, sourceBranch, BRANCH_MAP);
+    const item = await resolveInventoryItem<InventoryLookupItem>(inventoryItemId, sourceBranch, BRANCH_ID_BY_CODE);
     setDetectedReturnedItem(item);
     if (item) {
       const unit = soldAsUnitForItem(item);
@@ -209,7 +202,7 @@ const ExchangePage: React.FC = () => {
   };
 
   const detectNewItemForCode = async (inventoryItemId: string, sourceBranch: BranchCode) => {
-    const item = await resolveInventoryItem<InventoryLookupItem>(inventoryItemId, sourceBranch, BRANCH_MAP);
+    const item = await resolveInventoryItem<InventoryLookupItem>(inventoryItemId, sourceBranch, BRANCH_ID_BY_CODE);
     setDetectedNewItem(item);
     if (item) {
       const unit = soldAsUnitForItem(item);
@@ -446,7 +439,7 @@ const ExchangePage: React.FC = () => {
       });
 
       const exchangePayload = {
-        branchId: BRANCH_MAP[selectedBranch],
+        branchId: BRANCH_ID_BY_CODE[selectedBranch],
         employeeId: currentUser.id,
         customerName: customerName.trim(),
         customerPhone: customerPhone.trim(),

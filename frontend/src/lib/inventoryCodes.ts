@@ -43,6 +43,10 @@ export const getBranchLabel = (t: TFunction, code: BranchDestinationCode) => {
   return destination ? t(destination.labelKey) : code;
 };
 
+export function resolveBranchId(code: string): string {
+  return BRANCH_ID_BY_CODE[code as BranchDestinationCode] ?? code;
+}
+
 export const typeCode = (type: InventoryItemType) =>
   type === 'ROLL' ? 'R' : type === 'PIECE' ? 'P' : 'M';
 

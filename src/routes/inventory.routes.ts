@@ -11,6 +11,7 @@ import {
   getInventoryStats,
 } from '../lib/inventory';
 import { authenticate, requireRole } from '../middleware/authenticate';
+import { parseOptionalInt, parsePage, parsePageSize } from '../lib/routeHelpers';
 
 const router = Router();
 
@@ -39,10 +40,10 @@ router.get('/', async (req: Request, res: Response) => {
       type = typeRaw;
     }
 
-    const code = codeRaw ? parseInt(codeRaw, 10) : undefined;
+    const code = parseOptionalInt(codeRaw);
     const includeArchived = includeArchivedRaw === 'true';
-    const page = pageRaw ? parseInt(pageRaw, 10) : 1;
-    const pageSize = pageSizeRaw ? parseInt(pageSizeRaw, 10) : 50;
+    const page = parsePage(pageRaw, 1);
+    const pageSize = parsePageSize(pageSizeRaw, 50);
 
     const result = await listInventory({
       branchId,

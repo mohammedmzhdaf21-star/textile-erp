@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import QRCode from 'qrcode';
 import api from '../lib/api';
 import { completeCuttingTasksAfterRollToPiece } from '../lib/cuttingTasks';
-import { buildInventoryItemId } from '../lib/inventoryCodes';
+import { buildInventoryItemId, BRANCH_CODE_BY_ID, BRANCH_ID_BY_CODE } from '../lib/inventoryCodes';
 import { getColorLabel } from '../lib/colorLabels';
 import { isBelowRemnantThreshold } from '../lib/inventoryRules';
 import { useTranslation } from 'react-i18next';
@@ -42,19 +42,6 @@ type ConversionSummary = {
 };
 
 const branches: BranchCode[] = ['A', 'B', 'C', 'E', 'F'];
-const BRANCH_MAP: Record<BranchCode, string> = {
-  A: 'B001',
-  B: 'B002',
-  C: 'B003',
-  E: 'B001',
-  F: 'B002',
-};
-
-const BRANCH_CODE_BY_ID: Record<string, BranchCode> = {
-  B001: 'A',
-  B002: 'B',
-  B003: 'C',
-};
 
 const toNumber = (value: unknown) => {
   const parsed = Number(value ?? 0);
@@ -184,7 +171,7 @@ const ItemConversion: React.FC = () => {
   const transferItem = async () => {
     if (!transferSource) return alert(t('itemConversion.loadTransferFirst'));
     const amount = Number(transferAmount);
-    const destinationBranchId = BRANCH_MAP[transferToBranch];
+    const destinationBranchId = BRANCH_ID_BY_CODE[transferToBranch];
     const currentBranch = BRANCH_CODE_BY_ID[transferSource.branchId];
 
     if (destinationBranchId === transferSource.branchId) {

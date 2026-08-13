@@ -4,6 +4,7 @@ import api from '../lib/api';
 import { useTranslation } from 'react-i18next';
 import { formatCurrency, formatSignedCurrency } from '../lib/currency';
 import { isImmediatePaymentMethod, resolveSalePaymentLabel } from '../lib/paymentMethod';
+import { resolveBranchId } from '../lib/inventoryCodes';
 
 type Sale = {
   id: string;
@@ -42,13 +43,6 @@ type EmployeeGroup = {
 };
 
 const branches = ['A', 'B', 'C', 'E', 'F'] as const;
-const BRANCH_MAP: Record<string, string> = {
-  A: 'B001',
-  B: 'B002',
-  C: 'B003',
-  E: 'B001',
-  F: 'B002',
-};
 type BranchId = typeof branches[number];
 const OWED_PAYMENTS_KEY = 'textile-erp-owed-payments';
 
@@ -127,7 +121,7 @@ const toDate = formatDate(tomorrow);
       .get('/sales', {
         params: {
           // use mapped backend id
-          branchId: BRANCH_MAP[selectedBranch as string] ?? selectedBranch,
+          branchId: resolveBranchId(selectedBranch as string),
           fromDate,
           toDate,
         },
@@ -140,7 +134,7 @@ const toDate = formatDate(tomorrow);
         else if (data && Array.isArray(data.items)) raw = data.items as Sale[];
         else raw = [];
 
-        const branchId = BRANCH_MAP[selectedBranch as string] ?? selectedBranch;
+        const branchId = resolveBranchId(selectedBranch as string);
         const salesWithLocalOwedPayments = [
           ...raw,
           ...owedPaymentRowsForDate(branchId, fromDate),

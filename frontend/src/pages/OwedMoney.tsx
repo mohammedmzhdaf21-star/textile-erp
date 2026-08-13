@@ -4,6 +4,7 @@ import api from '../lib/api';
 import { useTranslation } from 'react-i18next';
 import { formatCurrency, parsePriceInput } from '../lib/currency';
 import { isImmediatePaymentMethod } from '../lib/paymentMethod';
+import { BRANCH_ID_BY_CODE } from '../lib/inventoryCodes';
 
 type Sale = {
   id: string;
@@ -40,14 +41,6 @@ type OwedRow = Sale & {
 
 const branches = ['A', 'B', 'C', 'E', 'F'] as const;
 type BranchId = typeof branches[number];
-
-const BRANCH_MAP: Record<BranchId, string> = {
-  A: 'B001',
-  B: 'B002',
-  C: 'B003',
-  E: 'B001',
-  F: 'B002',
-};
 
 const OWED_PAYMENTS_KEY = 'textile-erp-owed-payments';
 
@@ -127,7 +120,7 @@ const OwedMoney: React.FC = () => {
 
   const owedRows = useMemo<OwedRow[]>(() => {
     if (!selectedBranch) return [];
-    const branchId = BRANCH_MAP[selectedBranch];
+    const branchId = BRANCH_ID_BY_CODE[selectedBranch];
 
     return sales
       .map((sale) => {
@@ -166,7 +159,7 @@ const OwedMoney: React.FC = () => {
     try {
       const response = await api.get('/sales', {
         params: {
-          branchId: BRANCH_MAP[branch],
+          branchId: BRANCH_ID_BY_CODE[branch],
           includeVoided: false,
           pageSize: 200,
         },
@@ -217,7 +210,7 @@ const OwedMoney: React.FC = () => {
 
     const payment: OwedPayment = {
       saleId: paymentSale.id,
-      branchId: BRANCH_MAP[selectedBranch],
+      branchId: BRANCH_ID_BY_CODE[selectedBranch],
       amount,
       paidAt: new Date().toISOString(),
       customerName: paymentSale.customerName,

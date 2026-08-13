@@ -12,6 +12,7 @@ import { completeCuttingTasksAfterRollToPiece, maybeCreateCuttingTaskAfterPieceS
 import { sellCutPiece } from '../lib/cutAndSell';
 import { getColorLabel } from '../lib/colorLabels';
 import { resolveInventoryItem } from '../lib/inventoryLookup';
+import { BRANCH_ID_BY_CODE, resolveBranchId } from '../lib/inventoryCodes';
 import { isBelowRemnantThreshold } from '../lib/inventoryRules';
 import { printPieceInventoryLabel } from '../lib/pieceLabel';
 import {
@@ -80,14 +81,6 @@ type InventoryLookupItem = {
 import type { TFunction } from 'i18next';
 
 const branchOptions = ['A', 'B', 'C', 'E', 'F'];
-// Map UI branch codes to backend IDs (match seeded branches)
-const BRANCH_MAP: Record<string, string> = {
-  A: 'B001',
-  B: 'B002',
-  C: 'B003',
-  E: 'B001',
-  F: 'B002',
-};
 const soldAsUnitForItem = (item: InventoryLookupItem): 'METER' | 'PIECE' =>
   item.type === 'PIECE' ? 'PIECE' : 'METER';
 
@@ -295,7 +288,7 @@ const SalesView: React.FC = () => {
   };
 
   const detectScanItemForCode = async (inventoryItemId: string, sourceBranch: string) => {
-    const item = await resolveInventoryItem<InventoryLookupItem>(inventoryItemId, sourceBranch, BRANCH_MAP);
+    const item = await resolveInventoryItem<InventoryLookupItem>(inventoryItemId, sourceBranch, BRANCH_ID_BY_CODE);
     setDetectedScanItem(item);
     if (item) {
       const unit = soldAsUnitForItem(item);
@@ -665,7 +658,7 @@ const SalesView: React.FC = () => {
 
       const channelLabel = paymentChannel === 'FIB' ? 'FIB' : 'Cash';
       const payload = {
-        branchId: BRANCH_MAP[branch] ?? branch,
+        branchId: resolveBranchId(branch),
         employeeId: currentUser.id,
         customerName,
         customerPhone,

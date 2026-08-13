@@ -67,8 +67,9 @@ export async function authenticate(
     };
 
     next();
-  } catch {
-    res.status(401).json({ error: 'Authentication failed' });
+  } catch (error) {
+    console.error('Authentication middleware error:', error);
+    res.status(503).json({ error: 'Authentication service unavailable' });
   }
 }
 

@@ -3,6 +3,7 @@ import api from '../lib/api';
 import { useTranslation } from 'react-i18next';
 import { formatCurrency } from '../lib/currency';
 import { isImmediatePaymentMethod } from '../lib/paymentMethod';
+import { BRANCH_ID_BY_CODE } from '../lib/inventoryCodes';
 
 type Sale = {
   id: string;
@@ -19,14 +20,6 @@ type Sale = {
 
 const branches = ['A', 'B', 'C', 'E', 'F'] as const;
 type BranchId = typeof branches[number];
-
-const BRANCH_MAP: Record<BranchId, string> = {
-  A: 'B001',
-  B: 'B002',
-  C: 'B003',
-  E: 'B001',
-  F: 'B002',
-};
 
 const toMoneyNumber = (value: unknown) => {
   const parsed = Number(value ?? 0);
@@ -126,7 +119,7 @@ const DataAnalysis: React.FC = () => {
 
       const response = await api.get('/sales', {
         params: {
-          branchId: BRANCH_MAP[selectedBranch],
+          branchId: BRANCH_ID_BY_CODE[selectedBranch],
           fromDate: start.toISOString(),
           toDate: end.toISOString(),
           includeVoided: false,

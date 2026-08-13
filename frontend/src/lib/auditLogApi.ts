@@ -64,5 +64,8 @@ export async function fetchAuditEntityTypes() {
 
 export async function fetchAuditLogById(id: string) {
   const { data } = await api.get<{ entry: AuditLogDetail }>(`/audit-logs/${encodeURIComponent(id)}`);
+  if (!data.entry) {
+    throw new Error('Activity record not found');
+  }
   return data.entry;
 }

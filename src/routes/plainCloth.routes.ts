@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { authenticate, requireRole } from '../middleware/authenticate';
 import { writeAuditLog } from '../lib/auditLog';
+import { toInputJson } from '../lib/routeHelpers';
 import {
   createPlainClothPricing,
   deletePlainClothPricing,
@@ -77,7 +78,7 @@ router.delete('/:id', requireRole('ADMIN', 'MANAGER'), async (req: Request, res:
       action: 'DELETE',
       performedById: req.user!.userId,
       performedByEmail: req.user!.email,
-      changes: result as Record<string, unknown>,
+      changes: toInputJson(result),
     });
     return res.status(200).json(result);
   } catch (error: any) {

@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import api from '../lib/api';
 import { useTranslation } from 'react-i18next';
 import { formatCurrency } from '../lib/currency';
+import { BRANCH_ID_BY_CODE } from '../lib/inventoryCodes';
 
 type BranchCode = 'A' | 'B' | 'C' | 'E' | 'F';
 
@@ -65,14 +66,6 @@ type DailyBreakdown = {
 
 const branches: BranchCode[] = ['A', 'B', 'C', 'E', 'F'];
 const TRUSTEE_RULES_KEY = 'textile-erp-trustee-commission-rules';
-
-const BRANCH_MAP: Record<BranchCode, string> = {
-  A: 'B001',
-  B: 'B002',
-  C: 'B003',
-  E: 'B001',
-  F: 'B002',
-};
 
 const toMoneyNumber = (value: unknown) => {
   const parsed = Number(value ?? 0);
@@ -397,7 +390,7 @@ const TrusteeCommission: React.FC = () => {
         branchesToLoad.map(async (branch) => {
           const response = await api.get('/sales', {
             params: {
-              branchId: BRANCH_MAP[branch],
+              branchId: BRANCH_ID_BY_CODE[branch],
               fromDate: start.toISOString(),
               toDate: end.toISOString(),
               includeVoided: false,

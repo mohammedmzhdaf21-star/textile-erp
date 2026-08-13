@@ -22,6 +22,7 @@ import {
 } from '../lib/plainClothPricing';
 import { roleHasFullAccess } from '../lib/employeeSections';
 import { writeAuditLog } from '../lib/auditLog';
+import { toInputJson } from '../lib/routeHelpers';
 
 const router = Router();
 
@@ -108,7 +109,7 @@ router.put('/settings/rate', requireRole('ADMIN', 'MANAGER'), async (req: Reques
       action: 'UPDATE',
       performedById: req.user!.userId,
       performedByEmail: req.user!.email,
-      changes: rate as unknown as Record<string, unknown>,
+      changes: toInputJson(rate),
     });
     await recalculatePendingCommissionEntries();
     return res.status(200).json({ rate });
@@ -132,7 +133,7 @@ router.put('/settings/prices', requireRole('ADMIN', 'MANAGER'), async (req: Requ
         action: 'UPDATE',
         performedById: req.user!.userId,
         performedByEmail: req.user!.email,
-        changes: saved as unknown as Record<string, unknown>,
+        changes: toInputJson(saved),
       });
       const backfill = await backfillCommissionEntries();
       return res.status(200).json({ price: saved, backfillCreated: backfill.created });

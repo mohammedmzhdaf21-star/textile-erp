@@ -133,7 +133,7 @@ export async function createEmployee(input: {
       isActive: true,
       approvalStatus: 'APPROVED',
       assignedWork: input.assignedWork?.trim() || null,
-      allowedSections: sections,
+      allowedSections: sections === null ? Prisma.DbNull : sections,
       branches: input.branchIds?.length
         ? {
             create: input.branchIds.map((branchId) => ({ branchId })),
@@ -200,7 +200,7 @@ export async function updateEmployee(
     phone: input.phone === undefined ? undefined : input.phone?.trim() || null,
     role: input.role,
     assignedWork: input.assignedWork === undefined ? undefined : input.assignedWork?.trim() || null,
-    allowedSections: nextSections,
+    allowedSections: nextSections === null ? Prisma.DbNull : nextSections,
     isActive: input.isActive,
   };
 
