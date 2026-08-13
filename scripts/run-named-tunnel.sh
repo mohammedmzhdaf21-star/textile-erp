@@ -20,6 +20,8 @@ TOKEN="${CLOUDFLARE_TUNNEL_TOKEN:-}"
 PORT="${PORT:-3000}"
 PUBLIC_URL="${ERP_PUBLIC_URL:-https://erp.kutalimzhda.com}"
 METRICS_PORT="${TUNNEL_METRICS_PORT:-20241}"
+# HTTP/2 over TCP — stable on VPS hosts. QUIC (UDP) drops after ~20–30 min idle on this server.
+TUNNEL_PROTOCOL="${CLOUDFLARE_TUNNEL_PROTOCOL:-http2}"
 
 if [[ -z "$TOKEN" ]]; then
   echo "ERROR: CLOUDFLARE_TUNNEL_TOKEN is missing from .env"
@@ -56,11 +58,12 @@ if command -v lsof >/dev/null 2>&1 && lsof -ti ":${METRICS_PORT}" >/dev/null 2>&
 fi
 
 echo "==> Cloudflare named tunnel"
-echo "    Domain:  $PUBLIC_URL"
-echo "    Origin:  http://127.0.0.1:${PORT}"
+echo "    Domain:   $PUBLIC_URL"
+echo "    Origin:   http://127.0.0.1:${PORT}"
+echo "    Protocol: $TUNNEL_PROTOCOL"
 
 exec cloudflared tunnel \
   --metrics "127.0.0.1:${METRICS_PORT}" \
   --loglevel info \
   --logfile "$ROOT/deploy/tunnel.log" \
-  run --token "$TOKEN"
+  run --token "$TOKEN" --protocol "$TUNNEL_PROTOCOL"

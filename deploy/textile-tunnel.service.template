@@ -9,6 +9,7 @@ WorkingDirectory=@WORKSPACE@
 Environment=PORT=3000
 Environment=ERP_PUBLIC_URL=https://erp.kutalimzhda.com
 Environment=TUNNEL_METRICS_PORT=20241
+Environment=CLOUDFLARE_TUNNEL_PROTOCOL=http2
 ExecStart=@WORKSPACE@/scripts/run-named-tunnel.sh
 Restart=always
 RestartSec=10

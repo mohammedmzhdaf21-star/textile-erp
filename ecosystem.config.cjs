@@ -30,6 +30,7 @@ module.exports = {
         PORT: '3000',
         ERP_PUBLIC_URL: 'https://erp.kutalimzhda.com',
         TUNNEL_METRICS_PORT: '20241',
+        CLOUDFLARE_TUNNEL_PROTOCOL: 'http2',
       },
       autorestart: true,
       max_restarts: 50,
