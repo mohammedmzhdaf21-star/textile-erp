@@ -61,6 +61,16 @@ mkdir -p "$ROOT/deploy"
 printf '%s\n' "$PUBLIC_URL" > "$ROOT/deploy/public-url.txt"
 printf '%s\n' "$METRICS_PORT" > "$ROOT/deploy/tunnel-metrics.port"
 
+# Stale cloudflared from PM2 restarts can hold the metrics port and block new tunnels.
+if command -v lsof >/dev/null 2>&1 && lsof -ti ":${METRICS_PORT}" >/dev/null 2>&1; then
+  echo "==> Freeing metrics port ${METRICS_PORT} from stale cloudflared"
+  lsof -ti ":${METRICS_PORT}" | xargs -r kill -9 2>/dev/null || true
+  sleep 2
+fi
+# Ensure no orphaned tunnel connector blocks re-registration at Cloudflare edge.
+pkill -f "cloudflared tunnel --metrics" 2>/dev/null || true
+sleep 1
+
 echo "==> Starting named Cloudflare tunnel"
 echo "    Public URL: $PUBLIC_URL"
 echo "    Protocol:   $TUNNEL_PROTOCOL (4 HA connections)"

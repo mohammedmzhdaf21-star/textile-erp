@@ -77,7 +77,7 @@ tunnel_recover() {
   printf '%s %s\n' "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" "RECOVER: restarting tunnel (1033 prevention)" >>"$log_file"
 
   tunnel_pm2_restart textile-tunnel "$log_file"
-  sleep 10
+  sleep 15
 
   if ! tunnel_check_public "$public_health"; then
     printf '%s %s\n' "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" "RECOVER: public still down — refreshing DNS" >>"$log_file"
