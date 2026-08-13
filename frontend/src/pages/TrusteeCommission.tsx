@@ -35,6 +35,12 @@ type TrusteeResult = TrusteeRule & {
   commissionAmount: number;
 };
 
+type BranchBreakdown = {
+  branch: BranchCode;
+  salesCount: number;
+  revenue: number;
+};
+
 const branches: BranchCode[] = ['A', 'B', 'C', 'E', 'F'];
 const TRUSTEE_RULES_KEY = 'textile-erp-trustee-commission-rules';
 
@@ -81,6 +87,19 @@ const extractSales = (data: unknown): Sale[] => {
 
 const uniqueBranches = (values: BranchCode[]) =>
   branches.filter((branch) => values.includes(branch));
+
+const branchBreakdownForRule = (
+  ruleBranches: BranchCode[],
+  salesByBranch: Record<BranchCode, Sale[]>
+): BranchBreakdown[] =>
+  ruleBranches.map((branch) => {
+    const sales = salesByBranch[branch] || [];
+    return {
+      branch,
+      salesCount: sales.length,
+      revenue: sales.reduce((sum, sale) => sum + saleCashAmount(sale), 0),
+    };
+  });
 
 const isBranchCode = (value: unknown): value is BranchCode =>
   typeof value === 'string' && branches.includes(value as BranchCode);
@@ -153,6 +172,7 @@ const TrusteeCommission: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [expandedResultId, setExpandedResultId] = useState<string | null>(null);
 
   const activeRules = rules.filter((rule) => rule.isActive);
 
@@ -267,6 +287,7 @@ const TrusteeCommission: React.FC = () => {
     setLoading(true);
     setError(null);
     setMessage(null);
+    setExpandedResultId(null);
 
     try {
       const start = new Date(fromDate);
@@ -501,28 +522,104 @@ const TrusteeCommission: React.FC = () => {
                 </div>
               ) : (
                 <div className="mt-4 space-y-3">
-                  {trusteeResults.map((result) => (
-                    <div key={result.id} className="rounded-2xl border border-magenta-200 bg-magenta-50 p-4">
-                      <div className="space-y-3">
-                        <div>
-                          <div className="font-semibold text-black">{result.trusteeName}</div>
-                          <div className="text-sm text-gray-600">
-                            {t('trusteeCommission.resultSummary', { branches: result.branches.join(', '), count: result.salesCount, rate: result.percentage })}
+                  {trusteeResults.map((result) => {
+                    const isExpanded = expandedResultId === result.id;
+                    const branchBreakdown = branchBreakdownForRule(result.branches, salesByBranch);
+
+                    return (
+                      <div key={result.id} className="rounded-2xl border border-magenta-200 bg-magenta-50">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setExpandedResultId((current) =>
+                              current === result.id ? null : result.id
+                            )
+                          }
+                          aria-expanded={isExpanded}
+                          className="w-full rounded-2xl p-4 text-left transition-colors hover:bg-magenta-100/60"
+                        >
+                          <div className="space-y-3">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <div className="font-semibold text-black">{result.trusteeName}</div>
+                                <div className="text-sm text-gray-600">
+                                  {t('trusteeCommission.resultSummary', {
+                                    branches: result.branches.join(', '),
+                                    count: result.salesCount,
+                                    rate: result.percentage,
+                                  })}
+                                </div>
+                              </div>
+                              <span
+                                className={`shrink-0 text-sm text-gray-500 transition-transform ${
+                                  isExpanded ? 'rotate-180' : ''
+                                }`}
+                                aria-hidden="true"
+                              >
+                                ▾
+                              </span>
+                            </div>
+                            <div className="grid gap-2 sm:grid-cols-2">
+                              <div className="rounded-xl bg-white px-3 py-2">
+                                <div className="text-xs text-gray-500">
+                                  {t('trusteeCommission.linkedBranchSales')}
+                                </div>
+                                <div className="text-lg font-bold text-black">
+                                  {formatCurrency(result.branchRevenue)}
+                                </div>
+                              </div>
+                              <div className="rounded-xl bg-white px-3 py-2">
+                                <div className="text-xs text-gray-500">
+                                  {t('trusteeCommission.trusteeCommission')}
+                                </div>
+                                <div className="text-lg font-bold text-magenta-600">
+                                  {formatCurrency(result.commissionAmount)}
+                                </div>
+                              </div>
+                            </div>
+                            <p className="text-xs text-gray-500">
+                              {isExpanded
+                                ? t('trusteeCommission.branchBreakdownHint')
+                                : t('trusteeCommission.tapForBranchBreakdown')}
+                            </p>
                           </div>
-                        </div>
-                        <div className="grid gap-2 sm:grid-cols-2">
-                          <div className="rounded-xl bg-white px-3 py-2">
-                            <div className="text-xs text-gray-500">{t('trusteeCommission.linkedBranchSales')}</div>
-                            <div className="text-lg font-bold text-black">{formatCurrency(result.branchRevenue)}</div>
+                        </button>
+
+                        {isExpanded && (
+                          <div className="border-t border-magenta-200 px-4 pb-4 pt-3">
+                            <div className="text-sm font-semibold text-black">
+                              {t('trusteeCommission.branchBreakdownTitle', {
+                                from: fromDate,
+                                to: toDate,
+                              })}
+                            </div>
+                            <div className="mt-3 space-y-2">
+                              {branchBreakdown.map((entry) => (
+                                <div
+                                  key={entry.branch}
+                                  className="flex items-center justify-between gap-3 rounded-xl bg-white px-3 py-2 text-sm"
+                                >
+                                  <div>
+                                    <div className="font-semibold text-black">
+                                      {t('trusteeCommission.branchLabel', { branch: entry.branch })}
+                                    </div>
+                                    <div className="text-xs text-gray-500">
+                                      {t('trusteeCommission.branchSalesCount', {
+                                        count: entry.salesCount,
+                                      })}
+                                    </div>
+                                  </div>
+                                  <div className="whitespace-nowrap font-bold text-magenta-600">
+                                    {formatCurrency(entry.revenue)}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
                           </div>
-                          <div className="rounded-xl bg-white px-3 py-2">
-                            <div className="text-xs text-gray-500">{t('trusteeCommission.trusteeCommission')}</div>
-                            <div className="text-lg font-bold text-magenta-600">{formatCurrency(result.commissionAmount)}</div>
-                          </div>
-                        </div>
+                        )}
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
