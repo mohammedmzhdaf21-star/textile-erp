@@ -4,7 +4,6 @@ import { normalizeStoredAmount } from './currency';
 import {
   getCommissionRate,
   getItemMinimumPrice,
-  getItemMinimumPrices,
 } from './commissionSettings';
 import { getPlainClothPricingByName } from './plainClothPricing';
 
