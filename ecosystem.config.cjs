@@ -33,9 +33,10 @@ module.exports = {
         CLOUDFLARE_TUNNEL_PROTOCOL: 'http2',
       },
       autorestart: true,
-      max_restarts: 50,
-      restart_delay: 5000,
-      min_uptime: '60s',
+      max_restarts: 100,
+      restart_delay: 3000,
+      min_uptime: '15s',
+      exp_backoff_restart_delay: 2000,
     },
   ],
 };
