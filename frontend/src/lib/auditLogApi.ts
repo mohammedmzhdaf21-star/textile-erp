@@ -19,6 +19,8 @@ export type AuditLogEntry = {
   changes: Record<string, unknown> | null;
   ipAddress: string | null;
   createdAt: string;
+  recipientName?: string | null;
+  recipientEmail?: string | null;
 };
 
 export type AuditLogDetail = AuditLogEntry & {

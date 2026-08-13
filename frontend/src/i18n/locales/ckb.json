@@ -187,6 +187,7 @@
     "loadMore": "زیاتر بار بکە",
     "unknownUser": "بەکارهێنەری نەناسراو",
     "tapForDetail": "بۆ وردەکاری کرتە بکە",
+    "commissionPaidSummary": "{{actor}} کۆمیشن دا بە {{recipient}} — {{amount}}",
     "entrySummary": "{{actor}} — {{action}} {{entity}} ({{entityId}})",
     "detail": {
       "title": "وردەکاریی کردار",
@@ -204,7 +205,10 @@
       "openRecord": "کردنەوەی تۆمار",
       "noExtraData": "هیچ وردەکارییەکی زیاتر نییە بۆ ئەم کردارە.",
       "missingId": "ناسنامەی کردار نەدراوە.",
-      "loadError": "نەتوانرا وردەکاریی کردار بار بکرێت."
+      "loadError": "نەتوانرا وردەکاریی کردار بار بکرێت.",
+      "paidTo": "پارەدراو بۆ",
+      "amountPaid": "بڕی پارەدراو",
+      "entryCount": "هێڵەکانی کۆمیشن"
     },
     "action": {
       "CREATE": "دروستکردن",

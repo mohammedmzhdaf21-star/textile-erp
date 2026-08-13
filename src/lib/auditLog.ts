@@ -111,21 +111,52 @@ export async function listAuditLogs(params: ListAuditLogsParams) {
     prisma.auditLog.count({ where }),
   ]);
 
+  const commissionEmployeeIds = [
+    ...new Set(
+      items.filter((row) => row.entityType === 'EmployeeCommission').map((row) => row.entityId)
+    ),
+  ];
+  const commissionEmployees = new Map<string, { name: string; email: string }>();
+  if (commissionEmployeeIds.length > 0) {
+    const employees = await prisma.employee.findMany({
+      where: { id: { in: commissionEmployeeIds } },
+      select: { id: true, name: true, email: true },
+    });
+    for (const employee of employees) {
+      commissionEmployees.set(employee.id, { name: employee.name, email: employee.email });
+    }
+  }
+
   return {
-    items: items.map((row) => ({
-      id: row.id,
-      entityType: row.entityType,
-      entityId: row.entityId,
-      action: row.action,
-      performedById: row.performedById,
-      performedByEmail: row.performedByEmail,
-      performedBy: row.performedBy,
-      branchId: row.branchId,
-      branch: row.branch,
-      changes: row.changes,
-      ipAddress: row.ipAddress,
-      createdAt: row.createdAt.toISOString(),
-    })),
+    items: items.map((row) => {
+      const base = {
+        id: row.id,
+        entityType: row.entityType,
+        entityId: row.entityId,
+        action: row.action,
+        performedById: row.performedById,
+        performedByEmail: row.performedByEmail,
+        performedBy: row.performedBy,
+        branchId: row.branchId,
+        branch: row.branch,
+        changes: row.changes,
+        ipAddress: row.ipAddress,
+        createdAt: row.createdAt.toISOString(),
+      };
+
+      if (row.entityType === 'EmployeeCommission') {
+        const recipient = commissionEmployees.get(row.entityId);
+        if (recipient) {
+          return {
+            ...base,
+            recipientName: recipient.name,
+            recipientEmail: recipient.email,
+          };
+        }
+      }
+
+      return base;
+    }),
     pagination: {
       page,
       pageSize,
@@ -155,7 +186,7 @@ function canViewAuditLog(
   return isAdmin || row.performedById === viewerId;
 }
 
-async function enrichAuditEntity(entityType: string, entityId: string) {
+async function enrichAuditEntity(entityType: string, entityId: string, changes?: unknown) {
   switch (entityType) {
     case 'Sale': {
       const sale = await prisma.sale.findUnique({
@@ -245,6 +276,36 @@ async function enrichAuditEntity(entityType: string, entityId: string) {
         },
       };
     }
+    case 'EmployeeCommission': {
+      const employee = await prisma.employee.findUnique({
+        where: { id: entityId },
+        select: { id: true, name: true, email: true, role: true },
+      });
+      if (!employee) return null;
+
+      const changeData =
+        changes && typeof changes === 'object' && !Array.isArray(changes)
+          ? (changes as Record<string, unknown>)
+          : {};
+
+      return {
+        linkPath: '/commission-payouts',
+        label: employee.name,
+        snapshot: {
+          paidTo: employee.name,
+          employeeEmail: employee.email,
+          employeeRole: employee.role,
+          amountPaid:
+            changeData.amountPaid !== undefined && changeData.amountPaid !== null
+              ? String(changeData.amountPaid)
+              : null,
+          entryCount:
+            changeData.entryCount !== undefined && changeData.entryCount !== null
+              ? String(changeData.entryCount)
+              : null,
+        },
+      };
+    }
     default:
       return null;
   }
@@ -271,7 +332,7 @@ export async function getAuditLogById(id: string, viewerId: string, viewerRole: 
     throw new Error('You do not have access to this activity record');
   }
 
-  const relatedEntity = await enrichAuditEntity(row.entityType, row.entityId);
+  const relatedEntity = await enrichAuditEntity(row.entityType, row.entityId, row.changes);
 
   return {
     id: row.id,

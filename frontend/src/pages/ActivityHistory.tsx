@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { getCurrentUser } from '../lib/auth';
 import { fetchAuditEntityTypes, fetchAuditLogs, type AuditLogEntry } from '../lib/auditLogApi';
 import { AUDIT_ACTIONS } from '../lib/auditLogTypes';
+import { formatCurrency } from '../lib/currency';
 
 type DateBucket = {
   key: string;
@@ -110,6 +111,20 @@ const ActivityHistory: React.FC = () => {
       entry.performedBy?.name ||
       entry.performedByEmail ||
       t('activityHistory.unknownUser');
+
+    if (entry.entityType === 'EmployeeCommission') {
+      const changes = entry.changes as Record<string, unknown> | null;
+      const recipient =
+        entry.recipientName ||
+        (typeof changes?.employeeName === 'string' ? changes.employeeName : null) ||
+        t('activityHistory.unknownUser');
+      const amount =
+        changes?.amountPaid !== undefined && changes?.amountPaid !== null
+          ? formatCurrency(Number(changes.amountPaid))
+          : '—';
+      return t('activityHistory.commissionPaidSummary', { actor, recipient, amount });
+    }
+
     const entityLabel = t(`activityHistory.entity.${entry.entityType}`, {
       defaultValue: entry.entityType,
     });
@@ -128,6 +143,25 @@ const ActivityHistory: React.FC = () => {
     const lines: string[] = [];
     const changes = entry.changes as Record<string, unknown> | null;
     if (!changes || typeof changes !== 'object') return lines;
+
+    if (entry.entityType === 'EmployeeCommission') {
+      const recipient =
+        entry.recipientName ||
+        (typeof changes.employeeName === 'string' ? changes.employeeName : null);
+      if (recipient) {
+        lines.push(`${t('activityHistory.detail.paidTo')}: ${recipient}`);
+      }
+      if (changes.amountPaid !== undefined && changes.amountPaid !== null) {
+        lines.push(
+          `${t('activityHistory.detail.amountPaid')}: ${formatCurrency(Number(changes.amountPaid))}`
+        );
+      }
+      if (changes.entryCount !== undefined && changes.entryCount !== null) {
+        lines.push(`${t('activityHistory.detail.entryCount')}: ${String(changes.entryCount)}`);
+      }
+      return lines;
+    }
+
     for (const [key, value] of Object.entries(changes)) {
       if (value === undefined || value === null) continue;
       const rendered =

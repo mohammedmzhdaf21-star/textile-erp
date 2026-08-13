@@ -187,6 +187,7 @@
     "loadMore": "Load more",
     "unknownUser": "Unknown user",
     "tapForDetail": "Tap for details",
+    "commissionPaidSummary": "{{actor}} paid commission to {{recipient}} — {{amount}}",
     "entrySummary": "{{actor}} — {{action}} {{entity}} ({{entityId}})",
     "detail": {
       "title": "Action details",
@@ -204,7 +205,10 @@
       "openRecord": "Open record",
       "noExtraData": "No additional details for this action.",
       "missingId": "Missing activity ID.",
-      "loadError": "Could not load action details."
+      "loadError": "Could not load action details.",
+      "paidTo": "Paid to",
+      "amountPaid": "Amount paid",
+      "entryCount": "Commission lines paid"
     },
     "action": {
       "CREATE": "Created",

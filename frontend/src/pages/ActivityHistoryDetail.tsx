@@ -61,24 +61,60 @@ const ActivityHistoryDetail: React.FC = () => {
   }, [entry]);
 
   const summary = entry
-    ? t('activityHistory.entrySummary', {
-        actor:
-          entry.performedBy?.name ||
-          entry.performedByEmail ||
-          t('activityHistory.unknownUser'),
-        action: t(`activityHistory.action.${entry.action}`, { defaultValue: entry.action }),
-        entity: t(`activityHistory.entity.${entry.entityType}`, {
-          defaultValue: entry.entityType,
-        }),
-        entityId: entry.entityId,
-      })
+    ? entry.entityType === 'EmployeeCommission'
+      ? t('activityHistory.commissionPaidSummary', {
+          actor:
+            entry.performedBy?.name ||
+            entry.performedByEmail ||
+            t('activityHistory.unknownUser'),
+          recipient:
+            entry.recipientName ||
+            (typeof (entry.changes as Record<string, unknown> | null)?.employeeName === 'string'
+              ? ((entry.changes as Record<string, unknown>).employeeName as string)
+              : entry.relatedEntity?.label) ||
+            t('activityHistory.unknownUser'),
+          amount:
+            (entry.changes as Record<string, unknown> | null)?.amountPaid !== undefined &&
+            (entry.changes as Record<string, unknown> | null)?.amountPaid !== null
+              ? formatCurrency(
+                  Number((entry.changes as Record<string, unknown>).amountPaid)
+                )
+              : entry.relatedEntity?.snapshot?.amountPaid
+                ? formatCurrency(Number(entry.relatedEntity.snapshot.amountPaid))
+                : '—',
+        })
+      : t('activityHistory.entrySummary', {
+          actor:
+            entry.performedBy?.name ||
+            entry.performedByEmail ||
+            t('activityHistory.unknownUser'),
+          action: t(`activityHistory.action.${entry.action}`, { defaultValue: entry.action }),
+          entity: t(`activityHistory.entity.${entry.entityType}`, {
+            defaultValue: entry.entityType,
+          }),
+          entityId: entry.entityId,
+        })
     : '';
 
   const renderSnapshotValue = (key: string, value: unknown) => {
-    if (key === 'totalPrice' && (typeof value === 'string' || typeof value === 'number')) {
+    if (
+      (key === 'totalPrice' || key === 'amountPaid') &&
+      (typeof value === 'string' || typeof value === 'number')
+    ) {
       return formatCurrency(Number(value));
     }
     return formatChangeValue(value);
+  };
+
+  const snapshotLabel = (key: string) => {
+    const labels: Record<string, string> = {
+      paidTo: t('activityHistory.detail.paidTo'),
+      employeeEmail: t('activityHistory.detail.email'),
+      employeeRole: t('activityHistory.detail.role'),
+      amountPaid: t('activityHistory.detail.amountPaid'),
+      entryCount: t('activityHistory.detail.entryCount'),
+    };
+    return labels[key] ?? key;
   };
 
   return (
@@ -209,7 +245,7 @@ const ActivityHistoryDetail: React.FC = () => {
                 <dl className="grid gap-2 text-sm sm:grid-cols-2">
                   {snapshotRows.map(([key, value]) => (
                     <div key={key}>
-                      <dt className="text-gray-500">{key}</dt>
+                      <dt className="text-gray-500">{snapshotLabel(key)}</dt>
                       <dd className="break-all font-medium text-gray-900">
                         {renderSnapshotValue(key, value)}
                       </dd>

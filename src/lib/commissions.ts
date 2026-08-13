@@ -308,6 +308,15 @@ export async function markEmployeeCommissionsPaid(
       throw new Error('No pending commission entries for this employee');
     }
 
+    const employee = await tx.employee.findUnique({
+      where: { id: employeeId },
+      select: { id: true, name: true, email: true },
+    });
+
+    if (!employee) {
+      throw new Error('Employee not found');
+    }
+
     const totalAmount = pending.reduce(
       (sum, entry) => sum + parseFloat(entry.commissionAmount.toString()),
       0
@@ -341,6 +350,8 @@ export async function markEmployeeCommissionsPaid(
         performedByEmail: paidByEmail || null,
         changes: {
           action: 'mark_paid',
+          employeeName: employee.name,
+          employeeEmail: employee.email,
           entryCount: pending.length,
           amountPaid: totalAmount,
           paymentId: payment.id,
