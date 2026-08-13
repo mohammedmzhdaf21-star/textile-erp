@@ -1,8 +1,9 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import api from '../lib/api';
 import { getCurrentUser } from '../lib/auth';
 import { useTranslation } from 'react-i18next';
-import { formatCurrency, parsePriceInput } from '../lib/currency';
+import { formatCurrency, parsePriceInput, toPriceInputNumber } from '../lib/currency';
+import { fetchPlainClothTypes, type PlainClothType } from '../lib/plainClothApi';
 import QrScanInput from '../components/QrScanInput';
 import { resolveInventoryItem } from '../lib/inventoryLookup';
 
@@ -105,10 +106,58 @@ const ExchangePage: React.FC = () => {
     note: '',
   });
   const [plainSale, setPlainSale] = useState({
-    clothName: 'Plain Cloth',
+    clothName: '',
     meters: 1,
-    pricePerMeter: 20,
+    pricePerMeter: 0,
   });
+  const [plainClothTypes, setPlainClothTypes] = useState<PlainClothType[]>([]);
+
+  useEffect(() => {
+    void fetchPlainClothTypes()
+      .then((items) => {
+        setPlainClothTypes(items);
+        if (items.length > 0) {
+          const first = items[0];
+          setPlainReturn((current) => ({
+            ...current,
+            clothName: current.clothName === 'Plain Cloth' ? first.name : current.clothName || first.name,
+            returnPricePerMeter:
+              current.returnPricePerMeter > 0
+                ? current.returnPricePerMeter
+                : toPriceInputNumber(first.pricePerM),
+          }));
+          setPlainSale((current) => ({
+            ...current,
+            clothName: current.clothName === 'Plain Cloth' ? first.name : current.clothName || first.name,
+            pricePerMeter:
+              current.pricePerMeter > 0
+                ? current.pricePerMeter
+                : toPriceInputNumber(first.pricePerM),
+          }));
+        }
+      })
+      .catch(() => setPlainClothTypes([]));
+  }, []);
+
+  const applyPlainClothToSale = (clothName: string) => {
+    const selected = plainClothTypes.find((item) => item.name === clothName);
+    setPlainSale((current) => ({
+      ...current,
+      clothName,
+      pricePerMeter: selected ? toPriceInputNumber(selected.pricePerM) : current.pricePerMeter,
+    }));
+  };
+
+  const applyPlainClothToReturn = (clothName: string) => {
+    const selected = plainClothTypes.find((item) => item.name === clothName);
+    setPlainReturn((current) => ({
+      ...current,
+      clothName,
+      returnPricePerMeter: selected
+        ? toPriceInputNumber(selected.pricePerM)
+        : current.returnPricePerMeter,
+    }));
+  };
 
   const totalNewSaleAmount = useMemo(
     () =>
@@ -571,11 +620,23 @@ const ExchangePage: React.FC = () => {
               <div className="grid gap-3 sm:grid-cols-3">
                 <div>
                   <label className="block text-sm font-medium text-gray-700">{t('exchange.plainClothName')}</label>
-                  <input
-                    value={plainSale.clothName}
-                    onChange={(e) => setPlainSale((current) => ({ ...current, clothName: e.target.value }))}
-                    className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
-                  />
+                  {plainClothTypes.length > 0 ? (
+                    <select
+                      value={plainSale.clothName}
+                      onChange={(e) => applyPlainClothToSale(e.target.value)}
+                      className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
+                    >
+                      {plainClothTypes.map((item) => (
+                        <option key={item.id} value={item.name}>{item.name}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      value={plainSale.clothName}
+                      onChange={(e) => setPlainSale((current) => ({ ...current, clothName: e.target.value }))}
+                      className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
+                    />
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700">{t('exchange.meters')}</label>
@@ -740,11 +801,23 @@ const ExchangePage: React.FC = () => {
             <div className="grid gap-3 sm:grid-cols-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700">{t('exchange.plainClothName')}</label>
-                <input
-                  value={plainReturn.clothName}
-                  onChange={(e) => setPlainReturn((current) => ({ ...current, clothName: e.target.value }))}
-                  className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
-                />
+                {plainClothTypes.length > 0 ? (
+                  <select
+                    value={plainReturn.clothName}
+                    onChange={(e) => applyPlainClothToReturn(e.target.value)}
+                    className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
+                  >
+                    {plainClothTypes.map((item) => (
+                      <option key={item.id} value={item.name}>{item.name}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    value={plainReturn.clothName}
+                    onChange={(e) => setPlainReturn((current) => ({ ...current, clothName: e.target.value }))}
+                    className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
+                  />
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">{t('exchange.metersReturned')}</label>

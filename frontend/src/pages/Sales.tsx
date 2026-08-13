@@ -1,10 +1,12 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import QrScanInput from '../components/QrScanInput';
 import api from '../lib/api';
 import { getCurrentUser } from '../lib/auth';
 import { getItemMinimumPrice } from '../lib/dashboardSettings';
 import { formatCurrency, parsePriceInput, toPriceInputNumber } from '../lib/currency';
+import { fetchPlainClothTypes, type PlainClothType } from '../lib/plainClothApi';
 import type { SalePaymentChannel } from '../lib/paymentMethod';
 import { completeCuttingTasksAfterRollToPiece, maybeCreateCuttingTaskAfterPieceSale } from '../lib/cuttingTasks';
 import { sellCutPiece } from '../lib/cutAndSell';
@@ -38,7 +40,7 @@ type InventorySaleLine = {
   colorId: string;
   soldAsUnit: 'METER' | 'PIECE';
   quantity: number;
-  price: number;
+  linePrice: number;
   sourceItemId?: string | null;
   code?: number;
   colorName?: string;
@@ -53,7 +55,7 @@ type PlainClothSaleLine = {
   type: 'plain';
   clothName: string;
   meters: number;
-  pricePerMeter: number;
+  linePrice: number;
 };
 
 type SaleLine = InventorySaleLine | PlainClothSaleLine;
@@ -77,12 +79,6 @@ type InventoryLookupItem = {
 
 import type { TFunction } from 'i18next';
 
-const packagePriceLabel = (t: TFunction, isPiecePackage?: boolean, mode?: PackageSaleMode) => {
-  if (isPiecePackage && mode === 'FULL') return t('sales.pricePerPackage');
-  if (isPiecePackage && mode === 'PARTIAL') return t('sales.salePriceTotal');
-  return t('sales.unitPrice');
-};
-
 const branchOptions = ['A', 'B', 'C', 'E', 'F'];
 // Map UI branch codes to backend IDs (match seeded branches)
 const BRANCH_MAP: Record<string, string> = {
@@ -92,8 +88,6 @@ const BRANCH_MAP: Record<string, string> = {
   E: 'B001',
   F: 'B002',
 };
-const clothOptions = ['Silk', 'Velvet', 'Cotton', 'Linen'];
-
 const soldAsUnitForItem = (item: InventoryLookupItem): 'METER' | 'PIECE' =>
   item.type === 'PIECE' ? 'PIECE' : 'METER';
 
@@ -111,6 +105,65 @@ const amountLabelForUnit = (
 const buildInitialPackageSelection = (components: PackageComponent[]): PackageComponentSold[] =>
   components.map((component) => ({ name: component.name, quantity: 0 }));
 
+const plainClothLinePriceShorthand = (pricePerM: number, meters: number) =>
+  toPriceInputNumber(pricePerM * meters);
+
+const lineUnitPrice = (linePriceShorthand: number, quantity: number) => {
+  if (quantity <= 0) return 0;
+  return parsePriceInput(linePriceShorthand) / quantity;
+};
+
+const plainClothPricePerMeter = (linePriceShorthand: number, meters: number) =>
+  lineUnitPrice(linePriceShorthand, meters);
+
+type SalesInputSection = 'scan' | 'rollCut' | 'plainCloth';
+
+function SalesCollapsibleSection({
+  title,
+  expanded,
+  onToggle,
+  accent = false,
+  children,
+}: {
+  title: string;
+  expanded: boolean;
+  onToggle: () => void;
+  accent?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <section
+      className={`rounded-2xl border shadow-sm ${
+        accent ? 'border-magenta-200 bg-magenta-50' : 'border-gray-200 bg-white'
+      }`}
+    >
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={expanded}
+        className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left sm:px-5 sm:py-4"
+      >
+        <span className="text-base font-semibold text-black sm:text-lg">{title}</span>
+        <span
+          className={`shrink-0 text-sm text-gray-500 transition-transform ${expanded ? 'rotate-180' : ''}`}
+          aria-hidden
+        >
+          ▾
+        </span>
+      </button>
+      {expanded && (
+        <div
+          className={`border-t px-4 pb-5 pt-4 sm:px-6 sm:pb-6 ${
+            accent ? 'border-magenta-200/80' : 'border-gray-200/80'
+          }`}
+        >
+          {children}
+        </div>
+      )}
+    </section>
+  );
+}
+
 const SalesView: React.FC = () => {
   const { t } = useTranslation();
   const [branch, setBranch] = useState<string>('A');
@@ -120,8 +173,9 @@ const SalesView: React.FC = () => {
   const [paymentStatus, setPaymentStatus] = useState<'FULL' | 'PARTIAL'>('FULL');
   const [paymentChannel, setPaymentChannel] = useState<SalePaymentChannel>('CASH');
   const [amountPaid, setAmountPaid] = useState('0');
-  const [plainCloth, setPlainCloth] = useState({ clothName: clothOptions[0], meters: 1, pricePerMeter: 20 });
-  const [scanState, setScanState] = useState({ inventoryItemId: '', sourceBranch: branch, amount: 1, price: 15 });
+  const [plainCloth, setPlainCloth] = useState({ clothName: '', meters: 1, linePrice: 0 });
+  const [plainClothTypes, setPlainClothTypes] = useState<PlainClothType[]>([]);
+  const [scanState, setScanState] = useState({ inventoryItemId: '', sourceBranch: branch, amount: 1, linePrice: 15 });
   const [detectedScanItem, setDetectedScanItem] = useState<InventoryLookupItem | null>(null);
   const [packageSaleMode, setPackageSaleMode] = useState<PackageSaleMode>('FULL');
   const [packageComponentsSold, setPackageComponentsSold] = useState<PackageComponentSold[]>([]);
@@ -138,6 +192,40 @@ const SalesView: React.FC = () => {
     rollSourceId: string;
     labelPrinted: boolean;
   } | null>(null);
+  const [expandedSection, setExpandedSection] = useState<SalesInputSection | null>(null);
+
+  const toggleSection = (section: SalesInputSection) => {
+    setExpandedSection((current) => (current === section ? null : section));
+  };
+
+  useEffect(() => {
+    void fetchPlainClothTypes()
+      .then((items) => {
+        setPlainClothTypes(items);
+        if (items.length > 0) {
+          setPlainCloth((current) => ({
+            ...current,
+            clothName: current.clothName || items[0].name,
+            linePrice:
+              current.linePrice > 0
+                ? current.linePrice
+                : plainClothLinePriceShorthand(items[0].pricePerM, current.meters || 1),
+          }));
+        }
+      })
+      .catch(() => setPlainClothTypes([]));
+  }, []);
+
+  const applyPlainClothSelection = (clothName: string) => {
+    const selected = plainClothTypes.find((item) => item.name === clothName);
+    setPlainCloth((current) => ({
+      ...current,
+      clothName,
+      linePrice: selected
+        ? plainClothLinePriceShorthand(selected.pricePerM, current.meters)
+        : current.linePrice,
+    }));
+  };
 
   const detectedPackageComponents = useMemo(
     () => parsePackageComponents(detectedScanItem?.packageComponents),
@@ -175,8 +263,8 @@ const SalesView: React.FC = () => {
   ]);
 
   const lineTotal = (line: SaleLine) => {
-    if (line.type === 'inventory') return line.quantity * parsePriceInput(line.price);
-    return line.meters * parsePriceInput(line.pricePerMeter);
+    if (line.type === 'inventory') return parsePriceInput(line.linePrice);
+    return parsePriceInput(line.linePrice);
   };
 
   const saleTotal = useMemo(
@@ -190,15 +278,20 @@ const SalesView: React.FC = () => {
   }, [saleTotal, paymentStatus, amountPaid]);
 
   const addPlainClothLine = () => {
+    if (!plainCloth.clothName.trim()) return alert(t('plainClothPricing.enterName'));
+    if (plainCloth.meters <= 0 || plainCloth.linePrice <= 0) {
+      return alert(t('sales.enterValidPlainCloth'));
+    }
     setCart((current) => [
       ...current,
       {
         type: 'plain',
-        clothName: plainCloth.clothName,
+        clothName: plainCloth.clothName.trim(),
         meters: plainCloth.meters,
-        pricePerMeter: plainCloth.pricePerMeter,
+        linePrice: plainCloth.linePrice,
       },
     ]);
+    setExpandedSection(null);
   };
 
   const detectScanItemForCode = async (inventoryItemId: string, sourceBranch: string) => {
@@ -209,10 +302,16 @@ const SalesView: React.FC = () => {
       const components = parsePackageComponents(item.packageComponents);
       const savedPrice = getItemMinimumPrice(item.id);
       if (savedPrice) {
-        setScanState((current) => ({
-          ...current,
-          price: Math.max(current.price, toPriceInputNumber(savedPrice.minimumPrice)),
-        }));
+        setScanState((current) => {
+          const amount = Math.max(current.amount || 1, 1);
+          return {
+            ...current,
+            linePrice: Math.max(
+              current.linePrice,
+              toPriceInputNumber(savedPrice.minimumPrice * amount)
+            ),
+          };
+        });
         setMinimumPriceMessage(
           t('sales.minimumPriceFor', {
             id: item.id,
@@ -286,7 +385,7 @@ const SalesView: React.FC = () => {
     if (!inventoryItemId) {
       return alert(t('sales.enterItemId'));
     }
-    if (scanState.price <= 0) {
+    if (scanState.linePrice <= 0) {
       return alert(t('sales.enterValidPrice'));
     }
 
@@ -294,12 +393,11 @@ const SalesView: React.FC = () => {
       const item = detectedScanItem?.id === inventoryItemId ? detectedScanItem : await detectScanItem();
       if (!item) return;
       const soldAsUnit = soldAsUnitForItem(item);
-      const savedPrice = getItemMinimumPrice(item.id);
       const components = parsePackageComponents(item.packageComponents);
       const isPiecePackage = Boolean(item.isPiecePackage && components.length > 0);
 
       let quantity = soldAsUnit === 'PIECE' ? Math.floor(scanState.amount) : scanState.amount;
-      const price = scanState.price;
+      const linePrice = scanState.linePrice;
       let description = t('sales.descriptionInventory', { type: item.type, branch: scanState.sourceBranch });
       let packageSummary = '';
       let linePackageMode: PackageSaleMode | undefined;
@@ -328,10 +426,6 @@ const SalesView: React.FC = () => {
         return alert(t('sales.enterQuantityOrMeters'));
       }
 
-      if (savedPrice && parsePriceInput(price) < savedPrice.minimumPrice) {
-        return alert(t('sales.minimumPriceAlert', { price: formatCurrency(savedPrice.minimumPrice) }));
-      }
-
       setCart((current) => [
         ...current,
         {
@@ -342,7 +436,7 @@ const SalesView: React.FC = () => {
           colorId: item.colorId,
           soldAsUnit,
           quantity,
-          price,
+          linePrice,
           sourceItemId: item.sourceItemId,
           code: item.code,
           colorName: item.color?.name,
@@ -359,6 +453,7 @@ const SalesView: React.FC = () => {
       setPackageComponentsSold([]);
       setScanMessage(null);
       setMinimumPriceMessage(null);
+      setExpandedSection(null);
     } catch (error: any) {
       const status = error?.response?.status;
       const body = error?.response?.data;
@@ -540,7 +635,7 @@ const SalesView: React.FC = () => {
             colorId: line.colorId,
             soldAsUnit: line.soldAsUnit,
             quantitySold: line.quantity,
-            soldPrice: parsePriceInput(line.price),
+            soldPrice: lineUnitPrice(line.linePrice, line.quantity),
             lineDiscount: 0,
           };
           if (line.isPiecePackage) {
@@ -554,12 +649,13 @@ const SalesView: React.FC = () => {
           }
           resolvedItems.push(payload);
         } else {
+          const soldPricePerMeter = plainClothPricePerMeter(line.linePrice, line.meters);
           resolvedItems.push({
             inventoryItemId: undefined,
             colorId: 'PLAIN',
             soldAsUnit: 'METER',
             quantitySold: line.meters,
-            soldPrice: parsePriceInput(line.pricePerMeter),
+            soldPrice: soldPricePerMeter,
             lineDiscount: 0,
             plainClothName: line.clothName,
             isPlainCloth: true,
@@ -680,8 +776,11 @@ const SalesView: React.FC = () => {
 
       <div className="mt-8 grid gap-6 lg:grid-cols-[1.4fr_1fr]">
         <div className="space-y-6">
-          <section className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
-            <h3 className="text-lg font-semibold text-black">{t('sales.inventoryScanTitle')}</h3>
+          <SalesCollapsibleSection
+            title={t('sales.inventoryScanTitle')}
+            expanded={expandedSection === 'scan'}
+            onToggle={() => toggleSection('scan')}
+          >
             <p className="text-sm text-gray-500 mb-4">
               {t('sales.inventoryScanDescription')}
             </p>
@@ -756,16 +855,19 @@ const SalesView: React.FC = () => {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">
-                  {packagePriceLabel(t, detectedScanItem?.isPiecePackage, packageSaleMode)}
+                  {detectedScanItem?.isPiecePackage && packageSaleMode === 'PARTIAL'
+                    ? t('sales.salePriceTotal')
+                    : t('sales.scanLinePrice')}
                 </label>
                 <input
                   type="number"
                   min="0.01"
                   step="0.01"
-                  value={scanState.price}
-                  onChange={(e) => setScanState((s) => ({ ...s, price: Number(e.target.value) }))}
+                  value={scanState.linePrice}
+                  onChange={(e) => setScanState((s) => ({ ...s, linePrice: Number(e.target.value) }))}
                   className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
                 />
+                <p className="mt-1 text-xs text-gray-500">{t('currency.thousandsHint')}</p>
               </div>
             </div>
 
@@ -852,10 +954,14 @@ const SalesView: React.FC = () => {
             >
               {t('sales.addScannedItem')}
             </button>
-          </section>
+          </SalesCollapsibleSection>
 
-          <section className="rounded-3xl border border-magenta-200 bg-magenta-50 p-6 shadow-sm">
-            <h3 className="text-lg font-semibold text-black">{t('sales.cutFromRollTitle')}</h3>
+          <SalesCollapsibleSection
+            title={t('sales.cutFromRollTitle')}
+            expanded={expandedSection === 'rollCut'}
+            onToggle={() => toggleSection('rollCut')}
+            accent
+          >
             <p className="mb-4 text-sm text-gray-600">{t('sales.cutFromRollDescription')}</p>
             <div className="grid gap-3 sm:grid-cols-4">
               <div className="sm:col-span-2">
@@ -960,23 +1066,40 @@ const SalesView: React.FC = () => {
                 </div>
               </div>
             )}
-          </section>
+          </SalesCollapsibleSection>
 
-          <section className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
-            <h3 className="text-lg font-semibold text-black">{t('sales.plainClothTitle')}</h3>
-            <p className="text-sm text-gray-500 mb-4">
-              {t('sales.plainClothDescription')}
-            </p>
+          <SalesCollapsibleSection
+            title={t('sales.plainClothTitle')}
+            expanded={expandedSection === 'plainCloth'}
+            onToggle={() => toggleSection('plainCloth')}
+          >
+            <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
+              <p className="text-sm text-gray-500">{t('sales.plainClothDescription')}</p>
+              <Link
+                to="/plain-cloth"
+                className="text-sm font-semibold text-magenta-600 hover:underline"
+              >
+                {t('sales.managePlainCloth')}
+              </Link>
+            </div>
+            {plainClothTypes.length === 0 ? (
+              <p className="rounded-2xl bg-gray-50 p-4 text-sm text-gray-600">
+                {t('sales.noPlainClothTypes')}{' '}
+                <Link to="/plain-cloth" className="font-semibold text-magenta-600 hover:underline">
+                  {t('sales.addPlainClothTypes')}
+                </Link>
+              </p>
+            ) : (
             <div className="grid gap-3 sm:grid-cols-3">
               <div>
                 <label className="block text-sm font-medium text-gray-700">{t('common.fabric')}</label>
                 <select
                   value={plainCloth.clothName}
-                  onChange={(e) => setPlainCloth((current) => ({ ...current, clothName: e.target.value }))}
+                  onChange={(e) => applyPlainClothSelection(e.target.value)}
                   className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
                 >
-                  {clothOptions.map((name) => (
-                    <option key={name} value={name}>{name}</option>
+                  {plainClothTypes.map((item) => (
+                    <option key={item.id} value={item.name}>{item.name}</option>
                   ))}
                 </select>
               </div>
@@ -992,25 +1115,28 @@ const SalesView: React.FC = () => {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700">{t('sales.pricePerMeter')}</label>
+                <label className="block text-sm font-medium text-gray-700">{t('sales.plainClothLinePrice')}</label>
                 <input
                   type="number"
-                  min="1"
-                  step="0.1"
-                  value={plainCloth.pricePerMeter}
-                  onChange={(e) => setPlainCloth((current) => ({ ...current, pricePerMeter: Number(e.target.value) }))}
+                  min="0"
+                  step="1"
+                  value={plainCloth.linePrice}
+                  onChange={(e) => setPlainCloth((current) => ({ ...current, linePrice: Number(e.target.value) }))}
                   className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
                 />
+                <p className="mt-1 text-xs text-gray-500">{t('currency.thousandsHint')}</p>
               </div>
             </div>
+            )}
             <button
               type="button"
               className="btn-primary mt-4"
               onClick={addPlainClothLine}
+              disabled={plainClothTypes.length === 0}
             >
-              Add plain cloth line
+              {t('sales.addPlainClothLine')}
             </button>
-          </section>
+          </SalesCollapsibleSection>
         </div>
 
         <aside className="space-y-6">
@@ -1132,8 +1258,8 @@ const SalesView: React.FC = () => {
                       {line.type === 'inventory'
                         ? line.isPiecePackage
                           ? `${line.description}: ${line.packageSummary ?? 'package sale'} — ${formatCurrency(lineTotal(line))}`
-                          : `${line.description}: ${line.quantity} ${line.soldAsUnit === 'PIECE' ? 'pieces' : 'meters'} @ ${formatCurrency(parsePriceInput(line.price))}/unit`
-                        : `${line.meters} meters @ ${formatCurrency(parsePriceInput(line.pricePerMeter))}/m`}
+                          : `${line.description}: ${line.quantity} ${line.soldAsUnit === 'PIECE' ? 'pieces' : 'meters'} — ${formatCurrency(parsePriceInput(line.linePrice))} (${formatCurrency(lineUnitPrice(line.linePrice, line.quantity))}/${line.soldAsUnit === 'PIECE' ? 'pc' : 'm'})`
+                        : `${line.meters} meters — ${formatCurrency(parsePriceInput(line.linePrice))} (${formatCurrency(plainClothPricePerMeter(line.linePrice, line.meters))}/m)`}
                     </p>
                   </div>
                   <button

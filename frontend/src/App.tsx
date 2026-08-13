@@ -19,6 +19,7 @@ import TrusteeCommission from './pages/TrusteeCommission';
 import SaleDetail from './pages/SaleDetail';
 import EmployeeAccounts from './pages/EmployeeAccounts';
 import ItemPricing from './pages/ItemPricing';
+import PlainClothPricing from './pages/PlainClothPricing';
 import SalesCommission from './pages/SalesCommission';
 import CommissionPayouts from './pages/CommissionPayouts';
 import { getCurrentUser, isAuthenticated } from './lib/auth';
@@ -62,6 +63,14 @@ function App() {
           element={
             <ProtectedLayout>
               <ItemPricing />
+            </ProtectedLayout>
+          }
+        />
+        <Route
+          path="/plain-cloth"
+          element={
+            <ProtectedLayout>
+              <PlainClothPricing />
             </ProtectedLayout>
           }
         />

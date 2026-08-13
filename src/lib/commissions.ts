@@ -1,12 +1,45 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from './prisma';
+import { normalizeStoredAmount } from './currency';
 import {
   getCommissionRate,
   getItemMinimumPrice,
-  getItemMinimumPrices,
 } from './commissionSettings';
+import { getPlainClothPricingByName } from './plainClothPricing';
 
 const PRICE_EPS = 0.001;
+
+async function resolveMinimumPriceForCommission(
+  tx: Prisma.TransactionClient,
+  params: {
+    inventoryItemId?: string | null;
+    isPlainCloth?: boolean;
+    plainClothName?: string | null;
+  }
+): Promise<number | null> {
+  if (params.isPlainCloth && params.plainClothName) {
+    const plainCloth = await getPlainClothPricingByName(params.plainClothName);
+    return plainCloth?.pricePerM ?? null;
+  }
+
+  if (!params.inventoryItemId) return null;
+
+  const savedMinimum = await getItemMinimumPrice(params.inventoryItemId);
+  if (savedMinimum) return savedMinimum.minimumPrice;
+
+  const inv = await tx.inventoryItem.findUnique({
+    where: { id: params.inventoryItemId },
+    select: { costPrice: true, subCode: true },
+  });
+  if (!inv) return null;
+
+  const costPrice = inv.costPrice ? parseFloat(inv.costPrice.toString()) : 0;
+  const subCode = inv.subCode != null ? Number(inv.subCode) : 0;
+  const fallback = costPrice > 0 ? costPrice : subCode;
+  if (!Number.isFinite(fallback) || fallback <= 0) return null;
+
+  return normalizeStoredAmount(fallback);
+}
 
 export function calculateLineCommission(
   soldPrice: number,
@@ -34,17 +67,21 @@ export async function recordCommissionForSaleItem(
     inventoryItemId?: string | null;
     soldPrice: number;
     quantitySold: number;
+    isPlainCloth?: boolean;
+    plainClothName?: string | null;
   }
 ) {
-  if (!params.inventoryItemId) return null;
-
-  const minimum = await getItemMinimumPrice(params.inventoryItemId);
-  if (!minimum) return null;
+  const minimumPrice = await resolveMinimumPriceForCommission(tx, {
+    inventoryItemId: params.inventoryItemId,
+    isPlainCloth: params.isPlainCloth,
+    plainClothName: params.plainClothName,
+  });
+  if (minimumPrice == null) return null;
 
   const rate = await getCommissionRate();
   const commissionAmount = calculateLineCommission(
     params.soldPrice,
-    minimum.minimumPrice,
+    minimumPrice,
     params.quantitySold,
     rate.ratePercent,
     rate.baseAmountPerUnit
@@ -57,9 +94,9 @@ export async function recordCommissionForSaleItem(
       employeeId: params.employeeId,
       saleId: params.saleId,
       saleItemId: params.saleItemId,
-      inventoryItemId: params.inventoryItemId,
+      inventoryItemId: params.inventoryItemId ?? null,
       soldPrice: new Prisma.Decimal(params.soldPrice.toFixed(2)),
-      minimumPrice: new Prisma.Decimal(minimum.minimumPrice.toFixed(2)),
+      minimumPrice: new Prisma.Decimal(minimumPrice.toFixed(2)),
       quantitySold: new Prisma.Decimal(params.quantitySold.toFixed(2)),
       ratePercent: new Prisma.Decimal(rate.ratePercent.toFixed(2)),
       commissionAmount: new Prisma.Decimal(commissionAmount.toFixed(2)),
@@ -77,6 +114,25 @@ export async function removePendingCommissionsForSale(
   });
 }
 
+export type PendingCommissionSaleDetail = {
+  customerName: string;
+  customerPhone: string;
+  totalPrice: string;
+  paymentMethod: string;
+  branchId: string;
+  branchName: string;
+  notes?: string | null;
+};
+
+export type PendingCommissionItemDetail = {
+  description: string;
+  isPlainCloth: boolean;
+  plainClothName?: string | null;
+  soldAsUnit: string;
+  lineTotal: string;
+  colorName?: string | null;
+};
+
 export type PendingCommissionLine = {
   id: string;
   saleId: string;
@@ -89,6 +145,8 @@ export type PendingCommissionLine = {
   commissionAmount: string;
   createdAt: string;
   saleDate: string;
+  sale: PendingCommissionSaleDetail;
+  item: PendingCommissionItemDetail;
 };
 
 export type PendingCommissionGroup = {
@@ -102,6 +160,39 @@ export type PendingCommissionGroup = {
   entries: PendingCommissionLine[];
 };
 
+function buildPendingItemDetail(
+  saleItem: {
+    isPlainCloth: boolean;
+    plainClothName: string | null;
+    inventoryItemId: string | null;
+    soldAsUnit: string;
+    soldPrice: Prisma.Decimal;
+    quantitySold: Prisma.Decimal;
+    color: { name: string } | null;
+  },
+  entryInventoryId: string | null
+): PendingCommissionItemDetail {
+  const soldPrice = parseFloat(saleItem.soldPrice.toString());
+  const quantitySold = parseFloat(saleItem.quantitySold.toString());
+  const lineTotal = (soldPrice * quantitySold).toFixed(2);
+
+  let description: string;
+  if (saleItem.isPlainCloth && saleItem.plainClothName) {
+    description = saleItem.plainClothName;
+  } else {
+    description = saleItem.inventoryItemId || entryInventoryId || 'Inventory item';
+  }
+
+  return {
+    description,
+    isPlainCloth: saleItem.isPlainCloth,
+    plainClothName: saleItem.plainClothName,
+    soldAsUnit: saleItem.soldAsUnit,
+    lineTotal,
+    colorName: saleItem.color?.name ?? null,
+  };
+}
+
 export async function listPendingCommissions(options?: {
   employeeId?: string;
 }): Promise<PendingCommissionGroup[]> {
@@ -113,7 +204,29 @@ export async function listPendingCommissions(options?: {
     },
     include: {
       employee: { select: { id: true, name: true, email: true, role: true } },
-      sale: { select: { createdAt: true } },
+      sale: {
+        select: {
+          id: true,
+          createdAt: true,
+          customerName: true,
+          customerPhone: true,
+          totalPrice: true,
+          paymentMethod: true,
+          notes: true,
+          branch: { select: { id: true, name: true } },
+        },
+      },
+      saleItem: {
+        select: {
+          isPlainCloth: true,
+          plainClothName: true,
+          inventoryItemId: true,
+          soldAsUnit: true,
+          soldPrice: true,
+          quantitySold: true,
+          color: { select: { name: true } },
+        },
+      },
     },
     orderBy: [{ employee: { name: 'asc' } }, { createdAt: 'desc' }],
   });
@@ -123,6 +236,19 @@ export async function listPendingCommissions(options?: {
   for (const entry of entries) {
     const key = entry.employeeId;
     const existing = grouped.get(key);
+    const itemDetail = entry.saleItem
+      ? buildPendingItemDetail(entry.saleItem, entry.inventoryItemId)
+      : {
+          description: entry.inventoryItemId || 'Sale item',
+          isPlainCloth: false,
+          plainClothName: null,
+          soldAsUnit: 'METER',
+          lineTotal: (
+            parseFloat(entry.soldPrice.toString()) * parseFloat(entry.quantitySold.toString())
+          ).toFixed(2),
+          colorName: null,
+        };
+
     const line: PendingCommissionLine = {
       id: entry.id,
       saleId: entry.saleId,
@@ -135,6 +261,16 @@ export async function listPendingCommissions(options?: {
       commissionAmount: entry.commissionAmount.toString(),
       createdAt: entry.createdAt.toISOString(),
       saleDate: entry.sale.createdAt.toISOString(),
+      sale: {
+        customerName: entry.sale.customerName,
+        customerPhone: entry.sale.customerPhone,
+        totalPrice: entry.sale.totalPrice.toString(),
+        paymentMethod: entry.sale.paymentMethod,
+        branchId: entry.sale.branch.id,
+        branchName: entry.sale.branch.name,
+        notes: entry.sale.notes,
+      },
+      item: itemDetail,
     };
 
     if (existing) {
@@ -268,9 +404,8 @@ export async function recalculatePendingCommissionEntries() {
 }
 
 export async function backfillCommissionEntries() {
-  const [rate, prices, sales] = await Promise.all([
+  const [rate, sales] = await Promise.all([
     getCommissionRate(),
-    getItemMinimumPrices(),
     prisma.sale.findMany({
       where: { isVoided: false },
       include: { items: true },
@@ -282,21 +417,23 @@ export async function backfillCommissionEntries() {
 
   for (const sale of sales) {
     for (const item of sale.items) {
-      if (!item.inventoryItemId) continue;
-
       const existing = await prisma.employeeCommissionEntry.findUnique({
         where: { saleItemId: item.id },
       });
       if (existing) continue;
 
-      const minimum = prices[item.inventoryItemId];
-      if (!minimum) continue;
+      const minimumPrice = await resolveMinimumPriceForCommission(prisma, {
+        inventoryItemId: item.inventoryItemId,
+        isPlainCloth: item.isPlainCloth,
+        plainClothName: item.plainClothName,
+      });
+      if (minimumPrice == null) continue;
 
       const soldPrice = parseFloat(item.soldPrice.toString());
       const quantitySold = parseFloat(item.quantitySold.toString());
       const commissionAmount = calculateLineCommission(
         soldPrice,
-        minimum.minimumPrice,
+        minimumPrice,
         quantitySold,
         rate.ratePercent,
         rate.baseAmountPerUnit
@@ -311,7 +448,7 @@ export async function backfillCommissionEntries() {
           saleItemId: item.id,
           inventoryItemId: item.inventoryItemId,
           soldPrice: item.soldPrice,
-          minimumPrice: new Prisma.Decimal(minimum.minimumPrice.toFixed(2)),
+          minimumPrice: new Prisma.Decimal(minimumPrice.toFixed(2)),
           quantitySold: item.quantitySold,
           ratePercent: new Prisma.Decimal(rate.ratePercent.toFixed(2)),
           commissionAmount: new Prisma.Decimal(commissionAmount.toFixed(2)),
