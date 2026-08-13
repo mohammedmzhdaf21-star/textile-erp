@@ -2,13 +2,13 @@ import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { canEditEmployeeAccounts, getCurrentUser, logout } from "../lib/auth";
+import { fetchUnreadNotificationCount } from "../lib/registrationApi";
 import {
-  approveEmployee,
-  fetchPendingEmployees,
-  fetchUnreadNotificationCount,
-  rejectEmployee,
-  type PendingEmployee,
-} from "../lib/registrationApi";
+  approveSignInRequest,
+  fetchPendingSignInRequests,
+  rejectSignInRequest,
+  type DeviceSignInRequest,
+} from "../lib/signInRequestsApi";
 
 export default function Dashboard() {
   const { t } = useTranslation();
@@ -16,7 +16,7 @@ export default function Dashboard() {
   const user = getCurrentUser();
   const isAdmin = canEditEmployeeAccounts(user);
 
-  const [pendingEmployees, setPendingEmployees] = useState<PendingEmployee[]>([]);
+  const [pendingSignIns, setPendingSignIns] = useState<DeviceSignInRequest[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loadingPending, setLoadingPending] = useState(false);
   const [actionId, setActionId] = useState<string | null>(null);
@@ -27,14 +27,14 @@ export default function Dashboard() {
     setLoadingPending(true);
     setError("");
     try {
-      const [employees, count] = await Promise.all([
-        fetchPendingEmployees(),
+      const [requests, count] = await Promise.all([
+        fetchPendingSignInRequests(),
         fetchUnreadNotificationCount(),
       ]);
-      setPendingEmployees(employees);
+      setPendingSignIns(requests);
       setUnreadCount(count);
     } catch (err: any) {
-      setError(err?.response?.data?.error || t("dashboard.pendingLoadFailed"));
+      setError(err?.response?.data?.error || t("dashboard.signInLoadFailed"));
     } finally {
       setLoadingPending(false);
     }
@@ -49,13 +49,11 @@ export default function Dashboard() {
     navigate("/login");
   }
 
-  async function handleApprove(employee: PendingEmployee) {
-    setActionId(employee.id);
+  async function handleApprove(request: DeviceSignInRequest) {
+    setActionId(request.id);
     setError("");
     try {
-      await approveEmployee(employee.id, {
-        branchIds: employee.branchIds.length ? employee.branchIds : undefined,
-      });
+      await approveSignInRequest(request.id);
       await loadPending();
     } catch (err: any) {
       setError(err?.response?.data?.error || t("dashboard.approveFailed"));
@@ -64,14 +62,13 @@ export default function Dashboard() {
     }
   }
 
-  async function handleReject(employee: PendingEmployee) {
-    const reason = window.prompt(t("dashboard.rejectReasonPrompt"));
-    if (reason === null) return;
+  async function handleReject(request: DeviceSignInRequest) {
+    if (window.prompt(t("dashboard.rejectReasonPrompt")) === null) return;
 
-    setActionId(employee.id);
+    setActionId(request.id);
     setError("");
     try {
-      await rejectEmployee(employee.id, reason || undefined);
+      await rejectSignInRequest(request.id);
       await loadPending();
     } catch (err: any) {
       setError(err?.response?.data?.error || t("dashboard.rejectFailed"));
@@ -95,16 +92,16 @@ export default function Dashboard() {
           </button>
         </div>
 
-        {isAdmin && (pendingEmployees.length > 0 || unreadCount > 0) && (
+        {isAdmin && (pendingSignIns.length > 0 || unreadCount > 0) && (
           <div className="mb-8 rounded-xl border-2 border-amber-400 bg-amber-50 p-6">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <h2 className="text-lg font-bold text-amber-900">
-                  {t("dashboard.pendingRegistrationsTitle")}
+                  {t("dashboard.pendingSignInsTitle")}
                 </h2>
                 <p className="mt-1 text-sm text-amber-800">
-                  {t("dashboard.pendingRegistrationsDescription", {
-                    count: pendingEmployees.length,
+                  {t("dashboard.pendingSignInsDescription", {
+                    count: pendingSignIns.length,
                   })}
                 </p>
                 {unreadCount > 0 && (
@@ -129,44 +126,44 @@ export default function Dashboard() {
               </div>
             )}
 
-            {pendingEmployees.length > 0 && (
+            {pendingSignIns.length > 0 && (
               <ul className="mt-4 space-y-3">
-                {pendingEmployees.map((employee) => (
+                {pendingSignIns.map((request) => (
                   <li
-                    key={employee.id}
+                    key={request.id}
                     className="rounded-lg border border-amber-200 bg-white p-4 shadow-sm"
                   >
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                       <div>
-                        <p className="font-semibold text-black">{employee.name}</p>
-                        <p className="text-sm text-gray-600">{employee.email}</p>
-                        {employee.phone && (
-                          <p className="text-sm text-gray-500">{employee.phone}</p>
-                        )}
-                        {employee.registrationNote && (
-                          <p className="mt-2 text-sm text-gray-600 italic">
-                            {employee.registrationNote}
-                          </p>
+                        <p className="font-semibold text-black">{request.employeeName}</p>
+                        <p className="text-sm text-gray-600">{request.employeeEmail}</p>
+                        <p className="mt-2 text-sm font-medium text-amber-900">
+                          {t("dashboard.deviceLabel", {
+                            device: request.deviceLabel || t("dashboard.unknownDevice"),
+                          })}
+                        </p>
+                        {request.ipAddress && (
+                          <p className="text-xs text-gray-500">{request.ipAddress}</p>
                         )}
                         <p className="mt-1 text-xs text-gray-400">
                           {t("dashboard.requestedAt", {
-                            date: new Date(employee.createdAt).toLocaleString(),
+                            date: new Date(request.createdAt).toLocaleString(),
                           })}
                         </p>
                       </div>
                       <div className="flex shrink-0 gap-2">
                         <button
                           type="button"
-                          onClick={() => void handleApprove(employee)}
-                          disabled={actionId === employee.id}
+                          onClick={() => void handleApprove(request)}
+                          disabled={actionId === request.id}
                           className="btn-primary text-sm"
                         >
-                          {actionId === employee.id ? t("common.loading") : t("dashboard.approve")}
+                          {actionId === request.id ? t("common.loading") : t("dashboard.approve")}
                         </button>
                         <button
                           type="button"
-                          onClick={() => void handleReject(employee)}
-                          disabled={actionId === employee.id}
+                          onClick={() => void handleReject(request)}
+                          disabled={actionId === request.id}
                           className="btn-secondary text-sm"
                         >
                           {t("dashboard.reject")}

@@ -42,7 +42,7 @@ router.post('/register', async (req: Request, res: Response) => {
 
 router.post('/login', async (req: Request, res: Response) => {
   try {
-    const { email, password } = req.body;
+    const { email, password, deviceId } = req.body;
 
     if (!email || !password) {
       return res.status(400).json({
@@ -66,7 +66,13 @@ router.post('/login', async (req: Request, res: Response) => {
       ipAddress = req.socket.remoteAddress || undefined;
     }
 
-    const result = await loginUser(email, password, userAgent, ipAddress);
+    const result = await loginUser(
+      email,
+      password,
+      userAgent,
+      ipAddress,
+      typeof deviceId === 'string' ? deviceId : undefined
+    );
 
     return res.status(200).json({
       message: 'Login successful',
@@ -75,6 +81,9 @@ router.post('/login', async (req: Request, res: Response) => {
   } catch (error: any) {
     const msg = error.message || 'Login failed';
 
+    if (error.code === 'DEVICE_SIGN_IN_PENDING') {
+      return res.status(403).json({ error: msg, code: error.code });
+    }
     if (msg.includes('locked')) {
       return res.status(423).json({ error: msg });
     }

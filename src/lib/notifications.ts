@@ -29,6 +29,37 @@ const formatNotification = (notification: {
   createdAt: notification.createdAt.toISOString(),
 });
 
+export async function notifyAdminsOfDeviceSignIn(input: {
+  id: string;
+  employeeName: string;
+  employeeEmail: string;
+  deviceLabel: string | null;
+}) {
+  const admins = await prisma.employee.findMany({
+    where: {
+      role: 'ADMIN',
+      isActive: true,
+      deletedAt: null,
+      approvalStatus: 'APPROVED',
+    },
+    select: { id: true },
+  });
+
+  if (admins.length === 0) return;
+
+  const deviceText = input.deviceLabel ?? 'Unknown device';
+
+  await prisma.notification.createMany({
+    data: admins.map((admin) => ({
+      type: 'DEVICE_SIGN_IN',
+      title: 'Employee sign-in request',
+      message: `${input.employeeName} (${input.employeeEmail}) wants to sign in from ${deviceText}`,
+      recipientId: admin.id,
+      metadata: { signInRequestId: input.id, employeeEmail: input.employeeEmail },
+    })),
+  });
+}
+
 export async function notifyAdminsOfRegistration(
   employee: {
     id: string;

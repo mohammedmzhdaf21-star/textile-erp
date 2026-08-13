@@ -64,6 +64,12 @@ enum NotificationType {
   SYSTEM
   BROADCAST
   EMPLOYEE_REGISTRATION
+  DEVICE_SIGN_IN
+}
+enum DeviceSignInStatus {
+  PENDING
+  APPROVED
+  REJECTED
 }
 enum EmployeeApprovalStatus {
   PENDING
@@ -361,6 +367,8 @@ model Employee {
   auditLogs        AuditLog[]
   sessions         Session[]
   settingsUpdated  Setting[]
+  deviceSignIns         DeviceSignInRequest[] @relation("EmployeeDeviceSignIns")
+  deviceSignInsApproved DeviceSignInRequest[] @relation("DeviceSignInApprovedBy")
 
   @@index([email])
   @@index([isActive])
@@ -385,6 +393,27 @@ model Session {
   @@index([refreshTokenHash])
   @@index([expiresAt])
   @@map("sessions")
+}
+
+model DeviceSignInRequest {
+  id           String             @id @default(uuid())
+  employeeId   String
+  employee     Employee           @relation("EmployeeDeviceSignIns", fields: [employeeId], references: [id], onDelete: Cascade)
+  deviceKey    String             @db.VarChar(64)
+  deviceLabel  String?            @db.VarChar(200)
+  userAgent    String?            @db.VarChar(500)
+  ipAddress    String?            @db.VarChar(45)
+  status       DeviceSignInStatus @default(PENDING)
+  approvedAt   DateTime?
+  approvedById String?
+  approvedBy   Employee?          @relation("DeviceSignInApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  @@unique([employeeId, deviceKey])
+  @@index([status])
+  @@index([employeeId])
+  @@map("device_sign_in_requests")
 }
 
 model BranchEmployee {

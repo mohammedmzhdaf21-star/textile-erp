@@ -36,10 +36,6 @@ export async function checkEmployeeAccess(
     return { ok: false, error: 'Account not found', status: 401 };
   }
 
-  if (employee.approvalStatus === 'PENDING') {
-    return { ok: false, error: 'Account pending admin approval', status: 403 };
-  }
-
   if (employee.approvalStatus === 'REJECTED') {
     return {
       ok: false,
@@ -60,10 +56,6 @@ export function assertEmployeeRecordCanSignIn(employee: {
   deletedAt: Date | null;
   approvalStatus: EmployeeApprovalStatus;
 }) {
-  if (employee.approvalStatus === 'PENDING') {
-    throw new Error('Account pending admin approval');
-  }
-
   if (employee.approvalStatus === 'REJECTED') {
     throw new Error('Registration was rejected. Contact your administrator.');
   }

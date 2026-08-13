@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -9,9 +9,6 @@ export default function Login() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
-  const registrationPending = Boolean(
-    (location.state as { registrationPending?: boolean } | null)?.registrationPending
-  );
   const registeredEmail =
     (location.state as { email?: string } | null)?.email ?? "";
 
@@ -19,21 +16,45 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [deviceSignInPending, setDeviceSignInPending] = useState(false);
+
+  useEffect(() => {
+    if (!deviceSignInPending || !email || !password) return;
+
+    const intervalId = window.setInterval(async () => {
+      try {
+        await login(email, password);
+        navigate("/dashboard");
+      } catch {
+        // Still waiting for admin approval on this device.
+      }
+    }, 5000);
+
+    return () => window.clearInterval(intervalId);
+  }, [deviceSignInPending, email, password, navigate]);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError("");
+    setDeviceSignInPending(false);
     setLoading(true);
 
     try {
       await login(email, password);
       navigate("/dashboard");
     } catch (err: any) {
+      const code = err?.response?.data?.code;
       const msg =
         err?.response?.data?.error ||
         err?.message ||
         t("login.loginFailed");
-      setError(msg);
+
+      if (code === "DEVICE_SIGN_IN_PENDING") {
+        setDeviceSignInPending(true);
+        setError(t("login.deviceSignInPending"));
+      } else {
+        setError(msg);
+      }
     } finally {
       setLoading(false);
     }
@@ -107,11 +128,9 @@ export default function Login() {
               />
             </div>
 
-            {registrationPending && (
+            {deviceSignInPending && (
               <div className="bg-amber-50 border-l-4 border-amber-500 p-4 rounded animate-fade-in">
-                <p className="text-amber-800 text-sm font-medium">
-                  {t("login.registrationPending")}
-                </p>
+                <p className="text-amber-800 text-sm font-medium">{t("login.deviceSignInWaiting")}</p>
               </div>
             )}
 

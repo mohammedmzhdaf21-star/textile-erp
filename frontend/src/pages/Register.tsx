@@ -50,7 +50,7 @@ export default function Register() {
       setTimeout(
         () =>
           navigate("/login", {
-            state: { registrationPending: true, email: email.trim() },
+            state: { email: email.trim() },
           }),
         1500
       );

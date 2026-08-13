@@ -1,4 +1,5 @@
 import api from "./api";
+import { getDeviceId } from "./deviceId";
 import type { DashboardSectionKey } from "./dashboardSettings";
 
 export type UserRole = "ADMIN" | "MANAGER" | "EMPLOYEE" | "TRUSTEE";
@@ -28,6 +29,7 @@ export async function login(email: string, password: string): Promise<LoginRespo
   const response = await api.post<LoginResponse>("/auth/login", {
     email,
     password,
+    deviceId: getDeviceId(),
   });
 
   const { accessToken, refreshToken, user } = response.data;

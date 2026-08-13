@@ -135,13 +135,7 @@ router.post('/', requireRole('ADMIN'), async (req: Request, res: Response) => {
       performedByEmail: req.user!.email,
     });
 
-    return res.status(201).json({
-      message:
-        employee.approvalStatus === 'PENDING'
-          ? 'Employee account created. Approve them on the dashboard before they can sign in.'
-          : 'Employee account created',
-      employee,
-    });
+    return res.status(201).json({ message: 'Employee account created', employee });
   } catch (error: any) {
     return res.status(400).json({ error: error.message || 'Failed to create employee' });
   }

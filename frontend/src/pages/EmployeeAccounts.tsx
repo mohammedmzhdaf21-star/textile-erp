@@ -7,11 +7,6 @@ import {
   type UserRole,
 } from "../lib/auth";
 import { dashboardSections, type DashboardSectionKey } from "../lib/dashboardSettings";
-import {
-  approveEmployee,
-  rejectEmployee,
-  type PendingEmployee,
-} from "../lib/registrationApi";
 
 type Branch = { id: string; name: string };
 
@@ -45,7 +40,7 @@ const emptyForm = () => ({
   assignedWork: "",
   branchIds: [] as string[],
   allowedSections: [...DEFAULT_SECTIONS] as DashboardSectionKey[],
-  isActive: false,
+  isActive: true,
 });
 
 export default function EmployeeAccounts() {
@@ -53,11 +48,9 @@ export default function EmployeeAccounts() {
   const currentUser = getCurrentUser();
   const canEdit = canEditEmployeeAccounts(currentUser);
   const [employees, setEmployees] = useState<EmployeeRecord[]>([]);
-  const [pendingEmployees, setPendingEmployees] = useState<PendingEmployee[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [actionId, setActionId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -72,16 +65,12 @@ export default function EmployeeAccounts() {
     setLoading(true);
     setError(null);
     try {
-      const [employeesRes, branchesRes, pendingRes] = await Promise.all([
+      const [employeesRes, branchesRes] = await Promise.all([
         api.get<{ employees: EmployeeRecord[] }>("/employees"),
         api.get<{ branches: Branch[] }>("/employees/branches/list"),
-        canEdit
-          ? api.get<{ employees: PendingEmployee[] }>("/employees/pending")
-          : Promise.resolve({ data: { employees: [] as PendingEmployee[] } }),
       ]);
       setEmployees(employeesRes.data.employees);
       setBranches(branchesRes.data.branches);
-      setPendingEmployees(pendingRes.data.employees);
     } catch (loadError: unknown) {
       const msg =
         loadError instanceof Error ? loadError.message : t("employeeAccounts.loadFailed");
@@ -89,7 +78,7 @@ export default function EmployeeAccounts() {
     } finally {
       setLoading(false);
     }
-  }, [t, canEdit]);
+  }, [t]);
 
   useEffect(() => {
     loadData();
@@ -142,44 +131,7 @@ export default function EmployeeAccounts() {
   };
 
   const showAccessPanel = form.role === "EMPLOYEE" || form.role === "TRUSTEE";
-  const roleNeedsApproval = showAccessPanel;
-  const editingPending = Boolean(
-    editingId && pendingEmployees.some((employee) => employee.id === editingId)
-  );
-
-  const handleApprove = async (employee: PendingEmployee) => {
-    setActionId(employee.id);
-    setError(null);
-    try {
-      await approveEmployee(employee.id, {
-        branchIds: employee.branchIds.length ? employee.branchIds : undefined,
-      });
-      setMessage(t("employeeAccounts.approved"));
-      await loadData();
-      if (editingId === employee.id) resetForm();
-    } catch (submitError: unknown) {
-      setError(t("dashboard.approveFailed"));
-    } finally {
-      setActionId(null);
-    }
-  };
-
-  const handleReject = async (employee: PendingEmployee) => {
-    const reason = window.prompt(t("dashboard.rejectReasonPrompt"));
-    if (reason === null) return;
-    setActionId(employee.id);
-    setError(null);
-    try {
-      await rejectEmployee(employee.id, reason || undefined);
-      setMessage(t("employeeAccounts.rejected"));
-      await loadData();
-      if (editingId === employee.id) resetForm();
-    } catch {
-      setError(t("dashboard.rejectFailed"));
-    } finally {
-      setActionId(null);
-    }
-  };
+  const roleNeedsDeviceApproval = showAccessPanel;
 
   const handleSubmit = async () => {
     if (!canEdit) return;
@@ -196,7 +148,7 @@ export default function EmployeeAccounts() {
         assignedWork: form.assignedWork.trim() || null,
         branchIds: form.branchIds,
         allowedSections: showAccessPanel ? form.allowedSections : null,
-        ...(editingId && !editingPending ? { isActive: form.isActive } : {}),
+        isActive: form.isActive,
         ...(form.password ? { password: form.password } : {}),
       };
 
@@ -209,11 +161,12 @@ export default function EmployeeAccounts() {
           setSaving(false);
           return;
         }
-        const response = await api.post<{ message: string }>("/employees", {
-          ...payload,
-          password: form.password,
-        });
-        setMessage(response.data.message || t("employeeAccounts.created"));
+        await api.post("/employees", { ...payload, password: form.password });
+        setMessage(
+          roleNeedsDeviceApproval
+            ? t("employeeAccounts.createdAwaitingDeviceSignIn")
+            : t("employeeAccounts.created")
+        );
       }
 
       await loadData();
@@ -328,28 +281,21 @@ export default function EmployeeAccounts() {
                 ))}
               </select>
             </label>
-            {roleNeedsApproval && !editingId && (
+            {roleNeedsDeviceApproval && !editingId && (
               <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 md:col-span-2">
-                {t("employeeAccounts.approvalRequiredNotice")}
+                {t("employeeAccounts.deviceSignInNotice")}
               </div>
             )}
-            {editingPending && (
-              <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 md:col-span-2">
-                {t("employeeAccounts.pendingEditNotice")}
-              </div>
-            )}
-            {editingId && !editingPending && (
-              <label className="flex items-center gap-3 rounded-xl bg-gray-50 px-4 py-3 text-sm md:col-span-2">
-                <input
-                  type="checkbox"
-                  checked={form.isActive}
-                  onChange={(event) =>
-                    setForm((current) => ({ ...current, isActive: event.target.checked }))
-                  }
-                />
-                <span className="font-medium text-gray-700">{t("employeeAccounts.activeAccount")}</span>
-              </label>
-            )}
+            <label className="flex items-center gap-3 rounded-xl bg-gray-50 px-4 py-3 text-sm md:col-span-2">
+              <input
+                type="checkbox"
+                checked={form.isActive}
+                onChange={(event) =>
+                  setForm((current) => ({ ...current, isActive: event.target.checked }))
+                }
+              />
+              <span className="font-medium text-gray-700">{t("employeeAccounts.activeAccount")}</span>
+            </label>
           </div>
 
           <label className="mt-4 block text-sm">
@@ -432,70 +378,6 @@ export default function EmployeeAccounts() {
           </div>
           {message && <p className="mt-3 text-sm font-medium text-magenta-600">{message}</p>}
           {error && <p className="mt-3 text-sm font-medium text-red-600">{error}</p>}
-        </section>
-      )}
-
-      {canEdit && pendingEmployees.length > 0 && (
-        <section className="rounded-3xl border-2 border-amber-400 bg-amber-50 p-6 shadow-sm">
-          <h2 className="text-xl font-bold text-amber-950">{t("employeeAccounts.pendingApprovalTitle")}</h2>
-          <p className="mt-1 text-sm text-amber-800">{t("employeeAccounts.pendingApprovalDescription")}</p>
-          <ul className="mt-4 space-y-3">
-            {pendingEmployees.map((employee) => (
-              <li
-                key={employee.id}
-                className="rounded-2xl border border-amber-200 bg-white p-4"
-              >
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                  <div>
-                    <h3 className="text-lg font-semibold text-black">{employee.name}</h3>
-                    <p className="text-sm text-gray-600">{employee.email}</p>
-                    {employee.assignedWork && (
-                      <p className="mt-1 text-sm text-gray-700">{employee.assignedWork}</p>
-                    )}
-                  </div>
-                  <div className="flex shrink-0 flex-wrap gap-2">
-                    <button
-                      type="button"
-                      className="btn-primary text-sm"
-                      disabled={actionId === employee.id}
-                      onClick={() => void handleApprove(employee)}
-                    >
-                      {actionId === employee.id ? t("common.loading") : t("dashboard.approve")}
-                    </button>
-                    <button
-                      type="button"
-                      className="btn-secondary text-sm"
-                      disabled={actionId === employee.id}
-                      onClick={() => void handleReject(employee)}
-                    >
-                      {t("dashboard.reject")}
-                    </button>
-                    <button
-                      type="button"
-                      className="btn-outline text-sm"
-                      onClick={() =>
-                        startEdit({
-                          id: employee.id,
-                          name: employee.name,
-                          email: employee.email,
-                          phone: employee.phone,
-                          role: employee.role,
-                          assignedWork: employee.assignedWork,
-                          allowedSections: employee.allowedSections as DashboardSectionKey[] | null,
-                          branchIds: employee.branchIds,
-                          lastLoginAt: employee.lastLoginAt,
-                          createdAt: employee.createdAt,
-                          isActive: false,
-                        })
-                      }
-                    >
-                      {t("common.edit")}
-                    </button>
-                  </div>
-                </div>
-              </li>
-            ))}
-          </ul>
         </section>
       )}
 

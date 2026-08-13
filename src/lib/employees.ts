@@ -6,9 +6,8 @@ import {
   EmployeeSectionKey,
   parseAllowedSections,
   roleHasFullAccess,
-  roleRequiresSignInApproval,
 } from './employeeSections';
-import { markRegistrationNotificationsRead, notifyAdminsOfRegistration } from './notifications';
+import { markRegistrationNotificationsRead } from './notifications';
 
 const SALT_ROUNDS = 10;
 
@@ -69,7 +68,7 @@ const employeeInclude = {
 
 export async function listEmployees() {
   const employees = await prisma.employee.findMany({
-    where: { deletedAt: null, approvalStatus: { not: 'PENDING' } },
+    where: { deletedAt: null },
     include: employeeInclude,
     orderBy: [{ role: 'asc' }, { name: 'asc' }],
   });
@@ -123,7 +122,6 @@ export async function createEmployee(input: {
   const passwordHash = await bcrypt.hash(input.password, SALT_ROUNDS);
   const sections =
     roleHasFullAccess(input.role) ? null : input.allowedSections ?? DEFAULT_EMPLOYEE_SECTIONS;
-  const requiresApproval = roleRequiresSignInApproval(input.role);
 
   const employee = await prisma.employee.create({
     data: {
@@ -132,8 +130,8 @@ export async function createEmployee(input: {
       phone: input.phone?.trim() || null,
       role: input.role,
       passwordHash,
-      isActive: !requiresApproval,
-      approvalStatus: requiresApproval ? 'PENDING' : 'APPROVED',
+      isActive: true,
+      approvalStatus: 'APPROVED',
       assignedWork: input.assignedWork?.trim() || null,
       allowedSections: sections,
       branches: input.branchIds?.length
@@ -144,13 +142,6 @@ export async function createEmployee(input: {
     },
     include: employeeInclude,
   });
-
-  if (requiresApproval) {
-    await notifyAdminsOfRegistration(employee, {
-      title: 'Employee awaiting sign-in approval',
-      message: `${employee.name} (${employee.email}) was added and needs your approval before they can sign in`,
-    });
-  }
 
   await prisma.auditLog.create({
     data: {
@@ -270,7 +261,6 @@ export async function getEmployeeAuthProfile(employeeId: string) {
       id: employeeId,
       deletedAt: null,
       isActive: true,
-      approvalStatus: 'APPROVED',
     },
     include: employeeInclude,
   });

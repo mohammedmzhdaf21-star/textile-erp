@@ -9,8 +9,8 @@ import {
 } from './jwt';
 import { getEmployeeAuthProfile } from './employees';
 import { DEFAULT_EMPLOYEE_SECTIONS } from './employeeSections';
-import { notifyAdminsOfRegistration } from './notifications';
 import { assertEmployeeRecordCanSignIn, checkEmployeeAccess } from './employeeAccess';
+import { ensureDeviceSignInApproved } from './deviceSignIn';
 
 const MAX_FAILED_ATTEMPTS = 5;
 const LOCKOUT_DURATION_MINUTES = 15;
@@ -39,9 +39,6 @@ export async function registerEmployee(input: {
 
   const existing = await prisma.employee.findUnique({ where: { email } });
   if (existing && !existing.deletedAt) {
-    if (existing.approvalStatus === 'PENDING') {
-      throw new Error('A registration request for this email is already pending approval');
-    }
     throw new Error('An account with this email already exists');
   }
 
@@ -63,8 +60,8 @@ export async function registerEmployee(input: {
       phone: input.phone?.trim() || null,
       passwordHash,
       role: 'EMPLOYEE',
-      isActive: false,
-      approvalStatus: 'PENDING',
+      isActive: true,
+      approvalStatus: 'APPROVED',
       allowedSections: DEFAULT_EMPLOYEE_SECTIONS,
       registrationNote: input.registrationNote?.trim() || null,
       branches: input.branchId
@@ -72,8 +69,6 @@ export async function registerEmployee(input: {
         : undefined,
     },
   });
-
-  await notifyAdminsOfRegistration(employee);
 
   await prisma.auditLog.create({
     data: {
@@ -83,7 +78,7 @@ export async function registerEmployee(input: {
       performedByEmail: email,
       changes: {
         source: 'self_registration',
-        approvalStatus: 'PENDING',
+        approvalStatus: 'APPROVED',
       },
     },
   });
@@ -108,7 +103,8 @@ export async function loginUser(
   email: string,
   password: string,
   userAgent?: string,
-  ipAddress?: string
+  ipAddress?: string,
+  deviceId?: string
 ) {
   const employee = await prisma.employee.findUnique({
     where: { email: email.toLowerCase() },
@@ -149,6 +145,22 @@ export async function loginUser(
       );
     }
     throw new Error('Invalid email or password');
+  }
+
+  const deviceCheck = await ensureDeviceSignInApproved({
+    employeeId: employee.id,
+    role: employee.role,
+    name: employee.name,
+    email: employee.email,
+    deviceId,
+    userAgent,
+    ipAddress,
+  });
+
+  if (!deviceCheck.approved) {
+    const error = new Error(deviceCheck.error) as Error & { code?: string };
+    error.code = deviceCheck.code;
+    throw error;
   }
 
   await prisma.employee.update({

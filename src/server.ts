@@ -10,6 +10,7 @@ import salesRoutes from './routes/sales.routes';
 import employeesRoutes from './routes/employees.routes';
 import commissionsRoutes from './routes/commissions.routes';
 import notificationsRoutes from './routes/notifications.routes';
+import signInRequestsRoutes from './routes/signInRequests.routes';
 import { migrateLegacyCommissionBase, migrateLegacySettingsPrices } from './lib/currency';
 import { backfillCommissionEntries, recalculatePendingCommissionEntries } from './lib/commissions';
 import prisma from './lib/prisma';
@@ -108,6 +109,7 @@ app.use('/api/sales', salesRoutes);
 app.use('/api/employees', employeesRoutes);
 app.use('/api/commissions', commissionsRoutes);
 app.use('/api/notifications', notificationsRoutes);
+app.use('/api/sign-in-requests', signInRequestsRoutes);
 
 // ============================================================
 // FRONTEND SPA (serve built app for /login, /register, etc.)
