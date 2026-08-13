@@ -21,11 +21,60 @@ import {
   updatePlainClothPricing,
 } from '../lib/plainClothPricing';
 import { roleHasFullAccess } from '../lib/employeeSections';
-import plainClothRoutes from './plainCloth.routes';
 
 const router = Router();
 
 router.use(authenticate);
+
+router.get('/plain-cloth', async (req: Request, res: Response) => {
+  try {
+    const includeInactive =
+      req.query.includeInactive === 'true' &&
+      (req.user!.role === 'ADMIN' || req.user!.role === 'MANAGER');
+    const items = await listPlainClothPricing({ includeInactive });
+    return res.status(200).json({ items });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message || 'Failed to list plain cloth types' });
+  }
+});
+
+router.post('/plain-cloth', requireRole('ADMIN', 'MANAGER'), async (req: Request, res: Response) => {
+  try {
+    const item = await createPlainClothPricing({
+      name: String(req.body?.name ?? ''),
+      pricePerM: Number(req.body?.pricePerM),
+    });
+    return res.status(201).json({ item });
+  } catch (error: any) {
+    return res.status(400).json({ error: error.message || 'Failed to create plain cloth type' });
+  }
+});
+
+router.put('/plain-cloth/:id', requireRole('ADMIN', 'MANAGER'), async (req: Request, res: Response) => {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const item = await updatePlainClothPricing(id, {
+      name: req.body?.name !== undefined ? String(req.body.name) : undefined,
+      pricePerM: req.body?.pricePerM !== undefined ? Number(req.body.pricePerM) : undefined,
+      isActive: req.body?.isActive !== undefined ? Boolean(req.body.isActive) : undefined,
+    });
+    return res.status(200).json({ item });
+  } catch (error: any) {
+    const status = error.message?.includes('not found') ? 404 : 400;
+    return res.status(status).json({ error: error.message || 'Failed to update plain cloth type' });
+  }
+});
+
+router.delete('/plain-cloth/:id', requireRole('ADMIN', 'MANAGER'), async (req: Request, res: Response) => {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const result = await deletePlainClothPricing(id);
+    return res.status(200).json(result);
+  } catch (error: any) {
+    const status = error.message?.includes('not found') ? 404 : 400;
+    return res.status(status).json({ error: error.message || 'Failed to delete plain cloth type' });
+  }
+});
 
 router.get('/settings', async (_req: Request, res: Response) => {
   try {
@@ -174,8 +223,5 @@ router.post('/backfill', requireRole('ADMIN'), async (_req: Request, res: Respon
     return res.status(500).json({ error: error.message || 'Failed to backfill commissions' });
   }
 });
-
-// Plain cloth pricing (alias — works even if /api/plain-cloth mount is missing)
-router.use('/plain-cloth', plainClothRoutes);
 
 export default router;

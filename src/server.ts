@@ -108,6 +108,18 @@ if (!serveFrontend && process.env.NODE_ENV !== 'production') {
 }
 
 // ============================================================
+// VERSION (deploy verification)
+// ============================================================
+app.get('/api/version', (_req: Request, res: Response) => {
+  res.status(200).json({
+    app: 'textile-erp',
+    plainClothApi: true,
+    plainClothPaths: ['/api/plain-cloth', '/api/commissions/plain-cloth'],
+    updatedAt: '2026-08-13',
+  });
+});
+
+// ============================================================
 // API ROUTES
 // ============================================================
 app.use('/api/auth', authRoutes);

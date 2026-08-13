@@ -46,13 +46,43 @@ function shouldTryNextPath(error: unknown) {
 
 export async function getServerPlainClothStatus(): Promise<'ready' | 'outdated' | 'unknown'> {
   try {
-    const response = await fetch('/health', { cache: 'no-store' });
-    if (!response.ok) return 'unknown';
-    const data = (await response.json()) as { features?: { plainClothApi?: boolean } };
-    return data.features?.plainClothApi ? 'ready' : 'outdated';
+    const versionRes = await fetch('/api/version', { cache: 'no-store' });
+    if (versionRes.ok) {
+      const version = (await versionRes.json()) as { plainClothApi?: boolean };
+      if (version.plainClothApi) return 'ready';
+    }
+  } catch {
+    // fall through
+  }
+
+  try {
+    const settingsRes = await api.get<{ plainClothTypes?: PlainClothType[] }>('/commissions/settings');
+    if (Array.isArray(settingsRes.data.plainClothTypes)) {
+      return 'ready';
+    }
+  } catch (error) {
+    if (isApi401(error)) return 'unknown';
+  }
+
+  try {
+    await api.get('/commissions/plain-cloth');
+    return 'ready';
+  } catch (error) {
+    if (isApi401(error)) return 'unknown';
+    if (isApi404(error)) return 'outdated';
+  }
+
+  try {
+    const healthRes = await fetch('/health', { cache: 'no-store' });
+    if (healthRes.ok) {
+      const data = (await healthRes.json()) as { features?: { plainClothApi?: boolean } };
+      if (data.features?.plainClothApi) return 'ready';
+    }
   } catch {
     return 'unknown';
   }
+
+  return 'outdated';
 }
 
 function readLocalTypes(): PlainClothType[] {

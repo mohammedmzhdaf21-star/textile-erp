@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
+PORT="${PORT:-3000}"
 
 echo "==> Textile ERP deploy update"
 echo "    Directory: $ROOT"
@@ -38,8 +39,25 @@ else
   echo "      npm run start:prod"
 fi
 
+sleep 2
+
 echo ""
-echo "Deploy complete."
-echo "  Local health:  curl -s http://localhost:${PORT:-3000}/health"
-echo "  Plain cloth:   curl -s -o /dev/null -w '%{http_code}' http://localhost:${PORT:-3000}/api/commissions/plain-cloth"
-echo "                  (401 = route exists, 404 = run npm run deploy again)"
+echo "==> Verifying deploy"
+VERSION_CODE=$(curl -s -o /dev/null -w '%{http_code}' "http://localhost:${PORT}/api/version" || echo "000")
+PLAIN_CODE=$(curl -s -o /dev/null -w '%{http_code}' "http://localhost:${PORT}/api/commissions/plain-cloth" || echo "000")
+HEALTH=$(curl -s "http://localhost:${PORT}/health" || echo "{}")
+
+echo "  /api/version HTTP ${VERSION_CODE} (expect 200)"
+echo "  /api/commissions/plain-cloth HTTP ${PLAIN_CODE} (expect 401 without login)"
+echo "  /health: ${HEALTH}"
+
+if [[ "${VERSION_CODE}" == "200" ]]; then
+  echo ""
+  echo "Deploy OK — plain cloth API is available."
+  echo "Hard-refresh your browser (Ctrl+Shift+R), then click Reconnect on Plain Cloth Pricing."
+else
+  echo ""
+  echo "WARN: Deploy may be incomplete. /api/version did not return 200."
+  echo "Try: pm2 logs textile-erp --lines 50"
+  exit 1
+fi
