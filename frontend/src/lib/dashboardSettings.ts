@@ -138,6 +138,7 @@ export const canAccessRoute = (
 export const ADMIN_ONLY_ROUTES = new Set([
   '/employee-accounts',
   '/item-pricing',
+  '/plain-cloth',
   '/sales-commission',
 ]);
 

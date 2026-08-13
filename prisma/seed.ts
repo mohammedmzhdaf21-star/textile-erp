@@ -133,6 +133,7 @@ async function main() {
       { id: 'COTTON_BASIC',   name: 'Basic Cotton',    pricePerM: 5.00 },
       { id: 'COTTON_PREMIUM', name: 'Premium Cotton',  pricePerM: 12.00 },
       { id: 'SILK',           name: 'Silk',            pricePerM: 25.00 },
+      { id: 'VELVET',         name: 'Velvet',          pricePerM: 30.00 },
       { id: 'LINEN',          name: 'Linen',           pricePerM: 18.00 },
       { id: 'POLYESTER',      name: 'Polyester',       pricePerM: 8.00 },
     ],

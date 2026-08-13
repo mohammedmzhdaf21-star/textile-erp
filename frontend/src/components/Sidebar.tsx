@@ -35,6 +35,7 @@ const navigation: Array<NavItem | NavGroup> = [
   { to: '/inventory', labelKey: 'nav.inventory', end: true },
   { to: '/inventory/convert', labelKey: 'nav.itemConversion', end: true },
   { to: '/sales', labelKey: 'nav.sales', end: true },
+  { to: '/plain-cloth', labelKey: 'nav.plainClothPricing', end: true, adminOnly: true },
   { to: '/sales/daily', labelKey: 'nav.dailySales', end: true },
   { to: '/sales/history', labelKey: 'nav.historySales', end: true },
   { to: '/sales/owed', labelKey: 'nav.owedMoney', end: true },

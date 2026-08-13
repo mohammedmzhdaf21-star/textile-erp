@@ -1,10 +1,12 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import QrScanInput from '../components/QrScanInput';
 import api from '../lib/api';
 import { getCurrentUser } from '../lib/auth';
 import { getItemMinimumPrice } from '../lib/dashboardSettings';
 import { formatCurrency, parsePriceInput, toPriceInputNumber } from '../lib/currency';
+import { fetchPlainClothTypes, type PlainClothType } from '../lib/plainClothApi';
 import type { SalePaymentChannel } from '../lib/paymentMethod';
 import { completeCuttingTasksAfterRollToPiece, maybeCreateCuttingTaskAfterPieceSale } from '../lib/cuttingTasks';
 import { sellCutPiece } from '../lib/cutAndSell';
@@ -92,8 +94,6 @@ const BRANCH_MAP: Record<string, string> = {
   E: 'B001',
   F: 'B002',
 };
-const clothOptions = ['Silk', 'Velvet', 'Cotton', 'Linen'];
-
 const soldAsUnitForItem = (item: InventoryLookupItem): 'METER' | 'PIECE' =>
   item.type === 'PIECE' ? 'PIECE' : 'METER';
 
@@ -120,7 +120,8 @@ const SalesView: React.FC = () => {
   const [paymentStatus, setPaymentStatus] = useState<'FULL' | 'PARTIAL'>('FULL');
   const [paymentChannel, setPaymentChannel] = useState<SalePaymentChannel>('CASH');
   const [amountPaid, setAmountPaid] = useState('0');
-  const [plainCloth, setPlainCloth] = useState({ clothName: clothOptions[0], meters: 1, pricePerMeter: 20 });
+  const [plainCloth, setPlainCloth] = useState({ clothName: '', meters: 1, pricePerMeter: 0 });
+  const [plainClothTypes, setPlainClothTypes] = useState<PlainClothType[]>([]);
   const [scanState, setScanState] = useState({ inventoryItemId: '', sourceBranch: branch, amount: 1, price: 15 });
   const [detectedScanItem, setDetectedScanItem] = useState<InventoryLookupItem | null>(null);
   const [packageSaleMode, setPackageSaleMode] = useState<PackageSaleMode>('FULL');
@@ -138,6 +139,33 @@ const SalesView: React.FC = () => {
     rollSourceId: string;
     labelPrinted: boolean;
   } | null>(null);
+
+  useEffect(() => {
+    void fetchPlainClothTypes()
+      .then((items) => {
+        setPlainClothTypes(items);
+        if (items.length > 0) {
+          setPlainCloth((current) => ({
+            ...current,
+            clothName: current.clothName || items[0].name,
+            pricePerMeter:
+              current.pricePerMeter > 0
+                ? current.pricePerMeter
+                : toPriceInputNumber(items[0].pricePerM),
+          }));
+        }
+      })
+      .catch(() => setPlainClothTypes([]));
+  }, []);
+
+  const applyPlainClothSelection = (clothName: string) => {
+    const selected = plainClothTypes.find((item) => item.name === clothName);
+    setPlainCloth((current) => ({
+      ...current,
+      clothName,
+      pricePerMeter: selected ? toPriceInputNumber(selected.pricePerM) : current.pricePerMeter,
+    }));
+  };
 
   const detectedPackageComponents = useMemo(
     () => parsePackageComponents(detectedScanItem?.packageComponents),
@@ -190,13 +218,18 @@ const SalesView: React.FC = () => {
   }, [saleTotal, paymentStatus, amountPaid]);
 
   const addPlainClothLine = () => {
+    if (!plainCloth.clothName.trim()) return alert(t('plainClothPricing.enterName'));
+    const pricePerMeter = parsePriceInput(plainCloth.pricePerMeter);
+    if (plainCloth.meters <= 0 || pricePerMeter <= 0) {
+      return alert(t('sales.enterValidPlainCloth'));
+    }
     setCart((current) => [
       ...current,
       {
         type: 'plain',
-        clothName: plainCloth.clothName,
+        clothName: plainCloth.clothName.trim(),
         meters: plainCloth.meters,
-        pricePerMeter: plainCloth.pricePerMeter,
+        pricePerMeter,
       },
     ]);
   };
@@ -963,20 +996,38 @@ const SalesView: React.FC = () => {
           </section>
 
           <section className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
-            <h3 className="text-lg font-semibold text-black">{t('sales.plainClothTitle')}</h3>
-            <p className="text-sm text-gray-500 mb-4">
-              {t('sales.plainClothDescription')}
-            </p>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h3 className="text-lg font-semibold text-black">{t('sales.plainClothTitle')}</h3>
+                <p className="text-sm text-gray-500 mb-4">
+                  {t('sales.plainClothDescription')}
+                </p>
+              </div>
+              <Link
+                to="/plain-cloth"
+                className="text-sm font-semibold text-magenta-600 hover:underline"
+              >
+                {t('sales.managePlainCloth')}
+              </Link>
+            </div>
+            {plainClothTypes.length === 0 ? (
+              <p className="rounded-2xl bg-gray-50 p-4 text-sm text-gray-600">
+                {t('sales.noPlainClothTypes')}{' '}
+                <Link to="/plain-cloth" className="font-semibold text-magenta-600 hover:underline">
+                  {t('sales.addPlainClothTypes')}
+                </Link>
+              </p>
+            ) : (
             <div className="grid gap-3 sm:grid-cols-3">
               <div>
                 <label className="block text-sm font-medium text-gray-700">{t('common.fabric')}</label>
                 <select
                   value={plainCloth.clothName}
-                  onChange={(e) => setPlainCloth((current) => ({ ...current, clothName: e.target.value }))}
+                  onChange={(e) => applyPlainClothSelection(e.target.value)}
                   className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
                 >
-                  {clothOptions.map((name) => (
-                    <option key={name} value={name}>{name}</option>
+                  {plainClothTypes.map((item) => (
+                    <option key={item.id} value={item.name}>{item.name}</option>
                   ))}
                 </select>
               </div>
@@ -995,20 +1046,23 @@ const SalesView: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700">{t('sales.pricePerMeter')}</label>
                 <input
                   type="number"
-                  min="1"
-                  step="0.1"
+                  min="0"
+                  step="1"
                   value={plainCloth.pricePerMeter}
                   onChange={(e) => setPlainCloth((current) => ({ ...current, pricePerMeter: Number(e.target.value) }))}
                   className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
                 />
+                <p className="mt-1 text-xs text-gray-500">{t('currency.thousandsHint')}</p>
               </div>
             </div>
+            )}
             <button
               type="button"
               className="btn-primary mt-4"
               onClick={addPlainClothLine}
+              disabled={plainClothTypes.length === 0}
             >
-              Add plain cloth line
+              {t('sales.addPlainClothLine')}
             </button>
           </section>
         </div>
