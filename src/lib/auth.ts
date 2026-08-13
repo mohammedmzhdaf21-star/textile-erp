@@ -8,10 +8,100 @@ import {
   JwtPayload,
 } from './jwt';
 import { getEmployeeAuthProfile } from './employees';
+import { DEFAULT_EMPLOYEE_SECTIONS } from './employeeSections';
+import { notifyAdminsOfRegistration } from './notifications';
 
 const MAX_FAILED_ATTEMPTS = 5;
 const LOCKOUT_DURATION_MINUTES = 15;
 const REFRESH_TOKEN_DAYS = 7;
+const SALT_ROUNDS = 10;
+const MIN_PASSWORD_LENGTH = 8;
+
+export async function registerEmployee(input: {
+  name: string;
+  email: string;
+  password: string;
+  phone?: string;
+  branchId?: string;
+  registrationNote?: string;
+}) {
+  const email = input.email.trim().toLowerCase();
+  const name = input.name.trim();
+
+  if (!name || !email || !input.password) {
+    throw new Error('Name, email, and password are required');
+  }
+
+  if (input.password.length < MIN_PASSWORD_LENGTH) {
+    throw new Error(`Password must be at least ${MIN_PASSWORD_LENGTH} characters`);
+  }
+
+  const existing = await prisma.employee.findUnique({ where: { email } });
+  if (existing && !existing.deletedAt) {
+    if (existing.approvalStatus === 'PENDING') {
+      throw new Error('A registration request for this email is already pending approval');
+    }
+    throw new Error('An account with this email already exists');
+  }
+
+  if (input.branchId) {
+    const branch = await prisma.branch.findFirst({
+      where: { id: input.branchId, isActive: true, deletedAt: null },
+    });
+    if (!branch) {
+      throw new Error('Selected branch is not available');
+    }
+  }
+
+  const passwordHash = await bcrypt.hash(input.password, SALT_ROUNDS);
+
+  const employee = await prisma.employee.create({
+    data: {
+      name,
+      email,
+      phone: input.phone?.trim() || null,
+      passwordHash,
+      role: 'EMPLOYEE',
+      isActive: false,
+      approvalStatus: 'PENDING',
+      allowedSections: DEFAULT_EMPLOYEE_SECTIONS,
+      registrationNote: input.registrationNote?.trim() || null,
+      branches: input.branchId
+        ? { create: [{ branchId: input.branchId }] }
+        : undefined,
+    },
+  });
+
+  await notifyAdminsOfRegistration(employee);
+
+  await prisma.auditLog.create({
+    data: {
+      entityType: 'Employee',
+      entityId: employee.id,
+      action: 'CREATE',
+      performedByEmail: email,
+      changes: {
+        source: 'self_registration',
+        approvalStatus: 'PENDING',
+      },
+    },
+  });
+
+  return {
+    id: employee.id,
+    name: employee.name,
+    email: employee.email,
+    approvalStatus: employee.approvalStatus,
+  };
+}
+
+export async function listPublicBranches() {
+  return prisma.branch.findMany({
+    where: { isActive: true, deletedAt: null },
+    select: { id: true, name: true },
+    orderBy: { id: 'asc' },
+  });
+}
 
 export async function loginUser(
   email: string,
@@ -25,6 +115,14 @@ export async function loginUser(
 
   if (!employee) {
     throw new Error('Invalid email or password');
+  }
+
+  if (employee.approvalStatus === 'PENDING') {
+    throw new Error('Account pending admin approval');
+  }
+
+  if (employee.approvalStatus === 'REJECTED') {
+    throw new Error('Registration was rejected. Contact your administrator.');
   }
 
   if (!employee.isActive || employee.deletedAt) {

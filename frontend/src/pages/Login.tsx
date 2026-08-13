@@ -140,6 +140,19 @@ export default function Login() {
             </button>
           </form>
 
+          <div className="mt-6 pt-6 border-t border-gray-100 text-center">
+            <p className="text-sm text-gray-600">
+              {t("login.newEmployee")}{" "}
+              <button
+                type="button"
+                onClick={() => navigate("/register")}
+                className="text-magenta-600 font-semibold hover:underline"
+              >
+                {t("register.title")}
+              </button>
+            </p>
+          </div>
+
           <div className="mt-6 pt-6 border-t border-gray-100">
             <p className="text-xs text-gray-500 text-center mb-2 font-semibold">
               {t("login.demoCredentials")}

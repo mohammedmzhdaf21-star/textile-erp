@@ -1,9 +1,44 @@
 import { Router, Request, Response } from 'express';
-import { loginUser, logoutUser, refreshAccessToken } from '../lib/auth';
+import { loginUser, logoutUser, refreshAccessToken, registerEmployee, listPublicBranches } from '../lib/auth';
 import { getEmployeeAuthProfile } from '../lib/employees';
 import { authenticate } from '../middleware/authenticate';
 
 const router = Router();
+
+router.get('/branches', async (_req: Request, res: Response) => {
+  try {
+    const branches = await listPublicBranches();
+    return res.status(200).json({ branches });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message || 'Failed to list branches' });
+  }
+});
+
+router.post('/register', async (req: Request, res: Response) => {
+  try {
+    const { name, email, password, phone, branchId, registrationNote } = req.body;
+
+    if (!name || !email || !password) {
+      return res.status(400).json({ error: 'Name, email, and password are required' });
+    }
+
+    const result = await registerEmployee({
+      name: String(name),
+      email: String(email),
+      password: String(password),
+      phone: phone ? String(phone) : undefined,
+      branchId: branchId ? String(branchId) : undefined,
+      registrationNote: registrationNote ? String(registrationNote) : undefined,
+    });
+
+    return res.status(201).json({
+      message: 'Registration submitted. An administrator must approve your account before you can sign in.',
+      employee: result,
+    });
+  } catch (error: any) {
+    return res.status(400).json({ error: error.message || 'Registration failed' });
+  }
+});
 
 router.post('/login', async (req: Request, res: Response) => {
   try {
@@ -43,7 +78,7 @@ router.post('/login', async (req: Request, res: Response) => {
     if (msg.includes('locked')) {
       return res.status(423).json({ error: msg });
     }
-    if (msg.includes('inactive')) {
+    if (msg.includes('inactive') || msg.includes('pending') || msg.includes('rejected')) {
       return res.status(403).json({ error: msg });
     }
     return res.status(401).json({ error: msg });

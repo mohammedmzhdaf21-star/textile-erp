@@ -8,6 +8,7 @@ import inventoryRoutes from './routes/inventory.routes';
 import salesRoutes from './routes/sales.routes';
 import employeesRoutes from './routes/employees.routes';
 import commissionsRoutes from './routes/commissions.routes';
+import notificationsRoutes from './routes/notifications.routes';
 import { migrateLegacyCommissionBase, migrateLegacySettingsPrices } from './lib/currency';
 import { backfillCommissionEntries, recalculatePendingCommissionEntries } from './lib/commissions';
 import prisma from './lib/prisma';
@@ -103,6 +104,7 @@ app.use('/api/inventory', inventoryRoutes);
 app.use('/api/sales', salesRoutes);
 app.use('/api/employees', employeesRoutes);
 app.use('/api/commissions', commissionsRoutes);
+app.use('/api/notifications', notificationsRoutes);
 
 // ============================================================
 // PRODUCTION FRONTEND (single-process 24/7 deployment)

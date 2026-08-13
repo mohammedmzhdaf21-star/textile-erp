@@ -6,6 +6,9 @@ import {
   getEmployeeById,
   listBranches,
   listEmployees,
+  listPendingEmployees,
+  approveEmployee,
+  rejectEmployee,
   updateEmployee,
 } from '../lib/employees';
 import {
@@ -53,6 +56,47 @@ router.get('/branches/list', async (_req: Request, res: Response) => {
     return res.status(200).json({ branches });
   } catch (error: any) {
     return res.status(500).json({ error: error.message || 'Failed to list branches' });
+  }
+});
+
+router.get('/pending', async (_req: Request, res: Response) => {
+  try {
+    const employees = await listPendingEmployees();
+    return res.status(200).json({ employees });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message || 'Failed to list pending registrations' });
+  }
+});
+
+router.post('/:id/approve', requireRole('ADMIN'), async (req: Request, res: Response) => {
+  try {
+    const { branchIds, allowedSections, assignedWork } = req.body;
+    const employee = await approveEmployee(singleParam(req.params.id) ?? '', {
+      branchIds: Array.isArray(branchIds) ? branchIds.map(String) : undefined,
+      allowedSections: parseSections(allowedSections),
+      assignedWork: assignedWork ? String(assignedWork) : undefined,
+      performedById: req.user!.userId,
+      performedByEmail: req.user!.email,
+    });
+    return res.status(200).json({ message: 'Employee approved', employee });
+  } catch (error: any) {
+    const status = error.message === 'Pending registration not found' ? 404 : 400;
+    return res.status(status).json({ error: error.message || 'Failed to approve employee' });
+  }
+});
+
+router.post('/:id/reject', requireRole('ADMIN'), async (req: Request, res: Response) => {
+  try {
+    const { reason } = req.body;
+    await rejectEmployee(singleParam(req.params.id) ?? '', {
+      reason: reason ? String(reason) : undefined,
+      performedById: req.user!.userId,
+      performedByEmail: req.user!.email,
+    });
+    return res.status(200).json({ message: 'Registration rejected' });
+  } catch (error: any) {
+    const status = error.message === 'Pending registration not found' ? 404 : 400;
+    return res.status(status).json({ error: error.message || 'Failed to reject registration' });
   }
 });
 

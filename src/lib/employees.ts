@@ -1,5 +1,5 @@
 import bcrypt from 'bcryptjs';
-import { Prisma, UserRole } from '@prisma/client';
+import { EmployeeApprovalStatus, Prisma, UserRole } from '@prisma/client';
 import { prisma } from './prisma';
 import {
   DEFAULT_EMPLOYEE_SECTIONS,
@@ -7,6 +7,7 @@ import {
   parseAllowedSections,
   roleHasFullAccess,
 } from './employeeSections';
+import { markRegistrationNotificationsRead } from './notifications';
 
 const SALT_ROUNDS = 10;
 
@@ -17,7 +18,9 @@ export type EmployeePublic = {
   phone: string | null;
   role: UserRole;
   isActive: boolean;
+  approvalStatus: EmployeeApprovalStatus;
   assignedWork: string | null;
+  registrationNote: string | null;
   allowedSections: EmployeeSectionKey[] | null;
   branchIds: string[];
   lastLoginAt: string | null;
@@ -31,7 +34,9 @@ const formatEmployee = (employee: {
   phone: string | null;
   role: UserRole;
   isActive: boolean;
+  approvalStatus: EmployeeApprovalStatus;
   assignedWork: string | null;
+  registrationNote: string | null;
   allowedSections: unknown;
   lastLoginAt: Date | null;
   createdAt: Date;
@@ -43,7 +48,9 @@ const formatEmployee = (employee: {
   phone: employee.phone,
   role: employee.role,
   isActive: employee.isActive,
+  approvalStatus: employee.approvalStatus,
   assignedWork: employee.assignedWork,
+  registrationNote: employee.registrationNote,
   allowedSections: roleHasFullAccess(employee.role)
     ? null
     : parseAllowedSections(employee.allowedSections),
@@ -61,9 +68,18 @@ const employeeInclude = {
 
 export async function listEmployees() {
   const employees = await prisma.employee.findMany({
-    where: { deletedAt: null },
+    where: { deletedAt: null, approvalStatus: { not: 'PENDING' } },
     include: employeeInclude,
     orderBy: [{ role: 'asc' }, { name: 'asc' }],
+  });
+  return employees.map(formatEmployee);
+}
+
+export async function listPendingEmployees() {
+  const employees = await prisma.employee.findMany({
+    where: { deletedAt: null, approvalStatus: 'PENDING' },
+    include: employeeInclude,
+    orderBy: { createdAt: 'asc' },
   });
   return employees.map(formatEmployee);
 }
@@ -234,9 +250,124 @@ export async function updateEmployee(
 
 export async function getEmployeeAuthProfile(employeeId: string) {
   const employee = await prisma.employee.findFirst({
-    where: { id: employeeId, deletedAt: null, isActive: true },
+    where: {
+      id: employeeId,
+      deletedAt: null,
+      isActive: true,
+      approvalStatus: 'APPROVED',
+    },
     include: employeeInclude,
   });
   if (!employee) return null;
   return formatEmployee(employee);
+}
+
+export async function approveEmployee(
+  id: string,
+  input: {
+    branchIds?: string[];
+    allowedSections?: EmployeeSectionKey[];
+    assignedWork?: string;
+    performedById: string;
+    performedByEmail: string;
+  }
+) {
+  const existing = await prisma.employee.findFirst({
+    where: { id, deletedAt: null, approvalStatus: 'PENDING' },
+    include: employeeInclude,
+  });
+  if (!existing) {
+    throw new Error('Pending registration not found');
+  }
+
+  const sections = input.allowedSections ?? DEFAULT_EMPLOYEE_SECTIONS;
+
+  await prisma.employee.update({
+    where: { id },
+    data: {
+      isActive: true,
+      approvalStatus: 'APPROVED',
+      approvedAt: new Date(),
+      approvedById: input.performedById,
+      assignedWork: input.assignedWork?.trim() || existing.assignedWork,
+      allowedSections: sections,
+    },
+  });
+
+  if (input.branchIds?.length) {
+    await prisma.branchEmployee.updateMany({
+      where: { employeeId: id, isActive: true },
+      data: { isActive: false, deactivatedAt: new Date() },
+    });
+    for (const branchId of input.branchIds) {
+      await prisma.branchEmployee.upsert({
+        where: { branchId_employeeId: { branchId, employeeId: id } },
+        create: { branchId, employeeId: id },
+        update: { isActive: true, deactivatedAt: null },
+      });
+    }
+  }
+
+  await markRegistrationNotificationsRead(id);
+
+  await prisma.auditLog.create({
+    data: {
+      entityType: 'Employee',
+      entityId: id,
+      action: 'UPDATE',
+      performedById: input.performedById,
+      performedByEmail: input.performedByEmail,
+      changes: { approvalStatus: 'APPROVED' },
+    },
+  });
+
+  const refreshed = await prisma.employee.findFirstOrThrow({
+    where: { id },
+    include: employeeInclude,
+  });
+  return formatEmployee(refreshed);
+}
+
+export async function rejectEmployee(
+  id: string,
+  input: {
+    performedById: string;
+    performedByEmail: string;
+    reason?: string;
+  }
+) {
+  const existing = await prisma.employee.findFirst({
+    where: { id, deletedAt: null, approvalStatus: 'PENDING' },
+  });
+  if (!existing) {
+    throw new Error('Pending registration not found');
+  }
+
+  await prisma.employee.update({
+    where: { id },
+    data: {
+      approvalStatus: 'REJECTED',
+      isActive: false,
+      approvedAt: new Date(),
+      approvedById: input.performedById,
+      registrationNote: input.reason?.trim()
+        ? `${existing.registrationNote ?? ''}\nRejection: ${input.reason.trim()}`.trim()
+        : existing.registrationNote,
+    },
+  });
+
+  await markRegistrationNotificationsRead(id);
+
+  await prisma.auditLog.create({
+    data: {
+      entityType: 'Employee',
+      entityId: id,
+      action: 'UPDATE',
+      performedById: input.performedById,
+      performedByEmail: input.performedByEmail,
+      changes: { approvalStatus: 'REJECTED' },
+    },
+  });
+
+  return { success: true };
 }

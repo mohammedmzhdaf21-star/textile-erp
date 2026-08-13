@@ -63,6 +63,12 @@ enum NotificationType {
   COMMISSION_PAID
   SYSTEM
   BROADCAST
+  EMPLOYEE_REGISTRATION
+}
+enum EmployeeApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
 }
 enum CommissionEntryStatus {
   PENDING
@@ -333,10 +339,16 @@ model Employee {
   hireDate            DateTime  @default(now())
   assignedWork        String?   @db.Text
   allowedSections     Json?
+  approvalStatus      EmployeeApprovalStatus @default(APPROVED)
+  approvedAt          DateTime?
+  approvedById        String?
+  approvedBy          Employee? @relation("EmployeeApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  registrationNote    String?   @db.Text
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
 
   sales            Sale[]                          @relation("SaleEmployee")
+  approvalsGiven   Employee[]                      @relation("EmployeeApprovedBy")
   voidedSales      Sale[]                          @relation("SaleVoidedBy")
   commissions           PaidCommissionHistory[]
   commissionEntries     EmployeeCommissionEntry[]       @relation("CommissionEmployee")
@@ -353,6 +365,7 @@ model Employee {
   @@index([email])
   @@index([isActive])
   @@index([role])
+  @@index([approvalStatus])
   @@map("employees")
 }
 

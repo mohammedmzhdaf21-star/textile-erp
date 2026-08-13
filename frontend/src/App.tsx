@@ -5,6 +5,7 @@ import Inventory from './pages/Inventory';
 import ItemConversion from './pages/ItemConversion';
 import Dashboard from './pages/Dashboard';
 import Login from './pages/Login';
+import Register from './pages/Register';
 import Sales from './pages/Sales';
 import Exchange from './pages/Exchange';
 import ItemInput from './pages/ItemInput';
@@ -47,6 +48,7 @@ function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<Register />} />
         <Route
           path="/dashboard"
           element={
