@@ -188,7 +188,13 @@
     "passwordRequired": "Password is required for new accounts.",
     "saveFailed": "Could not save employee account.",
     "loadFailed": "Could not load employee accounts.",
-    "adminOnly": "Only admins and managers can open Employee Accounts."
+    "adminOnly": "Only admins and managers can open Employee Accounts.",
+    "approvalRequiredNotice": "This employee cannot sign in until you approve them on the dashboard or in the pending list below.",
+    "pendingEditNotice": "This account is waiting for sign-in approval. Use Approve below before they can sign in.",
+    "pendingApprovalTitle": "Waiting for your approval to sign in",
+    "pendingApprovalDescription": "These accounts were created but cannot sign in until you approve them.",
+    "approved": "Employee approved. They can now sign in.",
+    "rejected": "Registration rejected."
   },
   "sidebar": {
     "menu": "Menu",

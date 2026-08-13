@@ -6,8 +6,9 @@ import {
   EmployeeSectionKey,
   parseAllowedSections,
   roleHasFullAccess,
+  roleRequiresSignInApproval,
 } from './employeeSections';
-import { markRegistrationNotificationsRead } from './notifications';
+import { markRegistrationNotificationsRead, notifyAdminsOfRegistration } from './notifications';
 
 const SALT_ROUNDS = 10;
 
@@ -122,6 +123,7 @@ export async function createEmployee(input: {
   const passwordHash = await bcrypt.hash(input.password, SALT_ROUNDS);
   const sections =
     roleHasFullAccess(input.role) ? null : input.allowedSections ?? DEFAULT_EMPLOYEE_SECTIONS;
+  const requiresApproval = roleRequiresSignInApproval(input.role);
 
   const employee = await prisma.employee.create({
     data: {
@@ -130,8 +132,8 @@ export async function createEmployee(input: {
       phone: input.phone?.trim() || null,
       role: input.role,
       passwordHash,
-      isActive: true,
-      approvalStatus: 'APPROVED',
+      isActive: !requiresApproval,
+      approvalStatus: requiresApproval ? 'PENDING' : 'APPROVED',
       assignedWork: input.assignedWork?.trim() || null,
       allowedSections: sections,
       branches: input.branchIds?.length
@@ -142,6 +144,13 @@ export async function createEmployee(input: {
     },
     include: employeeInclude,
   });
+
+  if (requiresApproval) {
+    await notifyAdminsOfRegistration(employee, {
+      title: 'Employee awaiting sign-in approval',
+      message: `${employee.name} (${employee.email}) was added and needs your approval before they can sign in`,
+    });
+  }
 
   await prisma.auditLog.create({
     data: {
@@ -154,6 +163,7 @@ export async function createEmployee(input: {
         email: employee.email,
         role: employee.role,
         allowedSections: sections,
+        approvalStatus: employee.approvalStatus,
       },
     },
   });

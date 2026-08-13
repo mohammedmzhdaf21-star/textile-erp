@@ -39,3 +39,6 @@ export const parseAllowedSections = (value: unknown): EmployeeSectionKey[] | nul
 };
 
 export const roleHasFullAccess = (role: string) => role === 'ADMIN' || role === 'MANAGER';
+
+export const roleRequiresSignInApproval = (role: string) =>
+  role === 'EMPLOYEE' || role === 'TRUSTEE';

@@ -10,8 +10,12 @@ export type PendingEmployee = {
   name: string;
   email: string;
   phone: string | null;
+  role: "ADMIN" | "MANAGER" | "EMPLOYEE" | "TRUSTEE";
+  assignedWork: string | null;
   registrationNote: string | null;
+  allowedSections: string[] | null;
   branchIds: string[];
+  lastLoginAt: string | null;
   createdAt: string;
 };
 

@@ -29,11 +29,17 @@ const formatNotification = (notification: {
   createdAt: notification.createdAt.toISOString(),
 });
 
-export async function notifyAdminsOfRegistration(employee: {
-  id: string;
-  name: string;
-  email: string;
-}) {
+export async function notifyAdminsOfRegistration(
+  employee: {
+    id: string;
+    name: string;
+    email: string;
+  },
+  options?: {
+    title?: string;
+    message?: string;
+  }
+) {
   const admins = await prisma.employee.findMany({
     where: {
       role: 'ADMIN',
@@ -49,8 +55,10 @@ export async function notifyAdminsOfRegistration(employee: {
   await prisma.notification.createMany({
     data: admins.map((admin) => ({
       type: 'EMPLOYEE_REGISTRATION',
-      title: 'New employee registration',
-      message: `${employee.name} (${employee.email}) requested workspace access`,
+      title: options?.title ?? 'New employee registration',
+      message:
+        options?.message ??
+        `${employee.name} (${employee.email}) requested workspace access`,
       recipientId: admin.id,
       metadata: { employeeId: employee.id },
     })),
