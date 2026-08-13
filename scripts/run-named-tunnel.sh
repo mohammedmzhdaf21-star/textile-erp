@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Permanent Cloudflare named tunnel → https://erp.kutalimzhda.com
-# Supervises cloudflared: if the connector loses all edge links (ha_connections=0),
-# exit so PM2 restarts it. This is internal to the tunnel — not external site polling.
+# Keeps the connector healthy: if Cloudflare edge links drop or the domain stops
+# responding while the app is up, restart cloudflared (PM2 autorestart).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -18,14 +18,15 @@ if [[ -f .env ]]; then
 fi
 
 TOKEN="${CLOUDFLARE_TUNNEL_TOKEN:-}"
-TUNNEL_ID="${CLOUDFLARE_TUNNEL_ID:-}"
 PORT="${PORT:-3000}"
 PUBLIC_URL="${ERP_PUBLIC_URL:-https://erp.kutalimzhda.com}"
+PUBLIC_HEALTH="${PUBLIC_URL}/health"
 METRICS_PORT="${TUNNEL_METRICS_PORT:-20241}"
 TUNNEL_PROTOCOL="${CLOUDFLARE_TUNNEL_PROTOCOL:-http2}"
-STARTUP_GRACE_SEC="${TUNNEL_STARTUP_GRACE_SEC:-90}"
-CHECK_INTERVAL_SEC="${TUNNEL_CHECK_INTERVAL_SEC:-30}"
-ZERO_STREAK_LIMIT="${TUNNEL_ZERO_STREAK_LIMIT:-2}"
+STARTUP_GRACE_SEC="${TUNNEL_STARTUP_GRACE_SEC:-60}"
+CHECK_INTERVAL_SEC="${TUNNEL_CHECK_INTERVAL_SEC:-15}"
+MIN_HA_CONNECTIONS="${TUNNEL_MIN_HA_CONNECTIONS:-4}"
+FAIL_STREAK_LIMIT="${TUNNEL_FAIL_STREAK_LIMIT:-2}"
 
 if [[ -z "$TOKEN" ]]; then
   echo "ERROR: CLOUDFLARE_TUNNEL_TOKEN is missing from .env"
@@ -61,10 +62,6 @@ if command -v lsof >/dev/null 2>&1 && lsof -ti ":${METRICS_PORT}" >/dev/null 2>&
   sleep 2
 fi
 
-if [[ -n "$TUNNEL_ID" ]]; then
-  cloudflared tunnel cleanup "$TUNNEL_ID" >>"$ROOT/deploy/tunnel.log" 2>&1 || true
-fi
-
 log_tunnel() {
   printf '%s %s\n' "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" "$*" | tee -a "$ROOT/deploy/tunnel.log"
 }
@@ -72,6 +69,23 @@ log_tunnel() {
 read_ha_connections() {
   curl -sf --max-time 3 "http://127.0.0.1:${METRICS_PORT}/metrics" 2>/dev/null \
     | awk '/^cloudflared_tunnel_ha_connections / { print $2; exit }'
+}
+
+tunnel_connector_unhealthy() {
+  local ha="$1"
+  local reason=""
+
+  if [[ -z "$ha" || ! "$ha" =~ ^[0-9]+$ || "$ha" -lt "$MIN_HA_CONNECTIONS" ]]; then
+    reason="ha=${ha:-none} (need ${MIN_HA_CONNECTIONS})"
+  elif tunnel_check_local && ! tunnel_check_public "$PUBLIC_HEALTH"; then
+    reason="domain_unreachable (app ok, public failed)"
+  fi
+
+  if [[ -n "$reason" ]]; then
+    echo "$reason"
+    return 0
+  fi
+  return 1
 }
 
 echo "==> Cloudflare named tunnel"
@@ -87,7 +101,7 @@ cloudflared tunnel \
 CF_PID=$!
 
 started_at=$(date +%s)
-zero_streak=0
+fail_streak=0
 
 while kill -0 "$CF_PID" 2>/dev/null; do
   sleep "$CHECK_INTERVAL_SEC"
@@ -102,17 +116,19 @@ while kill -0 "$CF_PID" 2>/dev/null; do
   fi
 
   ha="$(read_ha_connections || true)"
-  if [[ -z "$ha" || "$ha" == "0" ]]; then
-    zero_streak=$((zero_streak + 1))
-    log_tunnel "Tunnel connector lost Cloudflare edge link (ha=${ha:-none}, streak=${zero_streak})"
-    if (( zero_streak >= ZERO_STREAK_LIMIT )); then
-      log_tunnel "Restarting tunnel connector (PM2 will bring it back)"
+  unhealthy_reason="$(tunnel_connector_unhealthy "$ha" || true)"
+
+  if [[ -n "$unhealthy_reason" ]]; then
+    fail_streak=$((fail_streak + 1))
+    log_tunnel "Tunnel unhealthy: ${unhealthy_reason} (streak=${fail_streak})"
+    if (( fail_streak >= FAIL_STREAK_LIMIT )); then
+      log_tunnel "Restarting tunnel connector"
       kill -TERM "$CF_PID" 2>/dev/null || true
       wait "$CF_PID" 2>/dev/null || true
       exit 1
     fi
   else
-    zero_streak=0
+    fail_streak=0
   fi
 done
 
