@@ -155,7 +155,7 @@
     "dailySales": "Daily Sales",
     "historySales": "History Sales",
     "owedMoney": "Owed Money",
-    "tasks": "Tasks",
+    "tasks": "Task Input",
     "taskEmployee": "Task Employee",
     "openTasksBadge": "{{count}} open tasks",
     "dataAnalysis": "Data Analysis",
@@ -265,7 +265,7 @@
       "dailySales": "Daily Sales",
       "historySales": "History Sales",
       "owedMoney": "Owed Money",
-      "tasks": "Tasks",
+      "tasks": "Task Input",
       "taskEmployee": "Task Employee",
       "dataAnalysis": "Data Analysis",
       "trusteeCommission": "Trustee Commission",
@@ -627,7 +627,7 @@
     "paymentExceedsBalance": "Payment cannot exceed the outstanding balance of {{amount}}."
   },
   "tasks": {
-    "title": "Tasks",
+    "title": "Task Input",
     "subtitle": "Admin/owner task schedule by branch. Cutting tasks are created when shelf pieces sell out and are marked done automatically in Item Conversion.",
     "currentBranch": "Branch {{branch}}",
     "assignRecurring": "Assign recurring task",
