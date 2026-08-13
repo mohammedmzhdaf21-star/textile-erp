@@ -63,7 +63,7 @@ cf_mut POST "/zones/$ZONE/dns_records" \
   "{\"type\":\"CNAME\",\"name\":\"$NAME\",\"content\":\"$TARGET\",\"proxied\":true}" >/dev/null
 
 echo "==> Restarting named tunnel"
-npx pm2 restart textile-tunnel-named 2>/dev/null || true
+npx pm2 restart textile-tunnel 2>/dev/null || true
 
 echo ""
 echo "Done. Open in 2-5 min: https://$HOST"

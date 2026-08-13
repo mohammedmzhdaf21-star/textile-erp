@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# DEPRECATED: Ephemeral quick tunnel — causes 530 when URL expires.
+# Production uses scripts/run-named-tunnel.sh via npm run install:24-7
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"

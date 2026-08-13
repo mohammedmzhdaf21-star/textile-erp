@@ -1,0 +1,16 @@
+[Unit]
+Description=Textile ERP tunnel and app health watchdog
+After=network-online.target textile-erp.service textile-tunnel.service
+
+[Service]
+Type=simple
+WorkingDirectory=@WORKSPACE@
+Environment=ERP_PUBLIC_URL=https://erp.kutalimzhda.com
+Environment=WATCHDOG_INTERVAL_SEC=45
+Environment=WATCHDOG_FAIL_THRESHOLD=2
+ExecStart=@WORKSPACE@/scripts/tunnel-watchdog.sh
+Restart=always
+RestartSec=15
+
+[Install]
+WantedBy=default.target

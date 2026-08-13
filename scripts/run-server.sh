@@ -11,4 +11,4 @@ if [[ ! -f frontend/dist/index.html ]]; then
   exit 1
 fi
 
-exec tsx src/server.ts
+exec npx tsx src/server.ts

@@ -1,16 +1,16 @@
 [Unit]
-Description=Textile ERP Cloudflare tunnel
-After=network.target textile-erp.service
-Requires=textile-erp.service
+Description=Textile ERP Cloudflare named tunnel
+After=network-online.target textile-erp.service
+Wants=network-online.target
 
 [Service]
 Type=simple
 WorkingDirectory=@WORKSPACE@
 Environment=PORT=3000
-ExecStart=@WORKSPACE@/scripts/run-tunnel.sh
+Environment=ERP_PUBLIC_URL=https://erp.kutalimzhda.com
+ExecStart=@WORKSPACE@/scripts/run-named-tunnel.sh
 Restart=always
 RestartSec=10
-StartLimitIntervalSec=0
 
 [Install]
 WantedBy=default.target
