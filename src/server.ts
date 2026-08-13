@@ -53,6 +53,11 @@ app.get('/health', async (_req: Request, res: Response) => {
       status: 'ok',
       database: 'connected',
       timestamp: new Date().toISOString(),
+      features: {
+        plainClothApi: true,
+        deviceSignIn: true,
+        employeeRegistration: true,
+      },
     });
   } catch (error) {
     res.status(503).json({

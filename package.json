@@ -10,6 +10,7 @@
     "start": "bash scripts/run-server.sh",
     "build:frontend": "cd frontend && npm run build",
     "start:prod": "bash scripts/start-production.sh",
+    "deploy": "bash scripts/deploy-update.sh",
     "install:24-7": "bash scripts/install-24-7.sh",
     "build": "tsc",
     "studio": "prisma studio",

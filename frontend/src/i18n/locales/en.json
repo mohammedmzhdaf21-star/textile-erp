@@ -807,7 +807,8 @@
     "deleted": "Removed {{name}}.",
     "confirmDelete": "Delete plain cloth type {{name}}?",
     "loadFailed": "Failed to load plain cloth types.",
-    "apiUnavailable": "Plain cloth API is not available on the server (404). Run: git pull origin main, npm run build:frontend, then pm2 restart textile-erp.",
+    "apiUnavailable": "Plain cloth API is not available on the server (404). Run on the server: npm run deploy — or use this browser until deploy completes (saved locally only).",
+    "offlineMode": "Server API not updated yet. Names you add here are saved in this browser only. On the server run: npm run deploy",
     "saveFailed": "Failed to save plain cloth type.",
     "deleteFailed": "Failed to delete plain cloth type.",
     "backToSales": "Back to Sales"

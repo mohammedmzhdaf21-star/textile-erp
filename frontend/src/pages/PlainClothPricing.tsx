@@ -5,6 +5,7 @@ import {
   createPlainClothType,
   deletePlainClothType,
   fetchPlainClothTypes,
+  isPlainClothOfflineMode,
   updatePlainClothType,
   type PlainClothType,
 } from '../lib/plainClothApi';
@@ -38,6 +39,7 @@ export default function PlainClothPricing() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [offline, setOffline] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const loadItems = useCallback(async () => {
@@ -46,6 +48,10 @@ export default function PlainClothPricing() {
     try {
       const list = await fetchPlainClothTypes(true);
       setItems(list.filter((item) => item.isActive));
+      setOffline(isPlainClothOfflineMode());
+      if (isPlainClothOfflineMode()) {
+        setError(null);
+      }
     } catch (loadError: unknown) {
       setError(
         getApiErrorMessage(loadError, t('plainClothPricing.loadFailed'), t('plainClothPricing.apiUnavailable'))
@@ -105,6 +111,7 @@ export default function PlainClothPricing() {
       }
       resetForm();
       await loadItems();
+      setOffline(isPlainClothOfflineMode());
     } catch (saveError: unknown) {
       setError(
         getApiErrorMessage(saveError, t('plainClothPricing.saveFailed'), t('plainClothPricing.apiUnavailable'))
@@ -144,6 +151,11 @@ export default function PlainClothPricing() {
         <Link to="/sales" className="mt-2 inline-block text-sm font-medium text-magenta-600 hover:underline">
           {t('plainClothPricing.backToSales')}
         </Link>
+        {offline && (
+          <p className="mt-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            {t('plainClothPricing.offlineMode')}
+          </p>
+        )}
       </div>
 
       <section className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
