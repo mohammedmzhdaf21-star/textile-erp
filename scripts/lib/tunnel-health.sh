@@ -116,8 +116,8 @@ tunnel_needs_recovery() {
 
   local ha
   ha="$(tunnel_ha_connections "$root" 2>/dev/null || echo "")"
-  if [[ -n "$ha" && "$ha" =~ ^[0-9]+$ ]] && [[ "$ha" -lt "$min_ha" ]]; then
-    echo "ha_degraded:${ha}"
+  if [[ -n "$ha" && "$ha" =~ ^[0-9]+$ && "$ha" -eq 0 ]]; then
+    echo "ha_zero"
     return 0
   fi
 

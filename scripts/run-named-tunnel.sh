@@ -66,7 +66,6 @@ echo "    Public URL: $PUBLIC_URL"
 echo "    Protocol:   $TUNNEL_PROTOCOL (4 HA connections)"
 echo "    Metrics:    localhost:${METRICS_PORT}/metrics"
 
-exec cloudflared tunnel run \
-  --token "$TOKEN" \
-  --protocol "$TUNNEL_PROTOCOL" \
-  --metrics "127.0.0.1:${METRICS_PORT}"
+exec cloudflared tunnel \
+  --metrics "127.0.0.1:${METRICS_PORT}" \
+  run --token "$TOKEN" --protocol "$TUNNEL_PROTOCOL"

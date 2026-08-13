@@ -35,6 +35,10 @@ while true; do
       sleep 12
       tunnel_pm2_restart textile-tunnel "$LOG_FILE"
       ;;
+    ha_zero)
+      log "Tunnel has zero HA connections — recovering tunnel"
+      tunnel_recover "$ROOT" "$LOG_FILE" "$PUBLIC_HEALTH" || true
+      ;;
     public_down)
       log "Public URL down (1033/530) — recovering tunnel"
       tunnel_recover "$ROOT" "$LOG_FILE" "$PUBLIC_HEALTH" || true

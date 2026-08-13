@@ -50,6 +50,18 @@ module.exports = {
       restart_delay: 5000,
     },
     {
+      name: 'textile-tunnel-recovery',
+      script: path.join(root, 'scripts/ensure-tunnel-loop.sh'),
+      interpreter: 'bash',
+      cwd: root,
+      env: {
+        TUNNEL_RECOVERY_INTERVAL_SEC: '120',
+      },
+      autorestart: true,
+      max_restarts: 200,
+      restart_delay: 5000,
+    },
+    {
       name: 'textile-watchdog',
       script: path.join(root, 'scripts/tunnel-watchdog.sh'),
       interpreter: 'bash',
@@ -57,7 +69,7 @@ module.exports = {
       env: {
         ERP_PUBLIC_URL: 'https://erp.kutalimzhda.com',
         WATCHDOG_INTERVAL_SEC: '10',
-        TUNNEL_MIN_HA_CONNECTIONS: '2',
+        TUNNEL_MIN_HA_CONNECTIONS: '1',
       },
       autorestart: true,
       max_restarts: 200,

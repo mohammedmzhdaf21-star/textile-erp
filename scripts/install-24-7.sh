@@ -46,6 +46,7 @@ chmod +x \
   "$ROOT/scripts/tunnel-watchdog.sh" \
   "$ROOT/scripts/tunnel-keepalive.sh" \
   "$ROOT/scripts/ensure-tunnel-healthy.sh" \
+  "$ROOT/scripts/ensure-tunnel-loop.sh" \
   "$ROOT/scripts/setup-custom-domain.sh"
 
 if [[ -n "${CLOUDFLARE_API_TOKEN:-}" && -n "${CLOUDFLARE_ZONE_ID:-}" ]]; then

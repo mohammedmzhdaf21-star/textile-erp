@@ -39,7 +39,7 @@ case "$reason" in
     sleep 12
     tunnel_pm2_restart textile-tunnel "$LOG_FILE"
     ;;
-  public_down|ha_degraded:*)
+    ha_zero|ha_degraded:*|public_down)
     log "Cron recovery: $reason — restarting tunnel"
     tunnel_recover "$ROOT" "$LOG_FILE" "$PUBLIC_HEALTH" || true
     ;;
