@@ -7,6 +7,7 @@ import {
   type UserRole,
 } from "../lib/auth";
 import { dashboardSections, type DashboardSectionKey } from "../lib/dashboardSettings";
+import SignInApprovalsPanel from "../components/SignInApprovalsPanel";
 
 type Branch = { id: string; name: string };
 
@@ -221,6 +222,8 @@ export default function EmployeeAccounts() {
           </button>
         )}
       </div>
+
+      <SignInApprovalsPanel />
 
       {canEdit && (
         <section className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">

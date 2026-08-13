@@ -20,7 +20,7 @@ router.get('/pending', async (_req: Request, res: Response) => {
   }
 });
 
-router.post('/:id/approve', requireRole('ADMIN'), async (req: Request, res: Response) => {
+router.post('/:id/approve', requireRole('ADMIN', 'MANAGER'), async (req: Request, res: Response) => {
   try {
     const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
     const request = await approveDeviceSignIn(id, req.user!.userId);
@@ -31,7 +31,7 @@ router.post('/:id/approve', requireRole('ADMIN'), async (req: Request, res: Resp
   }
 });
 
-router.post('/:id/reject', requireRole('ADMIN'), async (req: Request, res: Response) => {
+router.post('/:id/reject', requireRole('ADMIN', 'MANAGER'), async (req: Request, res: Response) => {
   try {
     const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
     await rejectDeviceSignIn(id, req.user!.userId);

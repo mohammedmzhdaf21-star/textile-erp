@@ -240,6 +240,8 @@
     "pendingRegistrationsDescription": "{{count}} employee(s) are waiting for your approval before they can sign in.",
     "pendingSignInsTitle": "Device sign-in requests",
     "pendingSignInsDescription": "{{count}} employee(s) want to sign in and need your approval on their device.",
+    "pendingSignInsEmpty": "No pending sign-in requests right now.",
+    "pendingSignInsHint": "When an employee tries to sign in on a new device, their request will appear here with Approve and Reject buttons.",
     "deviceLabel": "Device: {{device}}",
     "unknownDevice": "Unknown device",
     "signInLoadFailed": "Could not load sign-in requests.",
