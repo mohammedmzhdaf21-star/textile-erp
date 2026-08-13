@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import fs from 'fs';
 import path from 'path';
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
@@ -15,6 +16,8 @@ import prisma from './lib/prisma';
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '3000', 10);
+const frontendDist = path.resolve(__dirname, '../frontend/dist');
+const serveFrontend = fs.existsSync(path.join(frontendDist, 'index.html'));
 
 // ============================================================
 // GLOBAL MIDDLEWARE
@@ -58,9 +61,9 @@ app.get('/health', async (_req: Request, res: Response) => {
 });
 
 // ============================================================
-// ROOT (API info in development only)
+// ROOT (API info in development when frontend is not built)
 // ============================================================
-if (process.env.NODE_ENV !== 'production') {
+if (!serveFrontend && process.env.NODE_ENV !== 'production') {
   app.get('/', (_req: Request, res: Response) => {
     res.status(200).json({
       message: 'Textile ERP API is running!',
@@ -107,10 +110,9 @@ app.use('/api/commissions', commissionsRoutes);
 app.use('/api/notifications', notificationsRoutes);
 
 // ============================================================
-// PRODUCTION FRONTEND (single-process 24/7 deployment)
+// FRONTEND SPA (serve built app for /login, /register, etc.)
 // ============================================================
-if (process.env.NODE_ENV === 'production') {
-  const frontendDist = path.resolve(__dirname, '../frontend/dist');
+if (serveFrontend) {
   app.use(express.static(frontendDist, { index: false }));
   app.get('/', (_req: Request, res: Response) => {
     res.sendFile(path.join(frontendDist, 'index.html'));
@@ -187,6 +189,11 @@ const server = app.listen(PORT, async () => {
   console.log(`Auth endpoint:   http://localhost:${PORT}/api/auth/login`);
   console.log(`Inventory:       http://localhost:${PORT}/api/inventory`);
   console.log(`Sales:           http://localhost:${PORT}/api/sales`);
+  if (serveFrontend) {
+    console.log(`Frontend:        http://localhost:${PORT}/login`);
+  } else {
+    console.log('Frontend:        not built — run npm run build:frontend');
+  }
   console.log(`Environment:     ${process.env.NODE_ENV || 'development'}`);
   console.log('============================================================');
   console.log('');
