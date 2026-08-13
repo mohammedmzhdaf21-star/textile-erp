@@ -40,6 +40,8 @@ If the UI is missing camera scan, cut-from-roll sell, Kurdish labels, or other f
 
 See [FEATURES.md](./FEATURES.md) for the complete list.
 
+Alternative hosting (Render): see [DEPLOYMENT.md](./DEPLOYMENT.md).
+
 ## Release tags
 
 | Tag | Contents |

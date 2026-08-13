@@ -11,10 +11,11 @@
     "resolveJsonModule": true,
     "moduleResolution": "node16",
     "declaration": false,
+    "noEmitOnError": true,
     "sourceMap": true,
     "typeRoots": ["./node_modules/@types", "./src/types"],
     "ignoreDeprecations": "6.0"
   },
-  "include": ["src/**/*", "prisma/**/*"],
+  "include": ["src/**/*.ts", "prisma/**/*.ts"],
   "exclude": ["node_modules", "dist"]
 }
