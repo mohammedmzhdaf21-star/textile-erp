@@ -114,6 +114,25 @@ export async function removePendingCommissionsForSale(
   });
 }
 
+export type PendingCommissionSaleDetail = {
+  customerName: string;
+  customerPhone: string;
+  totalPrice: string;
+  paymentMethod: string;
+  branchId: string;
+  branchName: string;
+  notes?: string | null;
+};
+
+export type PendingCommissionItemDetail = {
+  description: string;
+  isPlainCloth: boolean;
+  plainClothName?: string | null;
+  soldAsUnit: string;
+  lineTotal: string;
+  colorName?: string | null;
+};
+
 export type PendingCommissionLine = {
   id: string;
   saleId: string;
@@ -126,6 +145,8 @@ export type PendingCommissionLine = {
   commissionAmount: string;
   createdAt: string;
   saleDate: string;
+  sale: PendingCommissionSaleDetail;
+  item: PendingCommissionItemDetail;
 };
 
 export type PendingCommissionGroup = {
@@ -139,6 +160,39 @@ export type PendingCommissionGroup = {
   entries: PendingCommissionLine[];
 };
 
+function buildPendingItemDetail(
+  saleItem: {
+    isPlainCloth: boolean;
+    plainClothName: string | null;
+    inventoryItemId: string | null;
+    soldAsUnit: string;
+    soldPrice: Prisma.Decimal;
+    quantitySold: Prisma.Decimal;
+    color: { name: string } | null;
+  },
+  entryInventoryId: string | null
+): PendingCommissionItemDetail {
+  const soldPrice = parseFloat(saleItem.soldPrice.toString());
+  const quantitySold = parseFloat(saleItem.quantitySold.toString());
+  const lineTotal = (soldPrice * quantitySold).toFixed(2);
+
+  let description: string;
+  if (saleItem.isPlainCloth && saleItem.plainClothName) {
+    description = saleItem.plainClothName;
+  } else {
+    description = saleItem.inventoryItemId || entryInventoryId || 'Inventory item';
+  }
+
+  return {
+    description,
+    isPlainCloth: saleItem.isPlainCloth,
+    plainClothName: saleItem.plainClothName,
+    soldAsUnit: saleItem.soldAsUnit,
+    lineTotal,
+    colorName: saleItem.color?.name ?? null,
+  };
+}
+
 export async function listPendingCommissions(options?: {
   employeeId?: string;
 }): Promise<PendingCommissionGroup[]> {
@@ -150,7 +204,29 @@ export async function listPendingCommissions(options?: {
     },
     include: {
       employee: { select: { id: true, name: true, email: true, role: true } },
-      sale: { select: { createdAt: true } },
+      sale: {
+        select: {
+          id: true,
+          createdAt: true,
+          customerName: true,
+          customerPhone: true,
+          totalPrice: true,
+          paymentMethod: true,
+          notes: true,
+          branch: { select: { id: true, name: true } },
+        },
+      },
+      saleItem: {
+        select: {
+          isPlainCloth: true,
+          plainClothName: true,
+          inventoryItemId: true,
+          soldAsUnit: true,
+          soldPrice: true,
+          quantitySold: true,
+          color: { select: { name: true } },
+        },
+      },
     },
     orderBy: [{ employee: { name: 'asc' } }, { createdAt: 'desc' }],
   });
@@ -160,6 +236,19 @@ export async function listPendingCommissions(options?: {
   for (const entry of entries) {
     const key = entry.employeeId;
     const existing = grouped.get(key);
+    const itemDetail = entry.saleItem
+      ? buildPendingItemDetail(entry.saleItem, entry.inventoryItemId)
+      : {
+          description: entry.inventoryItemId || 'Sale item',
+          isPlainCloth: false,
+          plainClothName: null,
+          soldAsUnit: 'METER',
+          lineTotal: (
+            parseFloat(entry.soldPrice.toString()) * parseFloat(entry.quantitySold.toString())
+          ).toFixed(2),
+          colorName: null,
+        };
+
     const line: PendingCommissionLine = {
       id: entry.id,
       saleId: entry.saleId,
@@ -172,6 +261,16 @@ export async function listPendingCommissions(options?: {
       commissionAmount: entry.commissionAmount.toString(),
       createdAt: entry.createdAt.toISOString(),
       saleDate: entry.sale.createdAt.toISOString(),
+      sale: {
+        customerName: entry.sale.customerName,
+        customerPhone: entry.sale.customerPhone,
+        totalPrice: entry.sale.totalPrice.toString(),
+        paymentMethod: entry.sale.paymentMethod,
+        branchId: entry.sale.branch.id,
+        branchName: entry.sale.branch.name,
+        notes: entry.sale.notes,
+      },
+      item: itemDetail,
     };
 
     if (existing) {

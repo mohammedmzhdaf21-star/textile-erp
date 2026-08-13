@@ -292,7 +292,15 @@
     "payFailed": "نەتوانرا کۆمیشن وەک پارەدراو نیشان بکرێت.",
     "loadFailed": "نەتوانرا کۆمیشنە چاوەڕوانکراوەکان بار بکرێن.",
     "noPending": "هیچ کۆمیشنێکی چاوەڕوان نییە. فرۆشتن لە کەمترین نرخ (بڕی بنەڕەت) یان سەر کەمترین نرخ (ڕێژەی زیادە) لێرە دەردەکەون.",
-    "lineDetail": "فرۆشراو {{sold}} · کەمترین {{min}} · بڕ {{qty}} · {{rate}}% · {{date}}"
+    "lineDetail": "فرۆشراو {{sold}} · کەمترین {{min}} · بڕ {{qty}} · {{rate}}% · {{date}}",
+    "saleDetailTitle": "وردەکاری فرۆشتن",
+    "customerLine": "کڕیار: {{name}} · {{phone}}",
+    "branchLine": "لق {{branch}} · کۆی فرۆشتن {{total}} · {{payment}}",
+    "saleDateLine": "فرۆشراو لە {{date}}",
+    "soldLine": "{{qty}} {{unit}} @ {{unitPrice}} · کۆی هێڵ {{lineTotal}}",
+    "viewSale": "بینینی تەواوی فرۆشتن",
+    "plainClothItem": "{{name}} (قوماشی سادە)",
+    "colorLabel": "ڕەنگ: {{name}}"
   },
   "inventory": {
     "title": "کۆگا",

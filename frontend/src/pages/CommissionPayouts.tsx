@@ -1,8 +1,29 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import api from "../lib/api";
 import { canManageEmployeeAccounts, getCurrentUser } from "../lib/auth";
 import { formatCurrency } from "../lib/currency";
+import { resolveSalePaymentLabel } from "../lib/paymentMethod";
+
+type PendingCommissionSaleDetail = {
+  customerName: string;
+  customerPhone: string;
+  totalPrice: string;
+  paymentMethod: string;
+  branchId: string;
+  branchName: string;
+  notes?: string | null;
+};
+
+type PendingCommissionItemDetail = {
+  description: string;
+  isPlainCloth: boolean;
+  plainClothName?: string | null;
+  soldAsUnit: string;
+  lineTotal: string;
+  colorName?: string | null;
+};
 
 type PendingLine = {
   id: string;
@@ -14,6 +35,8 @@ type PendingLine = {
   ratePercent: string;
   commissionAmount: string;
   saleDate: string;
+  sale: PendingCommissionSaleDetail;
+  item: PendingCommissionItemDetail;
 };
 
 type PendingGroup = {
@@ -97,6 +120,9 @@ export default function CommissionPayouts() {
     }
   }
 
+  const unitLabel = (unit: string) =>
+    unit === "PIECE" ? t("common.pieceSingular") : t("common.meterSingular");
+
   return (
     <div className="mx-auto max-w-4xl space-y-6">
       <div>
@@ -157,28 +183,88 @@ export default function CommissionPayouts() {
                   </div>
                 </div>
 
-                <div className="mt-4 space-y-2">
+                <div className="mt-4 space-y-3">
                   {group.entries.map((entry) => (
                     <div
                       key={entry.id}
-                      className="grid grid-cols-1 gap-2 rounded-xl bg-white p-3 text-sm sm:grid-cols-[1fr_auto]"
+                      className="rounded-xl border border-gray-200 bg-white p-4 text-sm"
                     >
-                      <div className="min-w-0">
-                        <div className="break-all font-medium text-black">
-                          {entry.inventoryItemId || t("common.unknownItem")}
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1 space-y-2">
+                          <div>
+                            <div className="font-semibold text-black">
+                              {entry.item.isPlainCloth
+                                ? t("commissionPayouts.plainClothItem", {
+                                    name: entry.item.description,
+                                  })
+                                : entry.item.description}
+                            </div>
+                            {!entry.item.isPlainCloth && entry.item.colorName && (
+                              <div className="text-xs text-gray-500">
+                                {t("commissionPayouts.colorLabel", { name: entry.item.colorName })}
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="rounded-lg bg-gray-50 p-3 text-xs text-gray-700">
+                            <div className="font-semibold text-gray-900">
+                              {t("commissionPayouts.saleDetailTitle")}
+                            </div>
+                            <div className="mt-1">
+                              {t("commissionPayouts.customerLine", {
+                                name: entry.sale.customerName,
+                                phone: entry.sale.customerPhone,
+                              })}
+                            </div>
+                            <div>
+                              {t("commissionPayouts.branchLine", {
+                                branch: entry.sale.branchName || entry.sale.branchId,
+                                total: formatCurrency(entry.sale.totalPrice),
+                                payment: resolveSalePaymentLabel(
+                                  t,
+                                  entry.sale.paymentMethod,
+                                  entry.sale.notes
+                                ),
+                              })}
+                            </div>
+                            <div>
+                              {t("commissionPayouts.saleDateLine", {
+                                date: new Date(entry.saleDate).toLocaleString(),
+                              })}
+                            </div>
+                            <div className="mt-1">
+                              {t("commissionPayouts.soldLine", {
+                                qty: Number(entry.quantitySold).toFixed(2),
+                                unit: unitLabel(entry.item.soldAsUnit),
+                                unitPrice: formatCurrency(entry.soldPrice),
+                                lineTotal: formatCurrency(entry.item.lineTotal),
+                              })}
+                            </div>
+                            <Link
+                              to={`/sales/${entry.saleId}`}
+                              state={{ returnTo: "/commission-payouts" }}
+                              className="mt-2 inline-block font-semibold text-magenta-600 hover:underline"
+                            >
+                              {t("commissionPayouts.viewSale")}
+                            </Link>
+                          </div>
+
+                          <div className="text-xs text-gray-500">
+                            {t("commissionPayouts.lineDetail", {
+                              sold: formatCurrency(entry.soldPrice),
+                              min: formatCurrency(entry.minimumPrice),
+                              qty: Number(entry.quantitySold).toFixed(2),
+                              rate: Number(entry.ratePercent).toFixed(1),
+                              date: new Date(entry.saleDate).toLocaleString(),
+                            })}
+                          </div>
                         </div>
-                        <div className="text-xs text-gray-500">
-                          {t("commissionPayouts.lineDetail", {
-                            sold: formatCurrency(entry.soldPrice),
-                            min: formatCurrency(entry.minimumPrice),
-                            qty: Number(entry.quantitySold).toFixed(2),
-                            rate: Number(entry.ratePercent).toFixed(1),
-                            date: new Date(entry.saleDate).toLocaleString(),
-                          })}
+                        <div className="whitespace-nowrap text-right">
+                          <div className="text-xs text-gray-500">{t("nav.commission")}</div>
+                          <div className="text-xl font-bold text-magenta-600">
+                            {formatCurrency(entry.commissionAmount)}
+                          </div>
                         </div>
-                      </div>
-                      <div className="self-center whitespace-nowrap font-bold text-magenta-600">
-                        {formatCurrency(entry.commissionAmount)}
                       </div>
                     </div>
                   ))}

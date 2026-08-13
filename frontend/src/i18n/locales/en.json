@@ -292,7 +292,15 @@
     "payFailed": "Could not mark commission as paid.",
     "loadFailed": "Could not load pending commissions.",
     "noPending": "No pending commissions. Sales at minimum price (base amount) or above minimum (margin percent) appear here automatically.",
-    "lineDetail": "Sold {{sold}} · Min {{min}} · Qty {{qty}} · {{rate}}% · {{date}}"
+    "lineDetail": "Sold {{sold}} · Min {{min}} · Qty {{qty}} · {{rate}}% · {{date}}",
+    "saleDetailTitle": "Sale details",
+    "customerLine": "Customer: {{name}} · {{phone}}",
+    "branchLine": "Branch {{branch}} · Sale total {{total}} · {{payment}}",
+    "saleDateLine": "Sold on {{date}}",
+    "soldLine": "{{qty}} {{unit}} @ {{unitPrice}} · Line total {{lineTotal}}",
+    "viewSale": "View full sale",
+    "plainClothItem": "{{name}} (Plain cloth)",
+    "colorLabel": "Color: {{name}}"
   },
   "inventory": {
     "title": "Inventory",
