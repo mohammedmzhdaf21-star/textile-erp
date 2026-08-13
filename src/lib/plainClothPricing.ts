@@ -219,3 +219,53 @@ export async function recoverPlainClothNamesFromSales() {
 
   return { recovered };
 }
+
+/** Default Kurdish Sorani plain cloth types for this shop. */
+export const DEFAULT_PLAIN_CLOTH_TYPES = [
+  { name: 'ئەتڵەص', pricePerM: 12 },
+  { name: 'برنجۆک', pricePerM: 8 },
+  { name: 'حەریر', pricePerM: 25 },
+  { name: 'سلکی فەڕەنسی', pricePerM: 30 },
+] as const;
+
+/** Ensure shop plain cloth names exist (safe to run on every startup). */
+export async function ensureDefaultPlainClothTypes() {
+  let ensured = 0;
+
+  for (const entry of DEFAULT_PLAIN_CLOTH_TYPES) {
+    const existing = await prisma.plainClothPricing.findFirst({
+      where: { name: { equals: entry.name, mode: 'insensitive' } },
+    });
+
+    if (existing?.isActive) continue;
+
+    if (existing) {
+      await prisma.plainClothPricing.update({
+        where: { id: existing.id },
+        data: {
+          isActive: true,
+          pricePerM: new Prisma.Decimal(
+            normalizeStoredAmount(entry.pricePerM).toFixed(2)
+          ),
+        },
+      });
+      ensured += 1;
+      continue;
+    }
+
+    try {
+      await createPlainClothPricing({
+        name: entry.name,
+        pricePerM: entry.pricePerM,
+      });
+      ensured += 1;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '';
+      if (!message.toLowerCase().includes('already exists')) {
+        throw error;
+      }
+    }
+  }
+
+  return { ensured };
+}

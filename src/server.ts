@@ -14,7 +14,7 @@ import signInRequestsRoutes from './routes/signInRequests.routes';
 import plainClothRoutes from './routes/plainCloth.routes';
 import { migrateLegacyCommissionBase, migrateLegacySettingsPrices } from './lib/currency';
 import { backfillCommissionEntries, recalculatePendingCommissionEntries } from './lib/commissions';
-import { recoverPlainClothNamesFromSales } from './lib/plainClothPricing';
+import { recoverPlainClothNamesFromSales, ensureDefaultPlainClothTypes } from './lib/plainClothPricing';
 import prisma from './lib/prisma';
 
 const app = express();
@@ -192,6 +192,11 @@ const server = app.listen(PORT, async () => {
       console.log(
         `Recovered ${plainClothRecovery.recovered} plain cloth type(s) from past sales.`
       );
+    }
+
+    const plainClothDefaults = await ensureDefaultPlainClothTypes();
+    if (plainClothDefaults.ensured > 0) {
+      console.log(`Ensured ${plainClothDefaults.ensured} default plain cloth type(s).`);
     }
   } catch (error) {
     console.warn('Could not migrate legacy price settings:', error);

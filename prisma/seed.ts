@@ -130,16 +130,14 @@ async function main() {
   console.log('📐 Creating plain cloth pricing...');
   await prisma.plainClothPricing.createMany({
     data: [
-      { id: 'COTTON_BASIC',   name: 'Basic Cotton',    pricePerM: 5.00 },
-      { id: 'COTTON_PREMIUM', name: 'Premium Cotton',  pricePerM: 12.00 },
-      { id: 'SILK',           name: 'Silk',            pricePerM: 25.00 },
-      { id: 'VELVET',         name: 'Velvet',          pricePerM: 30.00 },
-      { id: 'LINEN',          name: 'Linen',           pricePerM: 18.00 },
-      { id: 'POLYESTER',      name: 'Polyester',       pricePerM: 8.00 },
+      { id: 'PC_ATLAS', name: 'ئەتڵەص', pricePerM: 12000 },
+      { id: 'PC_BARANJOK', name: 'برنجۆک', pricePerM: 8000 },
+      { id: 'PC_HARIR', name: 'حەریر', pricePerM: 25000 },
+      { id: 'PC_FRENCH_SILK', name: 'سلکی فەڕەنسی', pricePerM: 30000 },
     ],
     skipDuplicates: true,
   });
-  console.log('✅ 5 plain cloth types created\n');
+  console.log('✅ 4 plain cloth types created\n');
 
   // ============================================================
   // 7. SAMPLE INVENTORY ITEMS

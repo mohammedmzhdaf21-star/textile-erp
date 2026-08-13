@@ -13,6 +13,13 @@ const STORAGE_KEY = 'textile-erp-plain-cloth-types';
 
 const LIST_PATHS = ['/commissions/plain-cloth', '/plain-cloth'] as const;
 
+const DEFAULT_KURDISH_PLAIN_CLOTH: PlainClothType[] = [
+  { id: 'default_atlas', name: 'ئەتڵەص', pricePerM: 12000, isActive: true },
+  { id: 'default_baranjok', name: 'برنجۆک', pricePerM: 8000, isActive: true },
+  { id: 'default_harir', name: 'حەریر', pricePerM: 25000, isActive: true },
+  { id: 'default_french_silk', name: 'سلکی فەڕەنسی', pricePerM: 30000, isActive: true },
+];
+
 let offlineMode = false;
 
 export function isPlainClothOfflineMode() {
@@ -26,12 +33,20 @@ function isApi404(error: unknown) {
 function readLocalTypes(): PlainClothType[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
+    if (!raw) return seedLocalDefaultsIfEmpty();
     const parsed = JSON.parse(raw) as PlainClothType[];
-    return Array.isArray(parsed) ? parsed : [];
+    if (!Array.isArray(parsed) || parsed.length === 0) {
+      return seedLocalDefaultsIfEmpty();
+    }
+    return parsed;
   } catch {
-    return [];
+    return seedLocalDefaultsIfEmpty();
   }
+}
+
+function seedLocalDefaultsIfEmpty(): PlainClothType[] {
+  writeLocalTypes(DEFAULT_KURDISH_PLAIN_CLOTH);
+  return [...DEFAULT_KURDISH_PLAIN_CLOTH];
 }
 
 function writeLocalTypes(items: PlainClothType[]) {
