@@ -218,10 +218,27 @@ export async function loginUser(
 export async function logoutUser(refreshToken: string) {
   const tokenHash = hashRefreshToken(refreshToken);
 
+  const session = await prisma.session.findUnique({
+    where: { refreshTokenHash: tokenHash },
+    include: { employee: { select: { id: true, email: true } } },
+  });
+
   await prisma.session.updateMany({
     where: { refreshTokenHash: tokenHash, revokedAt: null },
     data: { revokedAt: new Date() },
   });
+
+  if (session?.employee) {
+    await prisma.auditLog.create({
+      data: {
+        entityType: 'Employee',
+        entityId: session.employee.id,
+        action: 'LOGOUT',
+        performedById: session.employee.id,
+        performedByEmail: session.employee.email,
+      },
+    });
+  }
 
   return { success: true };
 }

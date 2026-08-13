@@ -17,7 +17,8 @@ export type DashboardSectionKey =
   | 'trusteeCommission'
   | 'exchange'
   | 'itemInput'
-  | 'employeeAccounts';
+  | 'employeeAccounts'
+  | 'activityHistory';
 
 export type ItemMinimumPrice = {
   itemId: string;
@@ -61,6 +62,7 @@ export const dashboardSections: Array<{ key: DashboardSectionKey; labelKey: stri
   { key: 'exchange', labelKey: 'nav.exchange', route: '/exchange' },
   { key: 'itemInput', labelKey: 'nav.newItem', route: '/item-input' },
   { key: 'employeeAccounts', labelKey: 'nav.employeeAccounts', route: '/employee-accounts' },
+  { key: 'activityHistory', labelKey: 'nav.activityHistory', route: '/activity-history' },
 ];
 
 const readJson = <T,>(key: string, fallback: T): T => {

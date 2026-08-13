@@ -16,6 +16,7 @@ export const EMPLOYEE_SECTION_KEYS = [
   'exchange',
   'itemInput',
   'employeeAccounts',
+  'activityHistory',
 ] as const;
 
 export type EmployeeSectionKey = (typeof EMPLOYEE_SECTION_KEYS)[number];

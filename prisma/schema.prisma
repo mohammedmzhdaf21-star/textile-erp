@@ -577,6 +577,7 @@ model AuditLog {
   @@index([performedById, createdAt])
   @@index([branchId])
   @@index([action])
+  @@index([createdAt])
   @@map("audit_logs")
 }
 

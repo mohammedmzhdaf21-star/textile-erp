@@ -22,6 +22,7 @@ import ItemPricing from './pages/ItemPricing';
 import PlainClothPricing from './pages/PlainClothPricing';
 import SalesCommission from './pages/SalesCommission';
 import CommissionPayouts from './pages/CommissionPayouts';
+import ActivityHistory from './pages/ActivityHistory';
 import { getCurrentUser, isAuthenticated } from './lib/auth';
 import { canAccessAdminRoute, canAccessRoute } from './lib/dashboardSettings';
 
@@ -191,6 +192,14 @@ function App() {
           element={
             <ProtectedLayout>
               <TrusteeCommission />
+            </ProtectedLayout>
+          }
+        />
+        <Route
+          path="/activity-history"
+          element={
+            <ProtectedLayout>
+              <ActivityHistory />
             </ProtectedLayout>
           }
         />

@@ -130,7 +130,12 @@ Deploy and develop from `main` so nothing is lost when starting a new session or
 
 - A, B, C, E, F + Storage (S)
 
-## Production & Deploy
+## Activity History (permanent audit log)
+
+- Every significant action is stored **forever** in the database (no auto-delete)
+- Sales, inventory, employees, logins, commissions, plain cloth, device sign-in, and more
+- **Activity History** page under Accounting — grouped by date and time
+- Admins/managers see all actions; employees can see their own (if given access)
 
 - **24/7 autonomous stack:** app + tunnel + keepalive + watchdog + recovery (PM2)
 - **Self-healing:** auto-fixes Cloudflare Error 1033 within ~30 seconds — no manual steps

@@ -49,6 +49,7 @@ const navigation: Array<NavItem | NavGroup> = [
       { to: '/sales/history', labelKey: 'nav.historySales', end: true },
       { to: '/sales/owed', labelKey: 'nav.owedMoney', end: true },
       { to: '/exchange', labelKey: 'nav.exchange', end: true },
+      { to: '/activity-history', labelKey: 'nav.activityHistory', end: true },
     ],
   },
   {

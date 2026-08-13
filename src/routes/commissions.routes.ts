@@ -21,6 +21,7 @@ import {
   updatePlainClothPricing,
 } from '../lib/plainClothPricing';
 import { roleHasFullAccess } from '../lib/employeeSections';
+import { writeAuditLog } from '../lib/auditLog';
 
 const router = Router();
 
@@ -101,6 +102,14 @@ router.put('/settings/rate', requireRole('ADMIN', 'MANAGER'), async (req: Reques
       req.user!.userId,
       baseAmountPerUnit
     );
+    await writeAuditLog({
+      entityType: 'CommissionSettings',
+      entityId: 'rate',
+      action: 'UPDATE',
+      performedById: req.user!.userId,
+      performedByEmail: req.user!.email,
+      changes: rate as unknown as Record<string, unknown>,
+    });
     await recalculatePendingCommissionEntries();
     return res.status(200).json({ rate });
   } catch (error: any) {
@@ -117,12 +126,28 @@ router.put('/settings/prices', requireRole('ADMIN', 'MANAGER'), async (req: Requ
 
     if (price) {
       const saved = await saveItemMinimumPrice(price, req.user!.userId);
+      await writeAuditLog({
+        entityType: 'ItemMinimumPrice',
+        entityId: saved.itemId,
+        action: 'UPDATE',
+        performedById: req.user!.userId,
+        performedByEmail: req.user!.email,
+        changes: saved as unknown as Record<string, unknown>,
+      });
       const backfill = await backfillCommissionEntries();
       return res.status(200).json({ price: saved, backfillCreated: backfill.created });
     }
 
     if (prices && typeof prices === 'object') {
       const saved = await saveItemMinimumPricesBulk(prices, req.user!.userId);
+      await writeAuditLog({
+        entityType: 'ItemMinimumPrice',
+        entityId: 'bulk',
+        action: 'UPDATE',
+        performedById: req.user!.userId,
+        performedByEmail: req.user!.email,
+        changes: { count: Object.keys(saved).length },
+      });
       const backfill = await backfillCommissionEntries();
       return res.status(200).json({ prices: saved, backfillCreated: backfill.created });
     }

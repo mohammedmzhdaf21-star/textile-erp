@@ -164,7 +164,49 @@
     "exchange": "Exchange",
     "itemInput": "Item Input",
     "newItem": "New Item",
-    "employeeAccounts": "Employee Accounts"
+    "employeeAccounts": "Employee Accounts",
+    "activityHistory": "Activity History"
+  },
+  "activityHistory": {
+    "title": "Activity History",
+    "subtitle": "Permanent record of every action — stored forever, grouped by date and time.",
+    "selfOnlyNote": "You are viewing your own actions. Admins and managers can see everyone's history.",
+    "fromDate": "From date",
+    "toDate": "To date",
+    "actionFilter": "Action",
+    "entityFilter": "Type",
+    "allActions": "All actions",
+    "allEntities": "All types",
+    "search": "Search",
+    "searchPlaceholder": "Name, email, or record ID…",
+    "applyFilters": "Apply filters",
+    "totalCount": "{{count}} actions recorded",
+    "loading": "Loading…",
+    "loadError": "Could not load activity history",
+    "empty": "No actions found for these filters.",
+    "loadMore": "Load more",
+    "unknownUser": "Unknown user",
+    "entrySummary": "{{actor}} — {{action}} {{entity}} ({{entityId}})",
+    "action": {
+      "CREATE": "Created",
+      "UPDATE": "Updated",
+      "DELETE": "Deleted",
+      "VOID": "Voided",
+      "RESTORE": "Restored",
+      "LOGIN": "Signed in",
+      "LOGOUT": "Signed out",
+      "REFUND": "Refunded"
+    },
+    "entity": {
+      "Sale": "Sale",
+      "InventoryItem": "Inventory item",
+      "Employee": "Employee account",
+      "DeviceSignInRequest": "Device sign-in",
+      "PlainClothPricing": "Plain cloth pricing",
+      "CommissionSettings": "Commission settings",
+      "ItemMinimumPrice": "Item minimum price",
+      "EmployeeCommission": "Commission payout"
+    }
   },
   "employeeAccounts": {
     "title": "Employee Accounts",

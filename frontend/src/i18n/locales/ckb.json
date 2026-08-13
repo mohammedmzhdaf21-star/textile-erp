@@ -164,7 +164,49 @@
     "exchange": "گۆڕینەوە",
     "itemInput": "تۆمارکردنی بەرهەم",
     "newItem": "بەرهەمی نوێ",
-    "employeeAccounts": "هەژمارەکانی کارمەند"
+    "employeeAccounts": "هەژمارەکانی کارمەند",
+    "activityHistory": "مێژووی کردارەکان"
+  },
+  "activityHistory": {
+    "title": "مێژووی کردارەکان",
+    "subtitle": "تۆمارێکی هەمیشەیی بۆ هەموو کردار — بۆ هەمیشە پاشەکەوت دەبێت، ڕێکخراو بە ڕۆژ و کات.",
+    "selfOnlyNote": "تەنها کردارەکانی خۆت دەبینیت. بەڕێوەبەر و ئادمین مێژووی هەموو کەسێک دەبینن.",
+    "fromDate": "لە ڕۆژی",
+    "toDate": "بۆ ڕۆژی",
+    "actionFilter": "کردار",
+    "entityFilter": "جۆر",
+    "allActions": "هەموو کردارەکان",
+    "allEntities": "هەموو جۆرەکان",
+    "search": "گەڕان",
+    "searchPlaceholder": "ناو، ئیمەیڵ، یان ناسنامەی تۆمار…",
+    "applyFilters": "جێبەجێکردنی فلتەر",
+    "totalCount": "{{count}} کردار تۆمارکراوە",
+    "loading": "بارکردن…",
+    "loadError": "نەتوانرا مێژووی کردار بار بکرێت",
+    "empty": "هیچ کردارێک نەدۆزرایەوە بۆ ئەم فلتەرانە.",
+    "loadMore": "زیاتر بار بکە",
+    "unknownUser": "بەکارهێنەری نەناسراو",
+    "entrySummary": "{{actor}} — {{action}} {{entity}} ({{entityId}})",
+    "action": {
+      "CREATE": "دروستکردن",
+      "UPDATE": "نوێکردنەوە",
+      "DELETE": "سڕینەوە",
+      "VOID": "هەڵوەشاندنەوە",
+      "RESTORE": "گەڕاندنەوە",
+      "LOGIN": "چوونەژوورەوە",
+      "LOGOUT": "چوونەدەرەوە",
+      "REFUND": "گەڕاندنەوەی پارە"
+    },
+    "entity": {
+      "Sale": "فرۆشتن",
+      "InventoryItem": "بەرهەمی کۆگا",
+      "Employee": "هەژماری کارمەند",
+      "DeviceSignInRequest": "چوونەژوورەوەی ئامێر",
+      "PlainClothPricing": "نرخی قوماشی سادە",
+      "CommissionSettings": "ڕێکخستنی کۆمیشن",
+      "ItemMinimumPrice": "کەمترین نرخی بەرهەم",
+      "EmployeeCommission": "پارەدانی کۆمیشن"
+    }
   },
   "employeeAccounts": {
     "title": "هەژمارەکانی کارمەند",
