@@ -219,8 +219,7 @@ const SalesView: React.FC = () => {
 
   const addPlainClothLine = () => {
     if (!plainCloth.clothName.trim()) return alert(t('plainClothPricing.enterName'));
-    const pricePerMeter = parsePriceInput(plainCloth.pricePerMeter);
-    if (plainCloth.meters <= 0 || pricePerMeter <= 0) {
+    if (plainCloth.meters <= 0 || plainCloth.pricePerMeter <= 0) {
       return alert(t('sales.enterValidPlainCloth'));
     }
     setCart((current) => [
@@ -229,7 +228,8 @@ const SalesView: React.FC = () => {
         type: 'plain',
         clothName: plainCloth.clothName.trim(),
         meters: plainCloth.meters,
-        pricePerMeter,
+        // Store shorthand like inventory line.price; parsePriceInput runs at display/submit time.
+        pricePerMeter: plainCloth.pricePerMeter,
       },
     ]);
   };
