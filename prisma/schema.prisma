@@ -166,6 +166,8 @@ model InventoryItem {
   packageKey     String  @default("") @db.VarChar(255)
   packageComponents Json?
   packageComponentStock Json?
+  sourceItemId   String?   @db.VarChar(100)
+  conversionType String?   @db.VarChar(50)
   version     Int       @default(0)
   isArchived  Boolean   @default(false)
   deletedAt   DateTime?
@@ -178,6 +180,7 @@ model InventoryItem {
   @@index([branchId, code])
   @@index([branchId, type])
   @@index([colorId])
+  @@index([sourceItemId])
   @@index([isArchived])
   @@map("inventory_items")
 }

@@ -219,6 +219,8 @@ router.post(
         isPiecePackage,
         packageKey,
         packageComponents,
+        sourceItemId,
+        conversionType,
       } = req.body;
 
       if (!id || !branchId || code === undefined || subCode === undefined || !colorId || !type) {
@@ -267,6 +269,8 @@ router.post(
           isPiecePackage: Boolean(isPiecePackage),
           packageKey: packageKey !== undefined ? String(packageKey) : '',
           packageComponents: Array.isArray(packageComponents) ? packageComponents : undefined,
+          sourceItemId: sourceItemId !== undefined ? String(sourceItemId) : undefined,
+          conversionType: conversionType !== undefined ? String(conversionType) : undefined,
         },
         req.user?.userId,
         req.user?.email

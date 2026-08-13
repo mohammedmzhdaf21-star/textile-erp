@@ -1,6 +1,6 @@
 {
   "snapshot": "default",
-  "install": "npm install && cd frontend && npm install",
+  "install": "npm install && npm install --prefix frontend && npx prisma generate",
   "start": "echo Ready",
   "terminals": [
     {

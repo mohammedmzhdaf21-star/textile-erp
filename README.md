@@ -47,6 +47,8 @@ See [FEATURES.md](./FEATURES.md) for the complete list.
 | `v1.0.0-full-features` | Initial full feature set |
 | `v1.1.0-full-features` | Multiple rolls, stock breakdown, under-2m remnant rule |
 | `v1.2.0-full-features` | QR camera scan, cut-sell, manual colors, print QR, history search, sale QR snapshots |
+| `v1.2.1-full-features` | Commission payouts, employee access, IQD thousands |
+| `v1.3.0-full-features` | Plain cloth pricing, device sign-in, employee registration, nav dropdowns, line pricing, deploy script, conversion links |
 
 ## Development
 

@@ -46,6 +46,8 @@ export interface CreateInventoryInput {
   isPiecePackage?: boolean;
   packageKey?: string;
   packageComponents?: Array<{ name: string; countPerPackage: number }>;
+  sourceItemId?: string;
+  conversionType?: string;
 }
 
 export interface UpdateInventoryInput {
@@ -306,6 +308,8 @@ export async function createInventoryItem(
         packageComponentStock: packageComponentStock
           ? (packageComponentStock as Prisma.InputJsonValue)
           : undefined,
+        sourceItemId: input.sourceItemId?.trim() || null,
+        conversionType: input.conversionType?.trim() || null,
       },
       include: { color: true, branch: true },
     });
