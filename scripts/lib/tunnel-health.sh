@@ -45,18 +45,26 @@ tunnel_check_local() {
   curl -sf --max-time 8 "$url" >/dev/null 2>&1
 }
 
-tunnel_check_public() {
-  local public_health="${1:-https://erp.kutalimzhda.com/health}"
+_tunnel_public_probe() {
+  local public_health="$1"
   local body code
-  body="$(curl -s --max-time 12 "$public_health" 2>/dev/null || true)"
-  code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 12 "$public_health" 2>/dev/null || echo "000")"
-  if [[ "$code" == "200" ]] && echo "$body" | grep -q '"status"[[:space:]]*:[[:space:]]*"ok"'; then
-    return 0
-  fi
+  body="$(curl -s --max-time 10 "$public_health" 2>/dev/null || true)"
+  code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$public_health" 2>/dev/null || echo "000")"
   if echo "$body" | grep -qiE 'error code: (1033|530)|cloudflare tunnel|unable to reach the origin|cloudflare tunnel error'; then
     return 1
   fi
-  [[ "$code" == "200" ]]
+  [[ "$code" == "200" ]] && echo "$body" | grep -q '"status"[[:space:]]*:[[:space:]]*"ok"'
+}
+
+tunnel_check_public() {
+  _tunnel_public_probe "${1:-https://erp.kutalimzhda.com/health}"
+}
+
+tunnel_check_public_strict() {
+  local public_health="${1:-https://erp.kutalimzhda.com/health}"
+  _tunnel_public_probe "$public_health" || return 1
+  sleep 1
+  _tunnel_public_probe "$public_health"
 }
 
 tunnel_pm2_cmd() {

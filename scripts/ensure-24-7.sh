@@ -17,7 +17,7 @@ tunnel_apply_quic_sysctl
 
 PUBLIC_HEALTH="${ERP_PUBLIC_URL:-https://erp.kutalimzhda.com}/health"
 LOG_FILE="$ROOT/deploy/ensure-24-7.log"
-REQUIRED_APPS=(textile-erp textile-tunnel)
+REQUIRED_APPS=(textile-erp textile-tunnel textile-tunnel-guard)
 
 RELOAD_APP=false
 for arg in "$@"; do
@@ -98,16 +98,17 @@ if ! tunnel_check_local; then
   exit 1
 fi
 
-if tunnel_check_public "$PUBLIC_HEALTH"; then
+if tunnel_check_public_strict "$PUBLIC_HEALTH"; then
   log "ensure-24-7: OK local + public ($PUBLIC_HEALTH)"
   exit 0
 fi
 
-log "ensure-24-7: public URL not ready yet — restarting tunnel once"
+log "ensure-24-7: public URL not ready — restarting tunnel"
 tunnel_pm2_restart textile-tunnel "$LOG_FILE"
-sleep 15
+bash "$ROOT/scripts/ensure-tunnel-up.sh" >>"$LOG_FILE" 2>&1 || true
+sleep 10
 
-if tunnel_check_public "$PUBLIC_HEALTH"; then
+if tunnel_check_public_strict "$PUBLIC_HEALTH"; then
   log "ensure-24-7: OK public=$PUBLIC_HEALTH"
   exit 0
 fi

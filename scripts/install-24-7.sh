@@ -44,6 +44,8 @@ chmod +x \
   "$ROOT/scripts/start-production.sh" \
   "$ROOT/scripts/run-named-tunnel.sh" \
   "$ROOT/scripts/ensure-24-7.sh" \
+  "$ROOT/scripts/ensure-tunnel-up.sh" \
+  "$ROOT/scripts/tunnel-guard-loop.sh" \
   "$ROOT/scripts/pm2-boot.sh" \
   "$ROOT/scripts/setup-boot-persistence.sh" \
   "$ROOT/scripts/setup-custom-domain.sh"
