@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import { authenticate, requireRole } from '../middleware/authenticate';
 import { roleHasFullAccess } from '../lib/employeeSections';
 import {
   completeBranchTask,
@@ -117,7 +118,7 @@ router.get('/', async (req: Request, res: Response) => {
   }
 });
 
-router.post('/', requireRole('ADMIN', 'MANAGER'), async (req: Request, res: Response) => {
+router.post('/', async (req: Request, res: Response) => {
   try {
     const {
       branch,
@@ -135,6 +136,11 @@ router.post('/', requireRole('ADMIN', 'MANAGER'), async (req: Request, res: Resp
 
     if (!branch || !templateKey || !title || !assignedTo || !schedule) {
       return res.status(400).json({ error: 'branch, templateKey, title, assignedTo, and schedule are required' });
+    }
+
+    const isCuttingTask = String(templateKey) === 'CUTTING_FABRIC_ROLL';
+    if (!isCuttingTask && !roleHasFullAccess(req.user!.role)) {
+      return res.status(403).json({ error: 'Only managers can create tasks' });
     }
 
     const task = await createBranchTask({
