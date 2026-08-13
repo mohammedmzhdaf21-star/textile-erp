@@ -116,6 +116,54 @@ const lineUnitPrice = (linePriceShorthand: number, quantity: number) => {
 const plainClothPricePerMeter = (linePriceShorthand: number, meters: number) =>
   lineUnitPrice(linePriceShorthand, meters);
 
+type SalesInputSection = 'scan' | 'rollCut' | 'plainCloth';
+
+function SalesCollapsibleSection({
+  title,
+  expanded,
+  onToggle,
+  accent = false,
+  children,
+}: {
+  title: string;
+  expanded: boolean;
+  onToggle: () => void;
+  accent?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <section
+      className={`rounded-2xl border shadow-sm ${
+        accent ? 'border-magenta-200 bg-magenta-50' : 'border-gray-200 bg-white'
+      }`}
+    >
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={expanded}
+        className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left sm:px-5 sm:py-4"
+      >
+        <span className="text-base font-semibold text-black sm:text-lg">{title}</span>
+        <span
+          className={`shrink-0 text-sm text-gray-500 transition-transform ${expanded ? 'rotate-180' : ''}`}
+          aria-hidden
+        >
+          ▾
+        </span>
+      </button>
+      {expanded && (
+        <div
+          className={`border-t px-4 pb-5 pt-4 sm:px-6 sm:pb-6 ${
+            accent ? 'border-magenta-200/80' : 'border-gray-200/80'
+          }`}
+        >
+          {children}
+        </div>
+      )}
+    </section>
+  );
+}
+
 const SalesView: React.FC = () => {
   const { t } = useTranslation();
   const [branch, setBranch] = useState<string>('A');
@@ -144,6 +192,11 @@ const SalesView: React.FC = () => {
     rollSourceId: string;
     labelPrinted: boolean;
   } | null>(null);
+  const [expandedSection, setExpandedSection] = useState<SalesInputSection | null>(null);
+
+  const toggleSection = (section: SalesInputSection) => {
+    setExpandedSection((current) => (current === section ? null : section));
+  };
 
   useEffect(() => {
     void fetchPlainClothTypes()
@@ -238,6 +291,7 @@ const SalesView: React.FC = () => {
         linePrice: plainCloth.linePrice,
       },
     ]);
+    setExpandedSection(null);
   };
 
   const detectScanItemForCode = async (inventoryItemId: string, sourceBranch: string) => {
@@ -399,6 +453,7 @@ const SalesView: React.FC = () => {
       setPackageComponentsSold([]);
       setScanMessage(null);
       setMinimumPriceMessage(null);
+      setExpandedSection(null);
     } catch (error: any) {
       const status = error?.response?.status;
       const body = error?.response?.data;
@@ -721,8 +776,11 @@ const SalesView: React.FC = () => {
 
       <div className="mt-8 grid gap-6 lg:grid-cols-[1.4fr_1fr]">
         <div className="space-y-6">
-          <section className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
-            <h3 className="text-lg font-semibold text-black">{t('sales.inventoryScanTitle')}</h3>
+          <SalesCollapsibleSection
+            title={t('sales.inventoryScanTitle')}
+            expanded={expandedSection === 'scan'}
+            onToggle={() => toggleSection('scan')}
+          >
             <p className="text-sm text-gray-500 mb-4">
               {t('sales.inventoryScanDescription')}
             </p>
@@ -896,10 +954,14 @@ const SalesView: React.FC = () => {
             >
               {t('sales.addScannedItem')}
             </button>
-          </section>
+          </SalesCollapsibleSection>
 
-          <section className="rounded-3xl border border-magenta-200 bg-magenta-50 p-6 shadow-sm">
-            <h3 className="text-lg font-semibold text-black">{t('sales.cutFromRollTitle')}</h3>
+          <SalesCollapsibleSection
+            title={t('sales.cutFromRollTitle')}
+            expanded={expandedSection === 'rollCut'}
+            onToggle={() => toggleSection('rollCut')}
+            accent
+          >
             <p className="mb-4 text-sm text-gray-600">{t('sales.cutFromRollDescription')}</p>
             <div className="grid gap-3 sm:grid-cols-4">
               <div className="sm:col-span-2">
@@ -1004,16 +1066,15 @@ const SalesView: React.FC = () => {
                 </div>
               </div>
             )}
-          </section>
+          </SalesCollapsibleSection>
 
-          <section className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <h3 className="text-lg font-semibold text-black">{t('sales.plainClothTitle')}</h3>
-                <p className="text-sm text-gray-500 mb-4">
-                  {t('sales.plainClothDescription')}
-                </p>
-              </div>
+          <SalesCollapsibleSection
+            title={t('sales.plainClothTitle')}
+            expanded={expandedSection === 'plainCloth'}
+            onToggle={() => toggleSection('plainCloth')}
+          >
+            <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
+              <p className="text-sm text-gray-500">{t('sales.plainClothDescription')}</p>
               <Link
                 to="/plain-cloth"
                 className="text-sm font-semibold text-magenta-600 hover:underline"
@@ -1075,7 +1136,7 @@ const SalesView: React.FC = () => {
             >
               {t('sales.addPlainClothLine')}
             </button>
-          </section>
+          </SalesCollapsibleSection>
         </div>
 
         <aside className="space-y-6">
