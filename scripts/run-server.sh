@@ -11,4 +11,9 @@ if [[ ! -f frontend/dist/index.html ]]; then
   exit 1
 fi
 
-exec npx tsx src/server.ts
+if [[ ! -x node_modules/.bin/tsx ]]; then
+  echo "Missing tsx. Run: npm install"
+  exit 1
+fi
+
+exec node_modules/.bin/tsx src/server.ts
