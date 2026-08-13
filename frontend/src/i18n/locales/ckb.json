@@ -714,7 +714,7 @@
     "confirmDeleteRule": "ئەکانتی وەبەرهێنەر بۆ {{name}} بسڕدرێتەوە؟",
     "deletedRule": "ئەکانتی وەبەرهێنەر {{name}} سڕایەوە.",
     "tapForBranchBreakdown": "بۆ بینینی فرۆشتن بەپێی لق لەم ماوەیەدا دەست لێبدە.",
-    "branchBreakdownHint": "فرۆشتن بۆ هەر لقێکی پەیوەندیدار لە ماوەی هەڵبژێردراو.",
+    "branchBreakdownHint": "دەست لە لقێک بدە بۆ بینینی فرۆشتنی ڕۆژانە لە ماوەی هەڵبژێردراو.",
     "branchBreakdownTitle": "فرۆشتنی لق ({{from}} بۆ {{to}})",
     "branchLabel": "لقی {{branch}}",
     "branchSalesCount": "{{count}} فرۆشتن",
