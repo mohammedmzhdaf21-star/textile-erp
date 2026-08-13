@@ -17,3 +17,4 @@ deploy/tunnel-metrics.port
 deploy/pm2-reboot.log
 deploy/ensure-24-7.log
 deploy/last-tunnel-recovery.ts
+deploy/verify-boot.log
