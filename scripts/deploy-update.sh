@@ -28,7 +28,7 @@ echo "==> Verifying server boots (prevents 1033 from broken deploys)"
 bash "$ROOT/scripts/verify-server-boot.sh"
 
 echo "==> Ensuring 24/7 stack (app + tunnel + watchdog + keepalive)"
-bash "$ROOT/scripts/ensure-24-7.sh"
+bash "$ROOT/scripts/ensure-24-7.sh" --reload-app
 
 echo ""
 echo "==> Verifying deploy"

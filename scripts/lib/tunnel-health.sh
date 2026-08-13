@@ -76,14 +76,27 @@ tunnel_pm2_restart() {
     tunnel_pm2_cmd start "$target" --update-env >>"$log_file" 2>&1 || true
 }
 
+tunnel_pm2_start_missing() {
+  local root="$1"
+  local log_file="${2:-/dev/null}"
+  tunnel_pm2_cmd start "$root/ecosystem.config.cjs" --update-env >>"$log_file" 2>&1 || true
+}
+
 tunnel_recover() {
   local root="${1:-$(tunnel_health_root)}"
   local log_file="${2:-$root/deploy/watchdog.log}"
   local public_health="${3:-${ERP_PUBLIC_URL:-https://erp.kutalimzhda.com}/health}"
-  local cooldown_sec="${TUNNEL_RECOVERY_COOLDOWN_SEC:-45}"
+  local cooldown_sec="${TUNNEL_RECOVERY_COOLDOWN_SEC:-20}"
   local cooldown_file="$root/deploy/last-tunnel-recovery.ts"
+  local lock_file="$root/deploy/tunnel-recovery.lock"
 
   tunnel_health_load_env "$root"
+
+  exec 8>"$lock_file"
+  if ! flock -n 8; then
+    printf '%s %s\n' "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" "RECOVER: skipped (recovery already running)" >>"$log_file"
+    return 0
+  fi
 
   if [[ -f "$cooldown_file" ]]; then
     local last now
@@ -131,18 +144,41 @@ tunnel_needs_recovery() {
     return 0
   fi
 
+  local ha=""
+  ha="$(tunnel_ha_connections "$root" 2>/dev/null || echo "")"
+  if [[ -n "$ha" && "$ha" =~ ^[0-9]+$ ]]; then
+    if [[ "$ha" -eq 0 ]]; then
+      echo "ha_zero"
+      return 0
+    fi
+    if [[ "$ha" -lt "$min_ha" ]]; then
+      echo "ha_degraded:${ha}"
+      return 0
+    fi
+  fi
+
   if ! tunnel_check_public "$public_health"; then
     echo "public_down"
     return 0
   fi
 
-  local ha
-  ha="$(tunnel_ha_connections "$root" 2>/dev/null || echo "")"
-  if [[ -n "$ha" && "$ha" =~ ^[0-9]+$ && "$ha" -eq 0 ]]; then
-    echo "ha_zero"
-    return 0
-  fi
-
   echo "ok"
-  return 1
+  return 0
+}
+
+tunnel_apply_quic_sysctl() {
+  if [[ -w /proc/sys/net/core/rmem_max ]]; then
+    echo 8388608 > /proc/sys/net/core/rmem_max 2>/dev/null || true
+    echo 8388608 > /proc/sys/net/core/wmem_max 2>/dev/null || true
+    echo 8388608 > /proc/sys/net/core/rmem_default 2>/dev/null || true
+    echo 8388608 > /proc/sys/net/core/wmem_default 2>/dev/null || true
+  fi
+  if command -v sysctl >/dev/null 2>&1; then
+    sysctl -w \
+      net.core.rmem_max=8388608 \
+      net.core.rmem_default=8388608 \
+      net.core.wmem_max=8388608 \
+      net.core.wmem_default=8388608 \
+      2>/dev/null || true
+  fi
 }

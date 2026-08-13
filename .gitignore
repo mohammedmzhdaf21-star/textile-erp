@@ -18,3 +18,4 @@ deploy/pm2-reboot.log
 deploy/ensure-24-7.log
 deploy/last-tunnel-recovery.ts
 deploy/verify-boot.log
+deploy/pm2-startup.cmd

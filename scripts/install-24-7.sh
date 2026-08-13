@@ -49,6 +49,7 @@ chmod +x \
   "$ROOT/scripts/ensure-tunnel-loop.sh" \
   "$ROOT/scripts/ensure-24-7.sh" \
   "$ROOT/scripts/pm2-boot.sh" \
+  "$ROOT/scripts/setup-boot-persistence.sh" \
   "$ROOT/scripts/setup-custom-domain.sh"
 
 if [[ -n "${CLOUDFLARE_API_TOKEN:-}" && -n "${CLOUDFLARE_ZONE_ID:-}" ]]; then
@@ -70,28 +71,28 @@ if [[ "$use_systemd" == "true" ]]; then
   sed "s|@WORKSPACE@|$ROOT|g" "$ROOT/deploy/textile-erp.service.template" > "$SERVICE_DIR/textile-erp.service"
   sed "s|@WORKSPACE@|$ROOT|g" "$ROOT/deploy/textile-tunnel.service.template" > "$SERVICE_DIR/textile-tunnel.service"
   sed "s|@WORKSPACE@|$ROOT|g" "$ROOT/deploy/textile-watchdog.service.template" > "$SERVICE_DIR/textile-watchdog.service"
+  sed "s|@WORKSPACE@|$ROOT|g" "$ROOT/deploy/textile-tunnel-keepalive.service.template" > "$SERVICE_DIR/textile-tunnel-keepalive.service"
+  sed "s|@WORKSPACE@|$ROOT|g" "$ROOT/deploy/textile-tunnel-recovery.service.template" > "$SERVICE_DIR/textile-tunnel-recovery.service"
   loginctl enable-linger "$(id -un)" 2>/dev/null || true
   systemctl --user daemon-reload
-  systemctl --user enable textile-erp.service textile-tunnel.service textile-watchdog.service
-  systemctl --user restart textile-erp.service textile-tunnel.service textile-watchdog.service
+  systemctl --user enable \
+    textile-erp.service \
+    textile-tunnel.service \
+    textile-watchdog.service \
+    textile-tunnel-keepalive.service \
+    textile-tunnel-recovery.service
+  systemctl --user restart \
+    textile-erp.service \
+    textile-tunnel.service \
+    textile-watchdog.service \
+    textile-tunnel-keepalive.service \
+    textile-tunnel-recovery.service
+  bash "$ROOT/scripts/setup-boot-persistence.sh"
   MANAGER="systemd"
 else
   echo "==> Installing PM2 process manager (auto-restart 24/7)"
-  bash "$ROOT/scripts/ensure-24-7.sh"
-
-  if command -v crontab >/dev/null 2>&1; then
-    CRON_REBOOT="@reboot bash $ROOT/scripts/pm2-boot.sh"
-    CRON_TUNNEL="*/2 * * * * flock -n $DEPLOY_DIR/tunnel-recovery.lock bash $ROOT/scripts/ensure-tunnel-healthy.sh >> $DEPLOY_DIR/tunnel-recovery.log 2>&1"
-    (crontab -l 2>/dev/null | grep -v "pm2-boot.sh" | grep -v "pm2 resurrect" | grep -v "ensure-tunnel-healthy" || true
-     echo "$CRON_REBOOT"
-     echo "$CRON_TUNNEL") | crontab -
-    echo "==> Added @reboot pm2-boot + 2-minute tunnel recovery cron"
-  else
-    echo "WARN: crontab not available — PM2 recovery loop handles tunnel health."
-    echo "      After server reboot run: npm run ensure:24-7"
-  fi
-
-  MANAGER="pm2"
+  bash "$ROOT/scripts/ensure-24-7.sh" --full-reload
+  bash "$ROOT/scripts/setup-boot-persistence.sh"
 fi
 
 PUBLIC_URL="${ERP_PUBLIC_URL:-https://erp.kutalimzhda.com}"

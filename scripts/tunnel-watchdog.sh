@@ -9,6 +9,7 @@ cd "$ROOT"
 source "$ROOT/scripts/lib/tunnel-health.sh"
 
 tunnel_health_load_env "$ROOT"
+tunnel_apply_quic_sysctl
 
 LOCAL_HEALTH="${LOCAL_HEALTH_URL:-http://127.0.0.1:3000/health}"
 PUBLIC_HEALTH="${ERP_PUBLIC_URL:-https://erp.kutalimzhda.com}/health"
@@ -24,7 +25,7 @@ log() {
 log "Watchdog started (interval=${CHECK_INTERVAL}s, min_ha=${TUNNEL_MIN_HA_CONNECTIONS:-2})"
 
 while true; do
-  reason="$(tunnel_needs_recovery "$ROOT" "$PUBLIC_HEALTH" || echo ok)"
+  reason="$(tunnel_needs_recovery "$ROOT" "$PUBLIC_HEALTH")"
 
   case "$reason" in
     ok)
@@ -35,17 +36,12 @@ while true; do
       sleep 12
       tunnel_pm2_restart textile-tunnel "$LOG_FILE"
       ;;
-    ha_zero)
-      log "Tunnel has zero HA connections — recovering tunnel"
+    ha_zero|ha_degraded:*|public_down)
+      log "Tunnel needs recovery ($reason) — recovering tunnel"
       tunnel_recover "$ROOT" "$LOG_FILE" "$PUBLIC_HEALTH" || true
       ;;
-    public_down)
-      log "Public URL down (1033/530) — recovering tunnel"
-      tunnel_recover "$ROOT" "$LOG_FILE" "$PUBLIC_HEALTH" || true
-      ;;
-    ha_degraded:*)
-      log "Tunnel HA connections degraded ($reason) — proactive restart"
-      tunnel_recover "$ROOT" "$LOG_FILE" "$PUBLIC_HEALTH" || true
+    *)
+      log "Watchdog: unexpected state ($reason)"
       ;;
   esac
 

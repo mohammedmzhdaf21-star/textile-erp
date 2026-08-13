@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 # Idempotent: start all 24/7 services and verify https://erp.kutalimzhda.com is reachable.
 # Run after deploy, on boot, or anytime — prevents Cloudflare Error 1033 from staying unfixed.
+#
+# Usage:
+#   ensure-24-7.sh              Health check + start missing apps (no disruptive reload)
+#   ensure-24-7.sh --reload-app   Restart textile-erp after deploy (keeps tunnel monitors running)
+#   ensure-24-7.sh --full-reload  Reload entire PM2 ecosystem (install / recovery only)
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -10,6 +15,7 @@ cd "$ROOT"
 source "$ROOT/scripts/lib/tunnel-health.sh"
 
 tunnel_health_load_env "$ROOT"
+tunnel_apply_quic_sysctl
 
 PUBLIC_HEALTH="${ERP_PUBLIC_URL:-https://erp.kutalimzhda.com}/health"
 LOG_FILE="$ROOT/deploy/ensure-24-7.log"
@@ -20,6 +26,15 @@ REQUIRED_APPS=(
   textile-tunnel-recovery
   textile-watchdog
 )
+
+RELOAD_APP=false
+FULL_RELOAD=false
+for arg in "$@"; do
+  case "$arg" in
+    --reload-app) RELOAD_APP=true ;;
+    --full-reload) FULL_RELOAD=true ;;
+  esac
+done
 
 mkdir -p "$ROOT/deploy"
 
@@ -35,18 +50,22 @@ pm2_cmd() {
   fi
 }
 
+pm2_app_status() {
+  local app="$1"
+  pm2_cmd jlist 2>/dev/null | node -e "
+    const apps=JSON.parse(require('fs').readFileSync(0,'utf8')||'[]');
+    const a=apps.find(x=>x.name===process.argv[1]);
+    process.stdout.write(a?.pm2_env?.status||'');
+  " "$app" 2>/dev/null || echo ""
+}
+
 pm2_all_running() {
-  local app
+  local app status
   for app in "${REQUIRED_APPS[@]}"; do
     if ! pm2_cmd describe "$app" >/dev/null 2>&1; then
       return 1
     fi
-    local status
-    status="$(pm2_cmd jlist 2>/dev/null | node -e "
-      const apps=JSON.parse(require('fs').readFileSync(0,'utf8')||'[]');
-      const a=apps.find(x=>x.name===process.argv[1]);
-      process.stdout.write(a?.pm2_env?.status||'');
-    " "$app" 2>/dev/null || echo "")"
+    status="$(pm2_app_status "$app")"
     if [[ "$status" != "online" && "$status" != "launching" ]]; then
       return 1
     fi
@@ -54,9 +73,20 @@ pm2_all_running() {
   return 0
 }
 
+pm2_start_missing() {
+  local app status
+  for app in "${REQUIRED_APPS[@]}"; do
+    status="$(pm2_app_status "$app")"
+    if [[ "$status" != "online" && "$status" != "launching" ]]; then
+      log "ensure-24-7: starting missing/stopped app $app (status=${status:-missing})"
+      tunnel_pm2_restart "$app" "$LOG_FILE"
+    fi
+  done
+}
+
 log "ensure-24-7: checking production stack"
 
-if ! pm2_all_running; then
+if [[ "$FULL_RELOAD" == "true" ]] || ! pm2_all_running; then
   log "ensure-24-7: starting/reloading full PM2 ecosystem"
   if ! bash "$ROOT/scripts/verify-server-boot.sh"; then
     log "ensure-24-7: ERROR server boot verification failed — not reloading textile-erp"
@@ -67,18 +97,27 @@ if ! pm2_all_running; then
     || pm2_cmd reload "$ROOT/ecosystem.config.cjs" --update-env 2>/dev/null \
     || pm2_cmd restart all 2>/dev/null \
     || true
-else
-  log "ensure-24-7: all PM2 apps present — verifying boot before reload"
+elif [[ "$RELOAD_APP" == "true" ]]; then
+  log "ensure-24-7: deploy mode — restarting textile-erp only"
   if ! bash "$ROOT/scripts/verify-server-boot.sh"; then
-    log "ensure-24-7: ERROR server boot verification failed — restarting existing app only"
-    tunnel_pm2_restart textile-erp "$LOG_FILE"
-    tunnel_recover "$ROOT" "$LOG_FILE" "$PUBLIC_HEALTH" || true
+    log "ensure-24-7: ERROR server boot verification failed"
     exit 1
   fi
-  log "ensure-24-7: boot OK — reloading config"
-  pm2_cmd reload "$ROOT/ecosystem.config.cjs" --update-env 2>/dev/null \
-    || pm2_cmd restart all 2>/dev/null \
-    || true
+  tunnel_pm2_restart textile-erp "$LOG_FILE"
+else
+  log "ensure-24-7: all PM2 apps present — health check only (no reload)"
+  pm2_start_missing
+  reason="$(tunnel_needs_recovery "$ROOT" "$PUBLIC_HEALTH")"
+  case "$reason" in
+    local_down)
+      log "ensure-24-7: local app unhealthy — restarting textile-erp"
+      tunnel_pm2_restart textile-erp "$LOG_FILE"
+      ;;
+    ha_zero|ha_degraded:*|public_down)
+      log "ensure-24-7: tunnel unhealthy ($reason) — recovering"
+      tunnel_recover "$ROOT" "$LOG_FILE" "$PUBLIC_HEALTH" || true
+      ;;
+  esac
 fi
 
 pm2_cmd save >>"$LOG_FILE" 2>&1 || true
@@ -104,7 +143,7 @@ for i in $(seq 1 24); do
     log "ensure-24-7: OK public=$PUBLIC_HEALTH ha_connections=${ha}"
     exit 0
   fi
-  if [[ "$i" == "6" || "$i" == "12" || "$i" == "18" ]]; then
+  if [[ "$i" == "3" || "$i" == "6" || "$i" == "12" || "$i" == "18" ]]; then
     log "ensure-24-7: public still down — recovering tunnel (attempt $i)"
     tunnel_recover "$ROOT" "$LOG_FILE" "$PUBLIC_HEALTH" || true
   fi

@@ -8,9 +8,13 @@ Type=simple
 WorkingDirectory=@WORKSPACE@
 Environment=PORT=3000
 Environment=ERP_PUBLIC_URL=https://erp.kutalimzhda.com
+Environment=CLOUDFLARE_TUNNEL_PROTOCOL=quic
+Environment=TUNNEL_METRICS_PORT=20241
 ExecStart=@WORKSPACE@/scripts/run-named-tunnel.sh
 Restart=always
 RestartSec=10
+RuntimeMaxSec=3600
+RuntimeMaxSecAction=restart
 
 [Install]
 WantedBy=default.target

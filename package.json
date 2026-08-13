@@ -13,6 +13,7 @@
     "deploy": "bash scripts/deploy-update.sh",
     "install:24-7": "bash scripts/install-24-7.sh",
     "ensure:24-7": "bash scripts/ensure-24-7.sh",
+    "setup:boot-persistence": "bash scripts/setup-boot-persistence.sh",
     "build": "tsc",
     "studio": "prisma studio",
     "postinstall": "prisma generate"

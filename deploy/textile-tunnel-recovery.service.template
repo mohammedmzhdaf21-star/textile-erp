@@ -1,0 +1,16 @@
+[Unit]
+Description=Textile ERP tunnel recovery loop
+After=network-online.target textile-erp.service textile-tunnel.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=@WORKSPACE@
+Environment=TUNNEL_RECOVERY_INTERVAL_SEC=120
+Environment=TUNNEL_RECOVERY_COOLDOWN_SEC=20
+ExecStart=@WORKSPACE@/scripts/ensure-tunnel-loop.sh
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=default.target

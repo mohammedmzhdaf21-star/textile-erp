@@ -1,0 +1,16 @@
+[Unit]
+Description=Textile ERP tunnel keepalive monitor
+After=network-online.target textile-erp.service textile-tunnel.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=@WORKSPACE@
+Environment=ERP_PUBLIC_URL=https://erp.kutalimzhda.com
+Environment=TUNNEL_KEEPALIVE_SEC=30
+ExecStart=@WORKSPACE@/scripts/tunnel-keepalive.sh
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=default.target
