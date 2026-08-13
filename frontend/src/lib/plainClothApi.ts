@@ -1,12 +1,18 @@
 import axios, { type AxiosError } from 'axios';
 import api from './api';
-import { normalizeStoredAmount } from './currency';
+import { normalizeStoredAmount, toPriceInputNumber } from './currency';
 
 export type PlainClothType = {
   id: string;
   name: string;
   pricePerM: number;
   isActive: boolean;
+};
+
+export type PlainClothReconnectResult = {
+  online: boolean;
+  synced: number;
+  reason: 'ok' | 'auth' | 'server_outdated' | 'failed';
 };
 
 const STORAGE_KEY = 'textile-erp-plain-cloth-types';
@@ -28,6 +34,25 @@ export function isPlainClothOfflineMode() {
 
 function isApi404(error: unknown) {
   return axios.isAxiosError(error) && error.response?.status === 404;
+}
+
+function isApi401(error: unknown) {
+  return axios.isAxiosError(error) && error.response?.status === 401;
+}
+
+function shouldTryNextPath(error: unknown) {
+  return isApi404(error);
+}
+
+export async function getServerPlainClothStatus(): Promise<'ready' | 'outdated' | 'unknown'> {
+  try {
+    const response = await fetch('/health', { cache: 'no-store' });
+    if (!response.ok) return 'unknown';
+    const data = (await response.json()) as { features?: { plainClothApi?: boolean } };
+    return data.features?.plainClothApi ? 'ready' : 'outdated';
+  } catch {
+    return 'unknown';
+  }
 }
 
 function readLocalTypes(): PlainClothType[] {
@@ -67,19 +92,36 @@ function markOnline(items: PlainClothType[]) {
   writeLocalTypes(items.filter((item) => item.isActive));
 }
 
+function priceForApiRequest(storedPrice: number) {
+  return storedPrice >= 500 ? toPriceInputNumber(storedPrice) : storedPrice;
+}
+
 async function requestListFromSettings(): Promise<PlainClothType[] | null> {
   try {
-    const response = await api.get<{ plainClothTypes?: PlainClothType[] }>('/commissions/settings');
+    const response = await api.get<{ plainClothTypes?: PlainClothType[]; rate?: unknown }>(
+      '/commissions/settings'
+    );
     if (Array.isArray(response.data.plainClothTypes)) {
       return response.data.plainClothTypes;
     }
+    if (response.data.rate !== undefined) {
+      return null;
+    }
   } catch (error) {
-    if (!isApi404(error)) throw error;
+    if (isApi401(error)) throw error;
+    if (!shouldTryNextPath(error)) throw error;
   }
   return null;
 }
 
 async function requestList(includeInactive: boolean): Promise<PlainClothType[]> {
+  let lastError: unknown;
+
+  const fromSettings = await requestListFromSettings();
+  if (fromSettings) {
+    return fromSettings;
+  }
+
   for (const path of LIST_PATHS) {
     try {
       const response = await api.get<{ items: PlainClothType[] }>(path, {
@@ -87,71 +129,94 @@ async function requestList(includeInactive: boolean): Promise<PlainClothType[]> 
       });
       return response.data.items || [];
     } catch (error) {
-      if (!isApi404(error)) throw error;
+      lastError = error;
+      if (isApi401(error)) throw error;
+      if (!shouldTryNextPath(error)) throw error;
     }
   }
 
-  const fromSettings = await requestListFromSettings();
-  if (fromSettings) return fromSettings;
-
-  throw new Error('Plain cloth API not found');
+  throw lastError ?? new Error('Plain cloth API not found');
 }
 
 async function requestCreate(name: string, pricePerM: number): Promise<PlainClothType> {
-  const body = { name, pricePerM };
+  const body = { name, pricePerM: priceForApiRequest(pricePerM) };
+  let lastError: unknown;
 
   for (const path of LIST_PATHS) {
     try {
       const response = await api.post<{ item: PlainClothType }>(path, body);
       return response.data.item;
     } catch (error) {
-      if (!isApi404(error)) throw error;
+      lastError = error;
+      if (isApi401(error)) throw error;
+      if (!shouldTryNextPath(error)) throw error;
     }
   }
 
   try {
-    const response = await api.post<{ item: PlainClothType }>('/commissions/settings/plain-cloth', body);
+    const response = await api.post<{ item: PlainClothType }>(
+      '/commissions/settings/plain-cloth',
+      body
+    );
     return response.data.item;
   } catch (error) {
-    if (!isApi404(error)) throw error;
+    lastError = error;
+    if (isApi401(error)) throw error;
+    if (!shouldTryNextPath(error)) throw error;
   }
 
-  throw new Error('Plain cloth API not found');
+  throw lastError ?? new Error('Plain cloth API not found');
 }
 
 async function requestUpdate(
   id: string,
   input: { name?: string; pricePerM?: number }
 ): Promise<PlainClothType> {
+  const payload = {
+    ...(input.name !== undefined ? { name: input.name.trim() } : {}),
+    ...(input.pricePerM !== undefined
+      ? { pricePerM: priceForApiRequest(normalizeStoredAmount(input.pricePerM)) }
+      : {}),
+  };
+  let lastError: unknown;
+
   for (const basePath of LIST_PATHS) {
     try {
-      const response = await api.put<{ item: PlainClothType }>(`${basePath}/${id}`, input);
+      const response = await api.put<{ item: PlainClothType }>(`${basePath}/${id}`, payload);
       return response.data.item;
     } catch (error) {
-      if (!isApi404(error)) throw error;
+      lastError = error;
+      if (isApi401(error)) throw error;
+      if (!shouldTryNextPath(error)) throw error;
     }
   }
 
   try {
     const response = await api.put<{ item: PlainClothType }>(
       `/commissions/settings/plain-cloth/${id}`,
-      input
+      payload
     );
     return response.data.item;
   } catch (error) {
-    if (!isApi404(error)) throw error;
+    lastError = error;
+    if (isApi401(error)) throw error;
+    if (!shouldTryNextPath(error)) throw error;
   }
 
-  throw new Error('Plain cloth API not found');
+  throw lastError ?? new Error('Plain cloth API not found');
 }
 
 async function requestDelete(id: string): Promise<void> {
+  let lastError: unknown;
+
   for (const basePath of LIST_PATHS) {
     try {
       await api.delete(`${basePath}/${id}`);
       return;
     } catch (error) {
-      if (!isApi404(error)) throw error;
+      lastError = error;
+      if (isApi401(error)) throw error;
+      if (!shouldTryNextPath(error)) throw error;
     }
   }
 
@@ -159,15 +224,17 @@ async function requestDelete(id: string): Promise<void> {
     await api.delete(`/commissions/settings/plain-cloth/${id}`);
     return;
   } catch (error) {
-    if (!isApi404(error)) throw error;
+    lastError = error;
+    if (isApi401(error)) throw error;
+    if (!shouldTryNextPath(error)) throw error;
   }
 
-  throw new Error('Plain cloth API not found');
+  throw lastError ?? new Error('Plain cloth API not found');
 }
 
 export async function syncLocalPlainClothTypesToServer(): Promise<number> {
   const localOnly = readLocalTypes().filter(
-    (item) => item.isActive && item.id.startsWith('local_')
+    (item) => item.isActive && (item.id.startsWith('local_') || item.id.startsWith('default_'))
   );
   if (localOnly.length === 0) return 0;
 
@@ -200,7 +267,8 @@ export async function fetchPlainClothTypes(includeInactive = false) {
     markOnline(items);
     void syncLocalPlainClothTypesToServer().catch(() => undefined);
     return filterActive(items, includeInactive);
-  } catch {
+  } catch (error) {
+    if (isApi401(error)) throw error;
     offlineMode = true;
     return filterActive(readLocalTypes(), includeInactive);
   }
@@ -215,6 +283,7 @@ export async function createPlainClothType(name: string, pricePerM: number) {
     markOnline([...readLocalTypes().filter((entry) => entry.id !== item.id), item]);
     return item;
   } catch (error) {
+    if (isApi401(error)) throw error;
     if (!isApi404(error) && !(error instanceof Error && error.message.includes('not found'))) {
       throw error;
     }
@@ -255,6 +324,7 @@ export async function updatePlainClothType(
     offlineMode = false;
     return item;
   } catch (error) {
+    if (isApi401(error)) throw error;
     if (!isApi404(error) && !(error instanceof Error && error.message.includes('not found'))) {
       throw error;
     }
@@ -293,6 +363,7 @@ export async function deletePlainClothType(id: string) {
       )
     );
   } catch (error) {
+    if (isApi401(error)) throw error;
     if (!isApi404(error) && !(error instanceof Error && error.message.includes('not found'))) {
       throw error;
     }
@@ -306,17 +377,22 @@ export async function deletePlainClothType(id: string) {
   }
 }
 
-export async function reconnectPlainClothApi(): Promise<{
-  online: boolean;
-  synced: number;
-}> {
+export async function reconnectPlainClothApi(): Promise<PlainClothReconnectResult> {
+  const serverStatus = await getServerPlainClothStatus();
+
   try {
     const items = await requestList(true);
     markOnline(items);
     const synced = await syncLocalPlainClothTypesToServer();
-    return { online: true, synced };
-  } catch {
+    return { online: true, synced, reason: 'ok' };
+  } catch (error) {
     offlineMode = true;
-    return { online: false, synced: 0 };
+    if (isApi401(error)) {
+      return { online: false, synced: 0, reason: 'auth' };
+    }
+    if (serverStatus === 'outdated') {
+      return { online: false, synced: 0, reason: 'server_outdated' };
+    }
+    return { online: false, synced: 0, reason: 'failed' };
   }
 }

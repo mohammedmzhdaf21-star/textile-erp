@@ -123,17 +123,22 @@ app.use('/api/plain-cloth', plainClothRoutes);
 // FRONTEND SPA (serve built app for /login, /register, etc.)
 // ============================================================
 if (serveFrontend) {
-  app.use(express.static(frontendDist, { index: false }));
-  app.get('/', (_req: Request, res: Response) => {
+  const sendSpaIndex = (res: Response) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
     res.sendFile(path.join(frontendDist, 'index.html'));
+  };
+
+  app.use(express.static(frontendDist, { index: false, maxAge: '7d' }));
+  app.get('/', (_req: Request, res: Response) => {
+    sendSpaIndex(res);
   });
   app.use((req: Request, res: Response, next: NextFunction) => {
     if (req.method !== 'GET' || req.path.startsWith('/api')) {
       return next();
     }
-    res.sendFile(path.join(frontendDist, 'index.html'), (err) => {
-      if (err) next(err);
-    });
+    sendSpaIndex(res);
   });
 }
 

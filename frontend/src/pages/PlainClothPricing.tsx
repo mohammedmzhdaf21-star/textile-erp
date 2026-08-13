@@ -99,6 +99,12 @@ export default function PlainClothPricing() {
             ? t('plainClothPricing.reconnectedSynced', { count: result.synced })
             : t('plainClothPricing.reconnected')
         );
+      } else if (result.reason === 'auth') {
+        setOffline(true);
+        setError(t('plainClothPricing.loginAgain'));
+      } else if (result.reason === 'server_outdated') {
+        setOffline(true);
+        setError(t('plainClothPricing.serverOutdated'));
       } else {
         setOffline(true);
         setError(t('plainClothPricing.refreshBrowser'));
