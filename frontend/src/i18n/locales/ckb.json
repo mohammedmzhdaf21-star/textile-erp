@@ -718,6 +718,10 @@
     "branchBreakdownTitle": "فرۆشتنی لق ({{from}} بۆ {{to}})",
     "branchLabel": "لقی {{branch}}",
     "branchSalesCount": "{{count}} فرۆشتن",
+    "dailyBreakdownTitle": "فرۆشتنی ڕۆژانە",
+    "dayHadSale": "فرۆشتن",
+    "dayNoSale": "بێ فرۆشتن",
+    "daySalesSummary": "{{count}} · {{amount}}",
     "invalidDateRange": "بەرواری دەستپێک دەبێت پێش یان یەکسان بێت لەگەڵ بەرواری کۆتایی.",
     "defaultTrustee": "بەڕێز وەبەرهێنەر"
   },

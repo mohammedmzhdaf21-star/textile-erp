@@ -41,6 +41,13 @@ type BranchBreakdown = {
   revenue: number;
 };
 
+type DailyBreakdown = {
+  date: string;
+  hadSale: boolean;
+  salesCount: number;
+  revenue: number;
+};
+
 const branches: BranchCode[] = ['A', 'B', 'C', 'E', 'F'];
 const TRUSTEE_RULES_KEY = 'textile-erp-trustee-commission-rules';
 
@@ -100,6 +107,48 @@ const branchBreakdownForRule = (
       revenue: sales.reduce((sum, sale) => sum + saleCashAmount(sale), 0),
     };
   });
+
+const dailyBreakdownForBranch = (
+  branch: BranchCode,
+  salesByBranch: Record<BranchCode, Sale[]>,
+  fromDate: string,
+  toDate: string
+): DailyBreakdown[] => {
+  const sales = salesByBranch[branch] || [];
+  const start = new Date(fromDate);
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(toDate);
+  end.setHours(0, 0, 0, 0);
+
+  const days: DailyBreakdown[] = [];
+  const cursor = new Date(start);
+
+  while (cursor <= end) {
+    const dayStart = new Date(cursor);
+    dayStart.setHours(0, 0, 0, 0);
+    const dayEnd = new Date(cursor);
+    dayEnd.setHours(23, 59, 59, 999);
+
+    const daySales = sales.filter((sale) => {
+      const created = new Date(sale.createdAt);
+      return created >= dayStart && created <= dayEnd;
+    });
+
+    const revenue = daySales.reduce((sum, sale) => sum + saleCashAmount(sale), 0);
+    days.push({
+      date: formatDate(cursor),
+      hadSale: daySales.length > 0,
+      salesCount: daySales.length,
+      revenue,
+    });
+
+    cursor.setDate(cursor.getDate() + 1);
+  }
+
+  return days;
+};
+
+const branchExpansionKey = (resultId: string, branch: BranchCode) => `${resultId}:${branch}`;
 
 const isBranchCode = (value: unknown): value is BranchCode =>
   typeof value === 'string' && branches.includes(value as BranchCode);
@@ -173,6 +222,7 @@ const TrusteeCommission: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [expandedResultId, setExpandedResultId] = useState<string | null>(null);
+  const [expandedBranchKey, setExpandedBranchKey] = useState<string | null>(null);
 
   const activeRules = rules.filter((rule) => rule.isActive);
 
@@ -288,6 +338,7 @@ const TrusteeCommission: React.FC = () => {
     setError(null);
     setMessage(null);
     setExpandedResultId(null);
+    setExpandedBranchKey(null);
 
     try {
       const start = new Date(fromDate);
@@ -530,11 +581,12 @@ const TrusteeCommission: React.FC = () => {
                       <div key={result.id} className="rounded-2xl border border-magenta-200 bg-magenta-50">
                         <button
                           type="button"
-                          onClick={() =>
+                          onClick={() => {
                             setExpandedResultId((current) =>
                               current === result.id ? null : result.id
-                            )
-                          }
+                            );
+                            setExpandedBranchKey(null);
+                          }}
                           aria-expanded={isExpanded}
                           className="w-full rounded-2xl p-4 text-left transition-colors hover:bg-magenta-100/60"
                         >
@@ -594,26 +646,104 @@ const TrusteeCommission: React.FC = () => {
                               })}
                             </div>
                             <div className="mt-3 space-y-2">
-                              {branchBreakdown.map((entry) => (
-                                <div
-                                  key={entry.branch}
-                                  className="flex items-center justify-between gap-3 rounded-xl bg-white px-3 py-2 text-sm"
-                                >
-                                  <div>
-                                    <div className="font-semibold text-black">
-                                      {t('trusteeCommission.branchLabel', { branch: entry.branch })}
-                                    </div>
-                                    <div className="text-xs text-gray-500">
-                                      {t('trusteeCommission.branchSalesCount', {
-                                        count: entry.salesCount,
-                                      })}
-                                    </div>
+                              {branchBreakdown.map((entry) => {
+                                const branchKey = branchExpansionKey(result.id, entry.branch);
+                                const isBranchExpanded = expandedBranchKey === branchKey;
+                                const dailyBreakdown = dailyBreakdownForBranch(
+                                  entry.branch,
+                                  salesByBranch,
+                                  fromDate,
+                                  toDate
+                                );
+
+                                return (
+                                  <div key={entry.branch} className="overflow-hidden rounded-xl bg-white">
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        setExpandedBranchKey((current) =>
+                                          current === branchKey ? null : branchKey
+                                        )
+                                      }
+                                      aria-expanded={isBranchExpanded}
+                                      className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm hover:bg-gray-50"
+                                    >
+                                      <div className="min-w-0">
+                                        <div className="font-semibold text-black">
+                                          {t('trusteeCommission.branchLabel', { branch: entry.branch })}
+                                        </div>
+                                        <div className="text-xs text-gray-500">
+                                          {t('trusteeCommission.branchSalesCount', {
+                                            count: entry.salesCount,
+                                          })}
+                                        </div>
+                                      </div>
+                                      <div className="flex shrink-0 items-center gap-2">
+                                        <div className="whitespace-nowrap font-bold text-magenta-600">
+                                          {formatCurrency(entry.revenue)}
+                                        </div>
+                                        <span
+                                          className={`text-xs text-gray-500 transition-transform ${
+                                            isBranchExpanded ? 'rotate-180' : ''
+                                          }`}
+                                          aria-hidden="true"
+                                        >
+                                          ▾
+                                        </span>
+                                      </div>
+                                    </button>
+
+                                    {isBranchExpanded && (
+                                      <div className="border-t border-gray-100 px-3 pb-3 pt-2">
+                                        <div className="mb-2 text-xs font-medium text-gray-600">
+                                          {t('trusteeCommission.dailyBreakdownTitle')}
+                                        </div>
+                                        <div className="max-h-64 space-y-1 overflow-y-auto">
+                                          {dailyBreakdown.map((day) => (
+                                            <div
+                                              key={day.date}
+                                              className={`flex items-center justify-between gap-3 rounded-lg px-2 py-1.5 text-xs ${
+                                                day.hadSale ? 'bg-green-50' : 'bg-gray-50'
+                                              }`}
+                                            >
+                                              <div className="flex min-w-0 items-center gap-2">
+                                                <span
+                                                  className={`inline-block h-2 w-2 shrink-0 rounded-full ${
+                                                    day.hadSale ? 'bg-green-600' : 'bg-gray-300'
+                                                  }`}
+                                                  aria-hidden="true"
+                                                />
+                                                <span className="font-medium text-black">
+                                                  {new Date(`${day.date}T12:00:00`).toLocaleDateString()}
+                                                </span>
+                                              </div>
+                                              <div className="shrink-0 text-right">
+                                                {day.hadSale ? (
+                                                  <>
+                                                    <div className="font-semibold text-green-700">
+                                                      {t('trusteeCommission.dayHadSale')}
+                                                    </div>
+                                                    <div className="text-gray-600">
+                                                      {t('trusteeCommission.daySalesSummary', {
+                                                        count: day.salesCount,
+                                                        amount: formatCurrency(day.revenue),
+                                                      })}
+                                                    </div>
+                                                  </>
+                                                ) : (
+                                                  <span className="text-gray-500">
+                                                    {t('trusteeCommission.dayNoSale')}
+                                                  </span>
+                                                )}
+                                              </div>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    )}
                                   </div>
-                                  <div className="whitespace-nowrap font-bold text-magenta-600">
-                                    {formatCurrency(entry.revenue)}
-                                  </div>
-                                </div>
-                              ))}
+                                );
+                              })}
                             </div>
                           </div>
                         )}
