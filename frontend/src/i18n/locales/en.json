@@ -143,6 +143,7 @@
   "nav": {
     "dashboard": "Dashboard",
     "itemPricing": "Item Pricing",
+    "commission": "Commission",
     "salesCommission": "Sales Commission",
     "commissionPayouts": "Commission Payouts",
     "inventory": "Inventory",
