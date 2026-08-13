@@ -7,7 +7,8 @@ cd "$ROOT"
 DEPLOY_DIR="$ROOT/deploy"
 mkdir -p "$DEPLOY_DIR"
 
-echo "==> Textile ERP 24/7 installer"
+echo "==> Textile ERP production installer"
+echo "    Permanent domain: ${ERP_PUBLIC_URL:-https://erp.kutalimzhda.com}"
 
 if [[ ! -f .env ]]; then
   echo "==> Creating .env from .env.example"
@@ -24,8 +25,7 @@ fi
 if [[ -z "${CLOUDFLARE_TUNNEL_TOKEN:-}" ]]; then
   echo ""
   echo "ERROR: CLOUDFLARE_TUNNEL_TOKEN is not set in .env"
-  echo "Add your Cloudflare named tunnel token (Cloudflare Zero Trust -> Tunnels -> your tunnel -> Install connector)."
-  echo "Production uses https://erp.kutalimzhda.com — do not rely on trycloudflare.com URLs."
+  echo "Cloudflare Zero Trust → Networks → Tunnels → your tunnel → Install connector → copy token."
   exit 1
 fi
 
@@ -43,20 +43,16 @@ npm run build:frontend
 chmod +x \
   "$ROOT/scripts/start-production.sh" \
   "$ROOT/scripts/run-named-tunnel.sh" \
-  "$ROOT/scripts/tunnel-watchdog.sh" \
-  "$ROOT/scripts/tunnel-keepalive.sh" \
-  "$ROOT/scripts/ensure-tunnel-healthy.sh" \
-  "$ROOT/scripts/ensure-tunnel-loop.sh" \
   "$ROOT/scripts/ensure-24-7.sh" \
   "$ROOT/scripts/pm2-boot.sh" \
   "$ROOT/scripts/setup-boot-persistence.sh" \
   "$ROOT/scripts/setup-custom-domain.sh"
 
 if [[ -n "${CLOUDFLARE_API_TOKEN:-}" && -n "${CLOUDFLARE_ZONE_ID:-}" ]]; then
-  echo "==> Ensuring DNS for ${ERP_HOSTNAME:-erp.kutalimzhda.com}"
-  bash "$ROOT/scripts/setup-custom-domain.sh" || echo "WARN: DNS setup failed; tunnel may still work if DNS is already correct."
+  echo "==> Ensuring permanent DNS for ${ERP_HOSTNAME:-erp.kutalimzhda.com}"
+  bash "$ROOT/scripts/setup-custom-domain.sh" || echo "WARN: DNS setup failed; fix in Cloudflare dashboard if needed."
 else
-  echo "WARN: Skipping DNS setup (set CLOUDFLARE_API_TOKEN and CLOUDFLARE_ZONE_ID in .env to auto-fix DNS)."
+  echo "WARN: Set CLOUDFLARE_API_TOKEN + CLOUDFLARE_ZONE_ID in .env to auto-configure DNS."
 fi
 
 use_systemd=false
@@ -65,41 +61,29 @@ if [[ -n "${DBUS_SESSION_BUS_ADDRESS:-}" ]] && systemctl --user show-environment
 fi
 
 if [[ "$use_systemd" == "true" ]]; then
-  echo "==> Installing systemd user services"
+  echo "==> Installing systemd user services (app + tunnel)"
   SERVICE_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
   mkdir -p "$SERVICE_DIR"
   sed "s|@WORKSPACE@|$ROOT|g" "$ROOT/deploy/textile-erp.service.template" > "$SERVICE_DIR/textile-erp.service"
   sed "s|@WORKSPACE@|$ROOT|g" "$ROOT/deploy/textile-tunnel.service.template" > "$SERVICE_DIR/textile-tunnel.service"
-  sed "s|@WORKSPACE@|$ROOT|g" "$ROOT/deploy/textile-watchdog.service.template" > "$SERVICE_DIR/textile-watchdog.service"
-  sed "s|@WORKSPACE@|$ROOT|g" "$ROOT/deploy/textile-tunnel-keepalive.service.template" > "$SERVICE_DIR/textile-tunnel-keepalive.service"
-  sed "s|@WORKSPACE@|$ROOT|g" "$ROOT/deploy/textile-tunnel-recovery.service.template" > "$SERVICE_DIR/textile-tunnel-recovery.service"
   loginctl enable-linger "$(id -un)" 2>/dev/null || true
   systemctl --user daemon-reload
-  systemctl --user enable \
-    textile-erp.service \
-    textile-tunnel.service \
-    textile-watchdog.service \
-    textile-tunnel-keepalive.service \
-    textile-tunnel-recovery.service
-  systemctl --user restart \
-    textile-erp.service \
-    textile-tunnel.service \
-    textile-watchdog.service \
-    textile-tunnel-keepalive.service \
-    textile-tunnel-recovery.service
+  systemctl --user enable textile-erp.service textile-tunnel.service
+  systemctl --user restart textile-erp.service textile-tunnel.service
   bash "$ROOT/scripts/setup-boot-persistence.sh"
   MANAGER="systemd"
 else
-  echo "==> Installing PM2 process manager (auto-restart 24/7)"
-  bash "$ROOT/scripts/ensure-24-7.sh" --full-reload
+  echo "==> Starting PM2 (app + Cloudflare named tunnel)"
+  bash "$ROOT/scripts/ensure-24-7.sh"
   bash "$ROOT/scripts/setup-boot-persistence.sh"
+  MANAGER="pm2"
 fi
 
 PUBLIC_URL="${ERP_PUBLIC_URL:-https://erp.kutalimzhda.com}"
 printf '%s\n' "$PUBLIC_URL" > "$DEPLOY_DIR/public-url.txt"
 
 echo ""
-echo "24/7 services started ($MANAGER)."
+echo "Production started ($MANAGER)."
 echo ""
 echo "  Permanent URL:  $PUBLIC_URL"
 echo "  Local health:   curl http://localhost:3000/health"
@@ -109,13 +93,9 @@ if [[ "$MANAGER" == "pm2" ]]; then
   echo "  Status:         npx pm2 status"
   echo "  App logs:       npx pm2 logs textile-erp"
   echo "  Tunnel logs:    npx pm2 logs textile-tunnel"
-  echo "  Watchdog logs:  tail -f deploy/watchdog.log"
-  echo "  Recovery logs:  tail -f deploy/tunnel-recovery.log"
-  echo "  Restart all:    npx pm2 restart all"
 else
-  echo "  App status:     systemctl --user status textile-erp"
-  echo "  Tunnel status:  systemctl --user status textile-tunnel"
-  echo "  Watchdog:       systemctl --user status textile-watchdog"
+  echo "  App:            systemctl --user status textile-erp"
+  echo "  Tunnel:         systemctl --user status textile-tunnel"
 fi
 echo ""
-echo "The quick trycloudflare.com URL is NOT used in production (it causes 530 errors when it expires)."
+echo "Your domain stays fixed in Cloudflare DNS. The tunnel connector runs 24/7 — no polling scripts."

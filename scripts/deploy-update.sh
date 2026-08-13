@@ -27,7 +27,7 @@ npm run build:frontend
 echo "==> Verifying server boots (prevents 1033 from broken deploys)"
 bash "$ROOT/scripts/verify-server-boot.sh"
 
-echo "==> Ensuring 24/7 stack (app + tunnel + watchdog + keepalive)"
+echo "==> Ensuring production stack (app + named tunnel)"
 bash "$ROOT/scripts/ensure-24-7.sh" --reload-app
 
 echo ""
