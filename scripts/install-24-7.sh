@@ -37,6 +37,9 @@ npm run build:frontend
 chmod +x \
   "$ROOT/scripts/start-production.sh" \
   "$ROOT/scripts/install-cloudflared-service.sh" \
+  "$ROOT/scripts/rebuild-cloudflare-tunnel.sh" \
+  "$ROOT/scripts/diagnose-tunnel-network.sh" \
+  "$ROOT/scripts/restart-cloudflared-service.sh" \
   "$ROOT/scripts/restart-cloudflared-service.sh" \
   "$ROOT/scripts/ensure-24-7.sh" \
   "$ROOT/scripts/ensure-tunnel-up.sh" \

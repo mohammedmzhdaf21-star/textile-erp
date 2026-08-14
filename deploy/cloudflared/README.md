@@ -1,33 +1,50 @@
 # Cloudflare Tunnel Setup
 
-Your tunnel is **Dashboard-managed** (recommended):
+**Type:** Dashboard-managed (token from Zero Trust, not `config.yml`)
 
-- Token in `.env` as `CLOUDFLARE_TUNNEL_TOKEN`
-- DNS: CNAME `erp` → `{tunnel-id}.cfargotunnel.com`
-- Configured in Cloudflare Zero Trust → Networks → Tunnels
-
-## Install (Linux — official method)
+## Quick commands
 
 ```bash
-npm run install:tunnel
+npm run diagnose:tunnel   # Check ports 443/7844 + public URL
+npm run install:tunnel    # Install official system service
+npm run rebuild:tunnel    # Wipe + fresh install (use after 1033)
 ```
 
-This runs `cloudflared service install` (systemd or SysV) so the tunnel:
+## If Error 1033 persists — create a NEW tunnel
 
-- Starts on server boot
-- Restarts automatically if it crashes
-- Uses the token from `/etc/cloudflared/token`
+1. **Zero Trust** → Networks → Tunnels → **Delete** old tunnel
+2. **Create a tunnel** → copy the new `--token ...` value
+3. **Public Hostname** tab → Add:
+   - Hostname: `erp.kutalimzhda.com`
+   - Service: `http://localhost:3000`
+4. Update `.env`:
+   ```
+   CLOUDFLARE_TUNNEL_TOKEN="<paste new token>"
+   ```
+5. On the server:
+   ```bash
+   npm run rebuild:tunnel
+   ```
 
-## Verify
+## Network requirements (outbound)
 
-1. Cloudflare Zero Trust → Networks → Tunnels → status **HEALTHY**
-2. `curl https://erp.kutalimzhda.com/health` → `{"status":"ok",...}`
+| Port | Purpose |
+|------|---------|
+| **443** | HTTPS to Cloudflare |
+| **7844** | Tunnel protocol |
 
-## App vs tunnel
+Run `npm run diagnose:tunnel` to verify.
+
+## Architecture
 
 | Component | Manager |
 |-----------|---------|
-| ERP app (port 3000) | PM2 (`textile-erp`) |
-| Cloudflare tunnel | System service (`cloudflared`) |
+| ERP app (port 3000) | PM2 `textile-erp` |
+| Cloudflare tunnel | System service `cloudflared` |
 
-Do **not** run a second tunnel via PM2 — duplicate connectors cause Error 1033.
+**Do not** run a second tunnel via PM2 — duplicate connectors cause 1033.
+
+## Verify
+
+- Dashboard: Zero Trust → Tunnels → **HEALTHY** (green)
+- Terminal: `curl https://erp.kutalimzhda.com/health`

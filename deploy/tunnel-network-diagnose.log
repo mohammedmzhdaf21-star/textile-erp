@@ -1,0 +1,9 @@
+2026-08-14T00:03:09Z === Cloudflare tunnel network diagnostics ===
+2026-08-14T00:03:09Z PASS: HTTPS outbound (443 to 1.1.1.1)
+2026-08-14T00:03:09Z PASS: HTTPS outbound (443 to api.cloudflare.com)
+2026-08-14T00:03:09Z PASS: TCP 7844 to region1.v2.argotunnel.com
+2026-08-14T00:03:09Z PASS: TCP 7844 to Cloudflare edge
+2026-08-14T00:03:09Z PASS: Local app health
+2026-08-14T00:03:09Z PASS: Public domain https://erp.kutalimzhda.com/health
+2026-08-14T00:03:09Z PASS: cloudflared system service running
+2026-08-14T00:03:09Z === Results: 7 passed, 0 failed ===
