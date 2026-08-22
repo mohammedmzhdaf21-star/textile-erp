@@ -103,6 +103,52 @@ export const resolveMeteredInstanceKey = (input: {
   return nextInstance === 1 ? '' : `${meteredInstanceKeyPrefix(input.type)}-${nextInstance}`;
 };
 
+export const resolvePieceInstanceKey = (input: {
+  items: Array<{
+    branchId: string;
+    code: number;
+    subCode?: number | string;
+    costPrice?: number | string;
+    colorId: string;
+    type: string;
+    pieceLength?: number | string | null;
+    packageKey?: string | null;
+    isPiecePackage?: boolean;
+  }>;
+  branchId: string;
+  familyCode: number;
+  subCode: number;
+  colorId: string;
+  pieceLength: number;
+}) => {
+  const matching = input.items.filter((item) => {
+    if (item.type !== 'PIECE' || item.isPiecePackage) return false;
+    const itemPrice = Number(item.subCode ?? item.costPrice ?? 0);
+    return (
+      item.branchId === input.branchId &&
+      Number(item.code) === Number(input.familyCode) &&
+      Math.abs(itemPrice - input.subCode) < 0.001 &&
+      item.colorId === input.colorId &&
+      Math.abs(Number(item.pieceLength ?? 0) - input.pieceLength) < 0.001
+    );
+  });
+
+  let maxInstance = 0;
+  for (const item of matching) {
+    const key = item.packageKey ?? '';
+    if (!key) {
+      maxInstance = Math.max(maxInstance, 1);
+      continue;
+    }
+    const match = key.match(/^piece-(\d+)$/);
+    if (match) {
+      maxInstance = Math.max(maxInstance, Number(match[1]));
+    }
+  }
+
+  return `piece-${maxInstance + 1}`;
+};
+
 const buildPackageIdSuffix = (components: PackageComponent[]) => {
   const initials = components
     .map((component) =>

@@ -562,8 +562,10 @@ const SalesView: React.FC = () => {
         newPieceId: result.pieceItemId,
       });
 
-      const refreshed = await api.get(`/inventory/${encodeURIComponent(rollCutSource.id)}`);
-      setRollCutSource(refreshed.data as RollInventoryItem);
+      const refreshed = result.roll
+        ? ({ ...rollCutSource, ...result.roll } as RollInventoryItem)
+        : ((await api.get(`/inventory/${encodeURIComponent(rollCutSource.id)}`)).data as RollInventoryItem);
+      setRollCutSource(refreshed);
       setCutSaleSummary({
         pieceItemId: result.pieceItemId,
         qrCodeDataUrl: result.qrCodeDataUrl,
@@ -657,6 +659,10 @@ const SalesView: React.FC = () => {
       }
 
       const channelLabel = paymentChannel === 'FIB' ? 'FIB' : 'Cash';
+      const idempotencyKey =
+        typeof crypto !== 'undefined' && 'randomUUID' in crypto
+          ? crypto.randomUUID()
+          : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
       const payload = {
         branchId: resolveBranchId(branch),
         employeeId: currentUser.id,
@@ -667,6 +673,7 @@ const SalesView: React.FC = () => {
         paymentMethod: paymentStatus === 'FULL' ? paymentChannel : 'CREDIT',
         amountPaid:
           paymentStatus === 'PARTIAL' ? parsePriceInput(amountPaid) : undefined,
+        idempotencyKey,
         notes: `Source branch: ${branch}. ${
           paymentStatus === 'PARTIAL'
             ? `Paid ${formatCurrency(parsePriceInput(amountPaid))} now via ${channelLabel}, due ${formatCurrency(dueAmount)}.`

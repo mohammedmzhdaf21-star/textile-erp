@@ -1,10 +1,5 @@
 import QRCode from 'qrcode';
 import api from './api';
-import {
-  buildInventoryItemId,
-  resolvePieceInstanceKey,
-} from './inventoryCodes';
-import { isBelowRemnantThreshold } from './inventoryRules';
 
 export type RollInventoryItem = {
   id: string;
@@ -37,6 +32,7 @@ export type CutRollResult = {
   cutMeters: number;
   pieceLength?: number;
   subCode: number;
+  roll?: RollInventoryItem;
 };
 
 const toNumber = (value: unknown) => {
@@ -53,58 +49,6 @@ export const createQrDataUrl = (itemId: string) =>
     margin: 1,
     width: 220,
   });
-
-export const findExistingPieceForRollCut = async (
-  rollSource: RollInventoryItem,
-  pieceLength: number
-) => {
-  const response = await api.get('/inventory', {
-    params: {
-      branchId: rollSource.branchId,
-      colorId: rollSource.colorId,
-      type: 'PIECE',
-      code: rollSource.code,
-      pageSize: 200,
-    },
-  });
-  const items = (response.data?.items ?? response.data ?? []) as RollInventoryItem[];
-
-  const matches = items.filter((item) => {
-    if (item.isPiecePackage || (item.packageKey ?? '').startsWith('piece-')) return false;
-    if (Math.abs(toNumber(item.pieceLength) - pieceLength) >= 0.001) return false;
-    return true;
-  });
-
-  return matches.find((item) => item.quantity === 0) ?? matches[0] ?? null;
-};
-
-const listPiecesForFamily = async (rollSource: RollInventoryItem) => {
-  const response = await api.get('/inventory', {
-    params: {
-      branchId: rollSource.branchId,
-      colorId: rollSource.colorId,
-      type: 'PIECE',
-      code: rollSource.code,
-      pageSize: 200,
-    },
-  });
-  return (response.data?.items ?? response.data ?? []) as RollInventoryItem[];
-};
-
-const patchSourceStock = async (item: RollInventoryItem, amount: number) => {
-  if (item.type === 'PIECE') {
-    await api.patch(`/inventory/${encodeURIComponent(item.id)}`, {
-      version: item.version,
-      quantity: item.quantity - Math.floor(amount),
-    });
-    return;
-  }
-
-  await api.patch(`/inventory/${encodeURIComponent(item.id)}`, {
-    version: item.version,
-    meters: Number((toNumber(item.meters) - amount).toFixed(2)),
-  });
-};
 
 export const cutRollToPieceStock = async (
   rollSource: RollInventoryItem,
@@ -123,91 +67,44 @@ export const cutRollToPieceStock = async (
     throw new Error('CUT_EXCEEDS_ROLL');
   }
 
-  const createAsRemnant = isBelowRemnantThreshold(cutMeters);
-  const existingPiece =
-    createAsRemnant || uniquePiece
-      ? null
-      : await findExistingPieceForRollCut(rollSource, cutMeters);
+  const response = await api.post('/inventory/roll-cut', {
+    rollId: rollSource.id,
+    version: rollSource.version,
+    cutMeters,
+    uniquePiece,
+  });
 
-  let pieceItemId: string;
-  let qrCodeDataUrl: string;
-  let addedToExisting = false;
-  let pieceInstanceKey: string | undefined;
-
-  if (existingPiece) {
-    pieceItemId = existingPiece.id;
-    qrCodeDataUrl = existingPiece.qrCodeDataUrl || (await createQrDataUrl(existingPiece.id));
-    addedToExisting = true;
-  } else {
-    if (uniquePiece && !createAsRemnant) {
-      const familyPieces = await listPiecesForFamily(rollSource);
-      pieceInstanceKey = resolvePieceInstanceKey({
-        items: familyPieces.map((item) => ({
-          ...item,
-          costPrice: item.costPrice ?? undefined,
-        })),
-        branchId: rollSource.branchId,
-        familyCode: rollSource.code,
-        subCode: itemSubCode(rollSource),
-        colorId: rollSource.colorId,
-        pieceLength: cutMeters,
-      });
-    }
-
-    pieceItemId = buildInventoryItemId({
-      branchId: rollSource.branchId,
-      familyCode: rollSource.code,
-      subCode: itemSubCode(rollSource),
-      colorName: rollSource.color?.name || rollSource.colorId,
-      colorId: rollSource.colorId,
-      type: createAsRemnant ? 'REMANENT' : 'PIECE',
-      pieceLength: createAsRemnant ? undefined : cutMeters,
-      instanceKey: pieceInstanceKey,
-    });
-    qrCodeDataUrl = await createQrDataUrl(pieceItemId);
-  }
-
-  await patchSourceStock(rollSource, cutMeters);
-
-  if (addedToExisting && existingPiece) {
-    const patchBody: Record<string, unknown> = {
-      version: existingPiece.version,
-      quantity: existingPiece.quantity + 1,
+  const data = response.data as CutRollResult & {
+    pieceItemId: string;
+    qrCodeDataUrl?: string | null;
+    roll?: {
+      id: string;
+      version: number;
+      meters: number;
+      type: string;
     };
-    if (!existingPiece.qrCodeDataUrl) {
-      patchBody.qrCodeValue = pieceItemId;
-      patchBody.qrCodeDataUrl = qrCodeDataUrl;
-    }
-    await api.patch(`/inventory/${encodeURIComponent(pieceItemId)}`, patchBody);
-  } else {
-    await api.post('/inventory', {
-      id: pieceItemId,
-      branchId: rollSource.branchId,
-      code: rollSource.code,
-      subCode: itemSubCode(rollSource),
-      colorId: rollSource.colorId,
-      type: createAsRemnant ? 'REMANENT' : 'PIECE',
-      meters: createAsRemnant ? cutMeters : undefined,
-      pieceLength: createAsRemnant ? undefined : cutMeters,
-      quantity: 1,
-      costPrice: rollSource.costPrice ? toNumber(rollSource.costPrice) : undefined,
-      qrCodeValue: pieceItemId,
-      qrCodeDataUrl,
-      pictureName: rollSource.id,
-      pictureDataUrl: rollSource.qrCodeDataUrl || undefined,
-      sourceItemId: rollSource.id,
-      conversionType: createAsRemnant ? 'ROLL_TO_REMANENT' : 'ROLL_TO_PIECE',
-      packageKey: pieceInstanceKey,
-    });
-  }
+  };
+
+  const pieceItemId = data.pieceItemId;
+  const finalQrCodeDataUrl =
+    data.qrCodeDataUrl || (await createQrDataUrl(pieceItemId));
 
   return {
     pieceItemId,
-    qrCodeDataUrl,
-    addedToExisting,
-    createAsRemnant,
-    cutMeters,
-    pieceLength: createAsRemnant ? undefined : cutMeters,
-    subCode: itemSubCode(rollSource),
+    qrCodeDataUrl: finalQrCodeDataUrl,
+    addedToExisting: data.addedToExisting,
+    createAsRemnant: data.createAsRemnant,
+    cutMeters: data.cutMeters,
+    pieceLength: data.pieceLength,
+    subCode: data.subCode,
+    roll: data.roll
+      ? {
+          ...rollSource,
+          id: data.roll.id,
+          version: data.roll.version,
+          meters: data.roll.meters,
+          type: data.roll.type as RollInventoryItem['type'],
+        }
+      : undefined,
   };
 };

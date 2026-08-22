@@ -33,6 +33,7 @@ router.post('/', async (req: Request, res: Response) => {
       paymentMethod,
       notes,
       amountPaid,
+      idempotencyKey,
     } = req.body;
 
     if (!branchId || !employeeId || !customerName || !customerPhone) {
@@ -75,6 +76,10 @@ router.post('/', async (req: Request, res: Response) => {
         amountPaid:
           amountPaid !== undefined && amountPaid !== null
             ? parseFloat(String(amountPaid))
+            : undefined,
+        idempotencyKey:
+          typeof idempotencyKey === 'string' && idempotencyKey.trim()
+            ? idempotencyKey.trim()
             : undefined,
       },
       req.user?.userId,

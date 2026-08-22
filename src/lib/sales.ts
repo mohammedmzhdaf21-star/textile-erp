@@ -62,6 +62,7 @@ export interface CreateSaleInput {
   paymentMethod?: 'CASH' | 'FIB' | 'CARD' | 'TRANSFER' | 'CREDIT';
   notes?: string;
   amountPaid?: number;
+  idempotencyKey?: string;
 }
 
 export interface ListSalesParams {
@@ -239,9 +240,21 @@ export async function createSale(
     throw new Error('Total price cannot be negative after discounts');
   }
 
-  // Run everything in a transaction
-  const sale = await prisma.$transaction(async (tx) => {
-    // Verify branch exists
+  const idempotencyKey = input.idempotencyKey?.trim() || undefined;
+
+  try {
+    const sale = await prisma.$transaction(async (tx) => {
+      if (idempotencyKey) {
+        const existingSale = await tx.sale.findUnique({
+          where: { idempotencyKey },
+          include: saleIncludeWithPayments,
+        });
+        if (existingSale) {
+          return existingSale;
+        }
+      }
+
+      // Verify branch exists
     const branch = await tx.branch.findUnique({ where: { id: input.branchId } });
     if (!branch) throw new Error('Branch not found');
 
@@ -274,6 +287,7 @@ export async function createSale(
         discount: new Prisma.Decimal(totalDiscount.toFixed(2)),
         paymentMethod: input.paymentMethod || 'CASH',
         notes: input.notes || null,
+        idempotencyKey: idempotencyKey || null,
       },
     });
 
@@ -393,9 +407,25 @@ export async function createSale(
       where: { id: createdSale.id },
       include: saleIncludeWithPayments,
     });
-  });
+    });
 
-  return sale ? enrichSaleWithBalance(sale) : sale;
+    return sale ? enrichSaleWithBalance(sale) : sale;
+  } catch (error) {
+    if (
+      idempotencyKey &&
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === 'P2002'
+    ) {
+      const existingSale = await prisma.sale.findUnique({
+        where: { idempotencyKey },
+        include: saleIncludeWithPayments,
+      });
+      if (existingSale) {
+        return enrichSaleWithBalance(existingSale);
+      }
+    }
+    throw error;
+  }
 }
 
 // ============================================================
