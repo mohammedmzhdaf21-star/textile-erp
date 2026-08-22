@@ -10,6 +10,10 @@ import {
   deleteInventoryItem,
   getInventoryStats,
 } from '../lib/inventory';
+import {
+  requireInventoryCreateAccess,
+  requireInventoryUpdateAccess,
+} from '../lib/inventoryAccess';
 import { authenticate, requireRole } from '../middleware/authenticate';
 import { parseOptionalInt, parsePage, parsePageSize } from '../lib/routeHelpers';
 
@@ -198,7 +202,7 @@ router.get('/:id', async (req: Request, res: Response) => {
 // ============================================================
 router.post(
   '/',
-  requireRole('ADMIN', 'MANAGER'),
+  requireInventoryCreateAccess,
   async (req: Request, res: Response) => {
     try {
       const {
@@ -304,7 +308,7 @@ router.post(
 // ============================================================
 router.patch(
   '/:id',
-  requireRole('ADMIN', 'MANAGER'),
+  requireInventoryUpdateAccess,
   async (req: Request, res: Response) => {
     try {
       const id = singleParam(req.params.id);
