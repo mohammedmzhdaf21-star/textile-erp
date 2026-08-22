@@ -310,9 +310,26 @@ const ExchangePage: React.FC = () => {
       return alert(t('exchange.enterValidAmountPrice'));
     }
 
+    if (newScan.sourceBranch !== selectedBranch) {
+      return alert(
+        t('exchange.branchMismatch', {
+          saleBranch: selectedBranch,
+          itemBranch: newScan.sourceBranch,
+        })
+      );
+    }
+
     try {
       const item = detectedNewItem?.id === inventoryItemId ? detectedNewItem : await detectNewItem();
       if (!item) return;
+      if (item.branchId && item.branchId !== BRANCH_ID_BY_CODE[selectedBranch]) {
+        return alert(
+          t('exchange.branchMismatch', {
+            saleBranch: selectedBranch,
+            itemBranch: newScan.sourceBranch,
+          })
+        );
+      }
       const soldAsUnit = soldAsUnitForItem(item);
       const quantity = soldAsUnit === 'PIECE' ? Math.floor(newScan.amount) : newScan.amount;
 
@@ -411,6 +428,18 @@ const ExchangePage: React.FC = () => {
     }
     if (netDue > 0 && paymentStatus === 'PARTIAL' && parsePriceInput(amountPaid) >= netDue) {
       return alert(t('exchange.useFullyPaid'));
+    }
+
+    const branchMismatch = newSaleLines.find(
+      (line) => line.type === 'inventory' && line.sourceBranch !== selectedBranch
+    );
+    if (branchMismatch) {
+      return alert(
+        t('exchange.branchMismatch', {
+          saleBranch: selectedBranch,
+          itemBranch: branchMismatch.type === 'inventory' ? branchMismatch.sourceBranch : selectedBranch,
+        })
+      );
     }
 
     setIsProcessing(true);

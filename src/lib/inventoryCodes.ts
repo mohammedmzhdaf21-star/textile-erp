@@ -103,6 +103,35 @@ export const resolveMeteredInstanceKey = (input: {
   return nextInstance === 1 ? '' : `${meteredInstanceKeyPrefix(input.type)}-${nextInstance}`;
 };
 
+export const formatPieceInstanceIdSuffix = (instanceKey?: string) => {
+  if (!instanceKey) return '';
+  const match = instanceKey.match(/^piece-(\d+)$/);
+  if (!match) return '';
+  return `-P${match[1].padStart(2, '0')}`;
+};
+
+export const parsePieceInstanceNumberFromItem = (item: {
+  id?: string;
+  packageKey?: string | null;
+}) => {
+  let max = 0;
+  const key = item.packageKey ?? '';
+  const keyMatch = key.match(/^piece-(\d+)$/);
+  if (keyMatch) {
+    max = Math.max(max, Number(keyMatch[1]));
+  }
+  if (item.id) {
+    const idMatch = item.id.match(/-P(\d{2})$/);
+    if (idMatch) {
+      max = Math.max(max, Number(idMatch[1]));
+    } else if (!keyMatch && item.id.includes('P') && !/-P\d{2}$/.test(item.id)) {
+      // Legacy unique pieces stored at the base length id (no -Pxx suffix).
+      max = Math.max(max, 1);
+    }
+  }
+  return max;
+};
+
 export const resolvePieceInstanceKey = (input: {
   items: Array<{
     branchId: string;
@@ -114,6 +143,7 @@ export const resolvePieceInstanceKey = (input: {
     pieceLength?: number | string | null;
     packageKey?: string | null;
     isPiecePackage?: boolean;
+    id?: string;
   }>;
   branchId: string;
   familyCode: number;
@@ -135,15 +165,7 @@ export const resolvePieceInstanceKey = (input: {
 
   let maxInstance = 0;
   for (const item of matching) {
-    const key = item.packageKey ?? '';
-    if (!key) {
-      maxInstance = Math.max(maxInstance, 1);
-      continue;
-    }
-    const match = key.match(/^piece-(\d+)$/);
-    if (match) {
-      maxInstance = Math.max(maxInstance, Number(match[1]));
-    }
+    maxInstance = Math.max(maxInstance, parsePieceInstanceNumberFromItem(item));
   }
 
   return `piece-${maxInstance + 1}`;
@@ -185,11 +207,13 @@ export const buildInventoryItemId = (input: {
     input.type === 'PIECE' && input.pieceLength && input.pieceLength > 0
       ? padLengthCode(input.pieceLength)
       : '';
+  const pieceInstanceSuffix =
+    input.type === 'PIECE' ? formatPieceInstanceIdSuffix(input.instanceKey) : '';
   const instanceSuffix =
     (input.type === 'ROLL' || input.type === 'REMANENT') && input.instanceKey
       ? `-${formatMeteredInstanceIdSuffix(input.instanceKey, input.type)}`
       : '';
-  return `${input.branchId}-${padFamilyCode(input.familyCode)}-${padSubCode(input.subCode)}-${colorCode}${typeLetter}${lengthSuffix}${instanceSuffix}`;
+  return `${input.branchId}-${padFamilyCode(input.familyCode)}-${padSubCode(input.subCode)}-${colorCode}${typeLetter}${lengthSuffix}${pieceInstanceSuffix}${instanceSuffix}`;
 };
 
 export const resolveInventoryItemId = (input: {

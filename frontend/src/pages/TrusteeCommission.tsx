@@ -1,8 +1,15 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import api from '../lib/api';
 import { useTranslation } from 'react-i18next';
 import { formatCurrency } from '../lib/currency';
 import { BRANCH_ID_BY_CODE } from '../lib/inventoryCodes';
+import {
+  createTrusteeRule,
+  deleteTrusteeRule,
+  fetchTrusteeRules,
+  updateTrusteeRule,
+  type TrusteeRule,
+} from '../lib/trusteesApi';
 
 type BranchCode = 'A' | 'B' | 'C' | 'E' | 'F';
 
@@ -29,22 +36,11 @@ type Sale = {
   items?: SaleItem[];
 };
 
-type TrusteeRule = {
-  id: string;
-  trusteeName: string;
-  contactInfo: string;
+type TrusteeRuleView = TrusteeRule & {
   branches: BranchCode[];
-  percentage: number;
-  isActive: boolean;
-  updatedAt: string;
 };
 
-type LegacyTrusteeRule = Omit<TrusteeRule, 'branches'> & {
-  branch?: BranchCode;
-  branches?: BranchCode[];
-};
-
-type TrusteeResult = TrusteeRule & {
+type TrusteeResult = TrusteeRuleView & {
   salesCount: number;
   branchRevenue: number;
   commissionAmount: number;
@@ -65,7 +61,9 @@ type DailyBreakdown = {
 };
 
 const branches: BranchCode[] = ['A', 'B', 'C', 'E', 'F'];
-const TRUSTEE_RULES_KEY = 'textile-erp-trustee-commission-rules';
+
+const toBranchCodes = (values: string[]) =>
+  branches.filter((branch) => values.includes(branch));
 
 const toMoneyNumber = (value: unknown) => {
   const parsed = Number(value ?? 0);
@@ -180,48 +178,13 @@ const dayExpansionKey = (resultId: string, branch: BranchCode, date: string) =>
 const isBranchCode = (value: unknown): value is BranchCode =>
   typeof value === 'string' && branches.includes(value as BranchCode);
 
-const normalizeRule = (rule: LegacyTrusteeRule): TrusteeRule => {
-  const rawBranches = rule.branches?.length
-    ? rule.branches
-    : rule.branch
-    ? [rule.branch]
-    : ['A'];
-  const assignedBranches = rawBranches.filter(isBranchCode);
+const normalizeRule = (rule: TrusteeRule): TrusteeRuleView => {
+  const assignedBranches = toBranchCodes(rule.branches.filter(isBranchCode));
 
   return {
-    id: rule.id,
-    trusteeName: rule.trusteeName,
-    contactInfo: rule.contactInfo,
-    branches: uniqueBranches(assignedBranches.length ? assignedBranches : ['A']),
-    percentage: rule.percentage,
-    isActive: true,
-    updatedAt: rule.updatedAt,
+    ...rule,
+    branches: assignedBranches.length ? assignedBranches : ['A'],
   };
-};
-
-const readTrusteeRules = (): TrusteeRule[] => {
-  try {
-    const raw = localStorage.getItem(TRUSTEE_RULES_KEY);
-    if (raw) return (JSON.parse(raw) as LegacyTrusteeRule[]).map(normalizeRule);
-  } catch {
-    // Ignore invalid local settings and reset to defaults below.
-  }
-
-  return [
-    {
-      id: 'default-main-investor-ace',
-      trusteeName: 'Mr. Investor',
-      contactInfo: 'investor@example.com',
-      branches: ['A', 'C', 'E'],
-      percentage: 15,
-      isActive: true,
-      updatedAt: new Date().toISOString(),
-    },
-  ];
-};
-
-const writeTrusteeRules = (rules: TrusteeRule[]) => {
-  localStorage.setItem(TRUSTEE_RULES_KEY, JSON.stringify(rules));
 };
 
 const TrusteeCommission: React.FC = () => {
@@ -232,11 +195,12 @@ const TrusteeCommission: React.FC = () => {
 
   const [fromDate, setFromDate] = useState(formatDate(weekAgo));
   const [toDate, setToDate] = useState(formatDate(today));
-  const [rules, setRules] = useState<TrusteeRule[]>(() => readTrusteeRules());
-  const [trusteeName, setTrusteeName] = useState('Mr. Investor');
-  const [contactInfo, setContactInfo] = useState('investor@example.com');
-  const [assignedBranches, setAssignedBranches] = useState<BranchCode[]>(['A', 'C', 'E']);
-  const [percentage, setPercentage] = useState('15');
+  const [rules, setRules] = useState<TrusteeRuleView[]>([]);
+  const [rulesLoading, setRulesLoading] = useState(true);
+  const [trusteeName, setTrusteeName] = useState('');
+  const [contactInfo, setContactInfo] = useState('');
+  const [assignedBranches, setAssignedBranches] = useState<BranchCode[]>([]);
+  const [percentage, setPercentage] = useState('0');
   const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
   const [salesByBranch, setSalesByBranch] = useState<Record<BranchCode, Sale[]>>({
     A: [],
@@ -253,6 +217,32 @@ const TrusteeCommission: React.FC = () => {
   const [expandedDayKey, setExpandedDayKey] = useState<string | null>(null);
 
   const activeRules = rules.filter((rule) => rule.isActive);
+
+  useEffect(() => {
+    let active = true;
+    setRulesLoading(true);
+    void fetchTrusteeRules(true)
+      .then((loaded) => {
+        if (!active) return;
+        setRules(loaded.map(normalizeRule));
+      })
+      .catch((err: any) => {
+        if (!active) return;
+        const status = err?.response?.status;
+        const body = err?.response?.data;
+        setError(
+          `Request failed${status ? ` (status ${status})` : ''}: ${
+            body?.error ?? body?.message ?? err?.message ?? t('trusteeCommission.failedToLoad')
+          }`
+        );
+      })
+      .finally(() => {
+        if (active) setRulesLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [t]);
 
   const revenueForBranches = (ruleBranches: BranchCode[]) =>
     ruleBranches.reduce(
@@ -284,9 +274,8 @@ const TrusteeCommission: React.FC = () => {
     0
   );
 
-  const saveRules = (nextRules: TrusteeRule[]) => {
+  const saveRules = (nextRules: TrusteeRuleView[]) => {
     setRules(nextRules);
-    writeTrusteeRules(nextRules);
   };
 
   const toggleAssignedBranch = (branch: BranchCode) => {
@@ -305,7 +294,7 @@ const TrusteeCommission: React.FC = () => {
     setEditingRuleId(null);
   };
 
-  const startEditRule = (rule: TrusteeRule) => {
+  const startEditRule = (rule: TrusteeRuleView) => {
     setTrusteeName(rule.trusteeName);
     setContactInfo(rule.contactInfo);
     setAssignedBranches([...rule.branches]);
@@ -314,18 +303,24 @@ const TrusteeCommission: React.FC = () => {
     setMessage(null);
   };
 
-  const deleteRule = (rule: TrusteeRule) => {
+  const deleteRule = async (rule: TrusteeRuleView) => {
     const confirmed = window.confirm(t('trusteeCommission.confirmDeleteRule', { name: rule.trusteeName }));
     if (!confirmed) return;
 
-    saveRules(rules.filter((existing) => existing.id !== rule.id));
-    if (editingRuleId === rule.id) {
-      resetRuleForm();
+    try {
+      await deleteTrusteeRule(rule.id);
+      saveRules(rules.filter((existing) => existing.id !== rule.id));
+      if (editingRuleId === rule.id) {
+        resetRuleForm();
+      }
+      setMessage(t('trusteeCommission.deletedRule', { name: rule.trusteeName }));
+    } catch (err: any) {
+      const body = err?.response?.data;
+      setError(body?.error ?? body?.message ?? err?.message ?? t('trusteeCommission.failedToLoad'));
     }
-    setMessage(t('trusteeCommission.deletedRule', { name: rule.trusteeName }));
   };
 
-  const saveRule = () => {
+  const saveRule = async () => {
     const parsedPercentage = Number(percentage);
     if (!trusteeName.trim()) return alert(t('trusteeCommission.enterTrusteeName'));
     if (assignedBranches.length === 0) return alert(t('trusteeCommission.chooseBranch'));
@@ -334,31 +329,36 @@ const TrusteeCommission: React.FC = () => {
     }
 
     const normalizedBranches = uniqueBranches(assignedBranches);
-    const rule: TrusteeRule = {
-      id:
-        editingRuleId ??
-        `${trusteeName.trim().toLowerCase().replace(/\s+/g, '-')}-${normalizedBranches.join('')}-${Date.now()}`,
+    const input = {
       trusteeName: trusteeName.trim(),
       contactInfo: contactInfo.trim(),
       branches: normalizedBranches,
       percentage: parsedPercentage,
       isActive: true,
-      updatedAt: new Date().toISOString(),
     };
 
-    const nextRules = editingRuleId
-      ? rules.map((existing) => (existing.id === editingRuleId ? rule : existing))
-      : [...rules.filter((existing) => existing.id !== rule.id), rule];
+    try {
+      const saved = editingRuleId
+        ? normalizeRule(await updateTrusteeRule(editingRuleId, input))
+        : normalizeRule(await createTrusteeRule(input));
 
-    saveRules(nextRules);
-    setMessage(
-      t('trusteeCommission.savedRule', {
-        rate: rule.percentage,
-        name: rule.trusteeName,
-        branches: rule.branches.join(', '),
-      })
-    );
-    resetRuleForm();
+      const nextRules = editingRuleId
+        ? rules.map((existing) => (existing.id === editingRuleId ? saved : existing))
+        : [...rules.filter((existing) => existing.id !== saved.id), saved];
+
+      saveRules(nextRules);
+      setMessage(
+        t('trusteeCommission.savedRule', {
+          rate: saved.percentage,
+          name: saved.trusteeName,
+          branches: saved.branches.join(', '),
+        })
+      );
+      resetRuleForm();
+    } catch (err: any) {
+      const body = err?.response?.data;
+      setError(body?.error ?? body?.message ?? err?.message ?? t('trusteeCommission.failedToLoad'));
+    }
   };
 
   const loadCommissions = async () => {
@@ -503,7 +503,11 @@ const TrusteeCommission: React.FC = () => {
           {message && <p className="mt-3 text-sm text-magenta-600">{message}</p>}
 
           <div className="mt-5 space-y-3">
-            {rules.length === 0 ? (
+            {rulesLoading ? (
+              <div className="rounded-2xl bg-gray-50 p-4 text-sm text-gray-600">
+                {t('trusteeCommission.loading')}
+              </div>
+            ) : rules.length === 0 ? (
               <div className="rounded-2xl bg-gray-50 p-4 text-sm text-gray-600">
                 {t('trusteeCommission.noRules')}
               </div>
