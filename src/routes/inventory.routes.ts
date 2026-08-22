@@ -10,6 +10,7 @@ import {
   deleteInventoryItem,
   getInventoryStats,
 } from '../lib/inventory';
+import { cutRollToPiece } from '../lib/rollCut';
 import {
   requireInventoryCreateAccess,
   requireInventoryUpdateAccess,
@@ -302,6 +303,72 @@ router.post(
     }
   }
 );
+
+// ============================================================
+// POST /api/inventory/roll-cut (atomic roll → piece/remnant)
+// ============================================================
+router.post('/roll-cut', async (req: Request, res: Response) => {
+  try {
+    const { rollId, version, cutMeters, uniquePiece, qrCodeDataUrl } = req.body;
+
+    if (!rollId || typeof rollId !== 'string') {
+      return res.status(400).json({ error: 'rollId is required' });
+    }
+    if (version === undefined || version === null) {
+      return res.status(400).json({ error: 'version is required' });
+    }
+    if (cutMeters === undefined || cutMeters === null) {
+      return res.status(400).json({ error: 'cutMeters is required' });
+    }
+
+    const parsedVersion = parseInt(String(version), 10);
+    const parsedCutMeters = parseFloat(String(cutMeters));
+    if (!Number.isFinite(parsedVersion) || parsedVersion < 0) {
+      return res.status(400).json({ error: 'version must be a non-negative integer' });
+    }
+    if (!Number.isFinite(parsedCutMeters) || parsedCutMeters <= 0) {
+      return res.status(400).json({ error: 'cutMeters must be a positive number' });
+    }
+
+    const result = await cutRollToPiece(
+      {
+        rollId: rollId.trim(),
+        version: parsedVersion,
+        cutMeters: parsedCutMeters,
+        uniquePiece: Boolean(uniquePiece),
+        qrCodeDataUrl:
+          typeof qrCodeDataUrl === 'string' && qrCodeDataUrl.trim()
+            ? qrCodeDataUrl.trim()
+            : undefined,
+      },
+      req.user?.userId,
+      req.user?.email
+    );
+
+    return res.status(201).json({
+      message: 'Roll cut completed',
+      ...result,
+    });
+  } catch (error: any) {
+    const msg = error.message || 'Failed to cut roll';
+    if (msg.includes('not found')) {
+      return res.status(404).json({ error: msg });
+    }
+    if (
+      msg.includes('modified by another') ||
+      msg.includes('exceeds') ||
+      msg.includes('positive') ||
+      msg.includes('archived') ||
+      msg.includes('Only rolls')
+    ) {
+      return res.status(msg.includes('modified by another') ? 409 : 400).json({ error: msg });
+    }
+    if (msg.includes('already exists')) {
+      return res.status(409).json({ error: msg });
+    }
+    return res.status(500).json({ error: msg });
+  }
+});
 
 // ============================================================
 // PATCH /api/inventory/:id (ADMIN, MANAGER only)

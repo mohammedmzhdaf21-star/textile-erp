@@ -204,6 +204,7 @@ model Sale {
   discount      Decimal       @default(0) @db.Decimal(12, 2)
   paymentMethod PaymentMethod @default(CASH)
   notes         String?       @db.Text
+  idempotencyKey String?      @unique @db.VarChar(64)
 
   isVoided      Boolean       @default(false)
   voidedById    String?
