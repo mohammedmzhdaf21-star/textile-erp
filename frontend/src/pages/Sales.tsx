@@ -665,6 +665,8 @@ const SalesView: React.FC = () => {
         items: resolvedItems,
         discount: 0,
         paymentMethod: paymentStatus === 'FULL' ? paymentChannel : 'CREDIT',
+        amountPaid:
+          paymentStatus === 'PARTIAL' ? parsePriceInput(amountPaid) : undefined,
         notes: `Source branch: ${branch}. ${
           paymentStatus === 'PARTIAL'
             ? `Paid ${formatCurrency(parsePriceInput(amountPaid))} now via ${channelLabel}, due ${formatCurrency(dueAmount)}.`

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import api from '../lib/api';
 import { useTranslation } from 'react-i18next';
 import { formatCurrency, formatSignedCurrency } from '../lib/currency';
-import { isImmediatePaymentMethod, resolveSalePaymentLabel } from '../lib/paymentMethod';
+import { resolveSalePaymentLabel } from '../lib/paymentMethod';
 import { resolveBranchId } from '../lib/inventoryCodes';
 
 type Sale = {
@@ -27,13 +27,17 @@ type Sale = {
   }>;
 };
 
-type OwedPayment = {
-  saleId: string;
-  branchId: string;
-  amount: number;
+type SalePaymentRecord = {
+  id: string;
+  amount: number | string;
   paidAt: string;
-  customerName?: string;
-  employeeName?: string;
+  sale: {
+    id: string;
+    customerName: string;
+    createdAt: string;
+    employee?: { name: string };
+  };
+  recordedBy?: { name: string };
 };
 
 type EmployeeGroup = {
@@ -44,7 +48,6 @@ type EmployeeGroup = {
 
 const branches = ['A', 'B', 'C', 'E', 'F'] as const;
 type BranchId = typeof branches[number];
-const OWED_PAYMENTS_KEY = 'textile-erp-owed-payments';
 
 const formatDate = (date: Date) => {
   const year = date.getFullYear();
@@ -68,32 +71,27 @@ const saleCashAmount = (sale: Sale) =>
     ? sale.paidAmount
     : toMoneyNumber(sale.total ?? sale.totalPrice ?? 0);
 
-const readOwedPayments = (): OwedPayment[] => {
-  try {
-    const raw = localStorage.getItem(OWED_PAYMENTS_KEY);
-    return raw ? (JSON.parse(raw) as OwedPayment[]) : [];
-  } catch {
-    return [];
-  }
-};
-
 const paymentDateKey = (dateString: string) => formatDate(new Date(dateString));
 
-const owedPaymentRowsForDate = (branchId: string, dateKey: string) =>
-  readOwedPayments()
-    .filter((payment) => payment.branchId === branchId && paymentDateKey(payment.paidAt) === dateKey)
-    .map((payment) => ({
-      id: `owed-payment-${payment.saleId}-${payment.paidAt}`,
-      sourceSaleId: payment.saleId,
-      total: payment.amount,
-      totalPrice: payment.amount,
-      createdAt: payment.paidAt,
-      employeeName: payment.employeeName || 'Owed Payment',
-      customerName: payment.customerName,
-      notes: `OWED PAYMENT | Paid ${payment.amount.toFixed(2)} now, due 0.00.`,
-      paymentStatus: 'PAID' as const,
-      paidAmount: payment.amount,
-    }));
+const owedPaymentRowsFromApi = (payments: SalePaymentRecord[], dateKey: string): Sale[] =>
+  payments
+    .filter((payment) => paymentDateKey(payment.paidAt) === dateKey)
+    .filter((payment) => paymentDateKey(payment.sale.createdAt) !== dateKey)
+    .map((payment) => {
+      const amount = toMoneyNumber(payment.amount);
+      return {
+        id: `owed-payment-${payment.sale.id}-${payment.paidAt}`,
+        sourceSaleId: payment.sale.id,
+        total: amount,
+        totalPrice: amount,
+        createdAt: payment.paidAt,
+        employeeName: payment.recordedBy?.name || payment.sale.employee?.name || 'Owed Payment',
+        customerName: payment.sale.customerName,
+        notes: `OWED PAYMENT | Paid ${amount.toFixed(2)} now, due 0.00.`,
+        paymentStatus: 'PAID' as const,
+        paidAmount: amount,
+      };
+    });
 
 const DailySales: React.FC = () => {
   const { t } = useTranslation();
@@ -117,63 +115,45 @@ const toDate = formatDate(tomorrow);
     setLoading(true);
     setError(null);
 
-    api
-      .get('/sales', {
+    Promise.all([
+      api.get('/sales', {
         params: {
-          // use mapped backend id
           branchId: resolveBranchId(selectedBranch as string),
           fromDate,
           toDate,
         },
-      })
-      .then((response) => {
-        const data = response.data;
+      }),
+      api.get('/sales/payments', {
+        params: {
+          branchId: resolveBranchId(selectedBranch as string),
+          fromDate,
+          toDate,
+        },
+      }),
+    ])
+      .then(([salesResponse, paymentsResponse]) => {
+        const data = salesResponse.data;
         let raw: Sale[] = [];
         if (Array.isArray(data)) raw = data as Sale[];
         else if (data && Array.isArray(data.sales)) raw = data.sales as Sale[];
         else if (data && Array.isArray(data.items)) raw = data.items as Sale[];
         else raw = [];
 
-        const branchId = resolveBranchId(selectedBranch as string);
-        const salesWithLocalOwedPayments = [
-          ...raw,
-          ...owedPaymentRowsForDate(branchId, fromDate),
+        const payments = (paymentsResponse.data?.payments ?? []) as SalePaymentRecord[];
+        const salesWithOwedPayments = [
+          ...raw.map((sale) => ({
+            ...sale,
+            total: toMoneyNumber(sale.total ?? sale.totalPrice ?? 0),
+            paidAmount: toMoneyNumber(sale.paidAmount),
+          })),
+          ...owedPaymentRowsFromApi(payments, fromDate),
         ];
 
-        // Enrich each sale with computed paidAmount and paymentStatus based on notes/paymentMethod
-        const enriched = salesWithLocalOwedPayments.map((s) => {
-          const notes = (s as any).notes || '';
-          // Try to parse "Paid X" from notes (e.g. "Paid 50 now, due 150")
-          let paidAmount = 0;
-          const refundMatch = /Refunded\s+([0-9]+(?:\.[0-9]+)?)/i.exec(notes);
-          const paidMatch = /Paid\s+(-?[0-9]+(?:\.[0-9]+)?)/i.exec(notes);
-          if (refundMatch) {
-            paidAmount = -toMoneyNumber(refundMatch[1]);
-          } else if (paidMatch) {
-            paidAmount = toMoneyNumber(paidMatch[1]);
-          } else if ((s as any).paymentStatus === 'PAID' || isImmediatePaymentMethod((s as any).paymentMethod)) {
-            // fully paid
-            paidAmount = toMoneyNumber((s as any).total ?? (s as any).totalPrice ?? 0);
-          } else {
-            paidAmount = 0;
-          }
-
-          const totalPrice = toMoneyNumber((s as any).total ?? (s as any).totalPrice ?? 0);
-          const paymentStatus: 'PAID' | 'PARTIAL' | 'UNPAID' =
-            paidAmount > 0 && paidAmount < totalPrice
-              ? 'PARTIAL'
-              : paidAmount >= totalPrice
-              ? 'PAID'
-              : 'UNPAID';
-
-          return { ...s, paidAmount, paymentStatus } as Sale & { paidAmount: number; paymentStatus: string };
-        });
-
-        enriched.sort(
+        salesWithOwedPayments.sort(
           (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
         );
 
-        setSales(enriched as any);
+        setSales(salesWithOwedPayments);
       })
       .catch((err) => {
         const status = err?.response?.status;

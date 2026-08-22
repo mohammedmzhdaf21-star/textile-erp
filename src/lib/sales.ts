@@ -16,6 +16,7 @@ import {
   recordCommissionForSaleItem,
   removePendingCommissionsForSale,
 } from './commissions';
+import { computeSaleBalance, enrichSaleWithBalance, parseInitialPaidFromNotes } from './saleBalance';
 
 // ============================================================
 // SALES BUSINESS LOGIC
@@ -68,6 +69,7 @@ export interface CreateSaleInput {
   discount?: number;
   paymentMethod?: 'CASH' | 'FIB' | 'CARD' | 'TRANSFER' | 'CREDIT';
   notes?: string;
+  amountPaid?: number;
 }
 
 export interface ListSalesParams {
@@ -86,6 +88,82 @@ export interface RefundInput {
   amount: number;
   method: 'CASH' | 'CARD' | 'STORE_CREDIT';
   reason: string;
+}
+
+export interface RecordSalePaymentInput {
+  amount: number;
+  notes?: string;
+  paidAt?: Date;
+}
+
+const saleIncludeWithPayments = {
+  items: { include: { color: true, inventoryItem: true } },
+  branch: true,
+  employee: { select: { id: true, name: true, email: true } },
+  customer: true,
+  payments: {
+    include: { recordedBy: { select: { id: true, name: true, email: true } } },
+    orderBy: { paidAt: 'asc' as const },
+  },
+  refunds: true,
+};
+
+async function ensureLegacyPaymentsBackfilled(
+  tx: Prisma.TransactionClient,
+  sale: {
+    id: string;
+    employeeId: string;
+    notes: string | null;
+    createdAt: Date;
+  }
+) {
+  const existingCount = await tx.salePayment.count({ where: { saleId: sale.id } });
+  if (existingCount > 0) return;
+
+  const initialPaid = parseInitialPaidFromNotes(sale.notes);
+  if (!initialPaid || initialPaid <= 0) return;
+
+  await tx.salePayment.create({
+    data: {
+      saleId: sale.id,
+      amount: new Prisma.Decimal(initialPaid.toFixed(2)),
+      recordedById: sale.employeeId,
+      notes: 'Backfilled from sale notes',
+      paidAt: sale.createdAt,
+    },
+  });
+}
+
+async function createInitialSalePaymentIfNeeded(
+  tx: Prisma.TransactionClient,
+  saleId: string,
+  recordedById: string,
+  totalPrice: number,
+  paymentMethod: string,
+  amountPaid?: number,
+  notes?: string | null,
+  paidAt?: Date
+) {
+  let initialPaid = amountPaid;
+  if (initialPaid === undefined) {
+    const fromNotes = parseInitialPaidFromNotes(notes);
+    if (fromNotes !== null && fromNotes > 0) {
+      initialPaid = fromNotes;
+    }
+  }
+
+  if (initialPaid === undefined || initialPaid <= 0) return;
+  if (paymentMethod !== 'CREDIT' && initialPaid >= totalPrice) return;
+
+  await tx.salePayment.create({
+    data: {
+      saleId,
+      amount: new Prisma.Decimal(initialPaid.toFixed(2)),
+      recordedById,
+      notes: 'Initial payment at sale',
+      paidAt: paidAt ?? new Date(),
+    },
+  });
 }
 
 export interface ExchangeReturnedInventoryInput {
@@ -375,6 +453,17 @@ export async function createSale(
       });
     }
 
+    await createInitialSalePaymentIfNeeded(
+      tx,
+      createdSale.id,
+      input.employeeId,
+      totalPrice,
+      input.paymentMethod || 'CASH',
+      input.amountPaid,
+      input.notes || null,
+      createdSale.createdAt
+    );
+
     // Audit log
     await tx.auditLog.create({
       data: {
@@ -395,16 +484,11 @@ export async function createSale(
     // Fetch the complete sale with items
     return await tx.sale.findUnique({
       where: { id: createdSale.id },
-      include: {
-        items: { include: { color: true, inventoryItem: true } },
-        branch: true,
-        employee: { select: { id: true, name: true, email: true } },
-        customer: true,
-      },
+      include: saleIncludeWithPayments,
     });
   });
 
-  return sale;
+  return sale ? enrichSaleWithBalance(sale) : sale;
 }
 
 // ============================================================
@@ -657,6 +741,19 @@ export async function processExchange(
       });
     }
 
+    if (saleTotal > 0) {
+      await createInitialSalePaymentIfNeeded(
+        tx,
+        createdSale.id,
+        input.employeeId,
+        saleTotal,
+        saleTotal > 0 && input.paymentStatus === 'PARTIAL' ? 'CREDIT' : 'CASH',
+        amountPaid,
+        exchangeNotes,
+        createdSale.createdAt
+      );
+    }
+
     await tx.auditLog.create({
       data: {
         entityType: 'Exchange',
@@ -680,17 +777,12 @@ export async function processExchange(
 
     return await tx.sale.findUnique({
       where: { id: createdSale.id },
-      include: {
-        items: { include: { color: true, inventoryItem: true } },
-        branch: true,
-        employee: { select: { id: true, name: true, email: true } },
-        customer: true,
-      },
+      include: saleIncludeWithPayments,
     });
   });
 
   return {
-    sale,
+    sale: sale ? enrichSaleWithBalance(sale) : sale,
     summary: {
       replacementTotal,
       returnedTotal,
@@ -797,13 +889,15 @@ export async function listSales(params: ListSalesParams) {
         branch: { select: { id: true, name: true } },
         employee: { select: { id: true, name: true } },
         customer: { select: { id: true, name: true, phone: true } },
+        payments: { select: { amount: true } },
+        refunds: { select: { amount: true } },
       },
     }),
     prisma.sale.count({ where }),
   ]);
 
   return {
-    sales,
+    sales: sales.map((sale) => enrichSaleWithBalance(sale)),
     pagination: {
       page,
       pageSize: take,
@@ -824,13 +918,17 @@ export async function getSale(id: string) {
       branch: true,
       employee: { select: { id: true, name: true, email: true } },
       customer: true,
+      payments: {
+        include: { recordedBy: { select: { id: true, name: true, email: true } } },
+        orderBy: { paidAt: 'asc' },
+      },
       refunds: { include: { processedBy: { select: { name: true, email: true } } } },
       voidedBy: { select: { id: true, name: true, email: true } },
     },
   });
 
   if (!sale) throw new Error('Sale not found');
-  return sale;
+  return enrichSaleWithBalance(sale);
 }
 
 // ============================================================
@@ -1004,6 +1102,137 @@ export async function processRefund(
 
     return refund;
   });
+}
+
+// ============================================================
+// RECORD SALE PAYMENT (owed / partial balance)
+// ============================================================
+export async function recordSalePayment(
+  saleId: string,
+  input: RecordSalePaymentInput,
+  recordedById: string,
+  performedByEmail?: string
+) {
+  if (input.amount <= 0) throw new Error('Payment amount must be positive');
+
+  return await prisma.$transaction(async (tx) => {
+    const sale = await tx.sale.findUnique({
+      where: { id: saleId },
+      include: {
+        payments: { select: { amount: true } },
+        refunds: { select: { amount: true } },
+      },
+    });
+
+    if (!sale) throw new Error('Sale not found');
+    if (sale.isVoided) throw new Error('Cannot record payment on a voided sale');
+
+    await ensureLegacyPaymentsBackfilled(tx, sale);
+
+    const balance = computeSaleBalance({
+      ...sale,
+      payments: await tx.salePayment.findMany({
+        where: { saleId },
+        select: { amount: true },
+      }),
+    });
+
+    if (input.amount > balance.outstandingAmount + 0.001) {
+      throw new Error(
+        `Payment exceeds outstanding balance. Outstanding: ${balance.outstandingAmount.toFixed(2)}`
+      );
+    }
+
+    const payment = await tx.salePayment.create({
+      data: {
+        saleId,
+        amount: new Prisma.Decimal(input.amount.toFixed(2)),
+        recordedById,
+        notes: input.notes?.trim() || null,
+        paidAt: input.paidAt ?? new Date(),
+      },
+      include: {
+        recordedBy: { select: { id: true, name: true, email: true } },
+      },
+    });
+
+    await tx.auditLog.create({
+      data: {
+        entityType: 'Sale',
+        entityId: saleId,
+        action: 'UPDATE',
+        performedById: recordedById,
+        performedByEmail: performedByEmail || null,
+        branchId: sale.branchId,
+        changes: {
+          paymentAmount: input.amount,
+          paymentId: payment.id,
+        } as Prisma.InputJsonValue,
+      },
+    });
+
+    const updatedSale = await tx.sale.findUnique({
+      where: { id: saleId },
+      include: {
+        items: { include: { color: true } },
+        branch: { select: { id: true, name: true } },
+        employee: { select: { id: true, name: true } },
+        customer: { select: { id: true, name: true, phone: true } },
+        payments: {
+          include: { recordedBy: { select: { id: true, name: true, email: true } } },
+          orderBy: { paidAt: 'asc' },
+        },
+        refunds: { select: { amount: true } },
+      },
+    });
+
+    if (!updatedSale) throw new Error('Sale not found');
+
+    return {
+      payment,
+      sale: enrichSaleWithBalance(updatedSale),
+    };
+  });
+}
+
+// ============================================================
+// LIST SALE PAYMENTS (for daily cash totals)
+// ============================================================
+export async function listSalePayments(params: {
+  branchId: string;
+  fromDate?: Date;
+  toDate?: Date;
+}) {
+  const { branchId, fromDate, toDate } = params;
+
+  const paidAtFilter: Prisma.DateTimeFilter | undefined =
+    fromDate || toDate
+      ? {
+          ...(fromDate ? { gte: fromDate } : {}),
+          ...(toDate ? { lte: toDate } : {}),
+        }
+      : undefined;
+
+  const payments = await prisma.salePayment.findMany({
+    where: {
+      sale: { branchId, isVoided: false },
+      ...(paidAtFilter ? { paidAt: paidAtFilter } : {}),
+    },
+    include: {
+      sale: {
+        select: {
+          id: true,
+          customerName: true,
+          createdAt: true,
+          employee: { select: { id: true, name: true } },
+        },
+      },
+      recordedBy: { select: { id: true, name: true } },
+    },
+    orderBy: { paidAt: 'desc' },
+  });
+
+  return payments;
 }
 
 // ============================================================
