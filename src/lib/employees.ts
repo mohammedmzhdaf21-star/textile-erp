@@ -334,6 +334,7 @@ export async function getEmployeeAuthProfile(employeeId: string) {
       id: employeeId,
       deletedAt: null,
       isActive: true,
+      approvalStatus: 'APPROVED',
     },
     include: employeeInclude,
   });
@@ -425,12 +426,18 @@ export async function rejectEmployee(
     where: { id },
     data: {
       approvalStatus: 'REJECTED',
+      isActive: false,
       approvedAt: new Date(),
       approvedById: input.performedById,
       registrationNote: input.reason?.trim()
         ? `${existing.registrationNote ?? ''}\nRejection: ${input.reason.trim()}`.trim()
         : existing.registrationNote,
     },
+  });
+
+  await prisma.session.updateMany({
+    where: { employeeId: id, revokedAt: null },
+    data: { revokedAt: new Date() },
   });
 
   await markRegistrationNotificationsRead(id);
