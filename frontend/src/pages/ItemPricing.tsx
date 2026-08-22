@@ -1,13 +1,14 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import QrScanInput from "../components/QrScanInput";
 import api from "../lib/api";
 import {
-  getItemMinimumPrice,
-  readItemMinimumPrices,
-  saveItemMinimumPrice,
-} from "../lib/dashboardSettings";
-import { pushItemMinimumPriceToServer } from "../lib/commissionSettingsApi";
+  fetchCommissionSettingsFromServer,
+  getCachedItemMinimumPrice,
+  getCachedItemMinimumPrices,
+  pushItemMinimumPriceToServer,
+} from "../lib/commissionSettingsApi";
+import type { ItemMinimumPrice } from "../lib/dashboardSettings";
 import { formatCurrency, parsePriceInput, toPriceInput } from "../lib/currency";
 
 export default function ItemPricing() {
@@ -16,7 +17,13 @@ export default function ItemPricing() {
   const [priceUnit, setPriceUnit] = useState<"METER" | "PIECE">("METER");
   const [minimumPrice, setMinimumPrice] = useState("0");
   const [priceMessage, setPriceMessage] = useState<string | null>(null);
-  const itemPrices = readItemMinimumPrices();
+  const [itemPrices, setItemPrices] = useState<Record<string, ItemMinimumPrice>>({});
+
+  useEffect(() => {
+    void fetchCommissionSettingsFromServer()
+      .then(({ prices }) => setItemPrices(prices))
+      .catch(() => setItemPrices(getCachedItemMinimumPrices()));
+  }, []);
 
   const unitLabel = (unit: "METER" | "PIECE") =>
     unit === "PIECE" ? t("common.pieceSingular") : t("common.meterSingular");
@@ -33,7 +40,7 @@ export default function ItemPricing() {
       const response = await api.get(`/inventory/${encodeURIComponent(itemId)}`);
       const item = response.data as { type?: string };
       const unit = item.type === "PIECE" ? "PIECE" : "METER";
-      const existing = getItemMinimumPrice(itemId);
+      const existing = getCachedItemMinimumPrice(itemId);
       setPriceUnit(unit);
       if (existing) setMinimumPrice(toPriceInput(existing.minimumPrice));
       setPriceMessage(
@@ -71,9 +78,9 @@ export default function ItemPricing() {
       updatedAt: new Date().toISOString(),
     };
 
-    saveItemMinimumPrice(price);
     try {
       await pushItemMinimumPriceToServer(price);
+      setItemPrices(getCachedItemMinimumPrices());
       setPriceMessage(
         t("dashboard.savedMinimumPrice", {
           itemId,
@@ -81,14 +88,17 @@ export default function ItemPricing() {
           unit: unitLabel(priceUnit),
         })
       );
-    } catch {
-      setPriceMessage(
-        t("dashboard.savedMinimumPriceLocalOnly", {
-          itemId,
-          price: formatCurrency(storedPrice),
-          unit: unitLabel(priceUnit),
-        })
-      );
+    } catch (error: unknown) {
+      const body =
+        error &&
+        typeof error === "object" &&
+        "response" in error &&
+        error.response &&
+        typeof error.response === "object" &&
+        "data" in error.response
+          ? (error.response.data as { error?: string; message?: string })
+          : undefined;
+      setPriceMessage(body?.error ?? body?.message ?? t("dashboard.failedToCalculate"));
     }
   }
 
@@ -130,7 +140,7 @@ export default function ItemPricing() {
             <input
               type="number"
               min="0"
-              step="0.01"
+              step="1"
               value={minimumPrice}
               onChange={(event) => setMinimumPrice(event.target.value)}
               className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
@@ -145,7 +155,7 @@ export default function ItemPricing() {
 
         <div className="mt-6 max-h-96 space-y-2 overflow-auto text-sm">
           <h2 className="text-sm font-semibold text-gray-800">{t("itemPricing.savedPrices")}</h2>
-          {Object.values(itemPrices).length === 0 ? (
+          {Object.keys(itemPrices).length === 0 ? (
             <p className="text-gray-500">{t("itemPricing.noSavedPrices")}</p>
           ) : (
             Object.values(itemPrices).map((price) => (

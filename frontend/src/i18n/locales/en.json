@@ -642,6 +642,8 @@
     "enterPartialPayment": "Enter a partial payment amount",
     "mustBeLoggedIn": "You must be logged in to create a sale",
     "failedToCreate": "Failed to create sale",
+    "branchMismatch": "Sale branch {{saleBranch}} does not match item branch {{itemBranch}}. Change the sale branch or scan from the correct branch.",
+    "inventoryBranchMismatch": "This item belongs to branch {{itemBranch}}, not sale branch {{saleBranch}}.",
     "saleCreated": "Sale created for branch {{branch}}. Total {{total}}",
     "saleCreatedWithTasks": "Sale created for branch {{branch}}. Total {{total}}. {{count}} cutting task(s) added for employees.",
     "descriptionInventory": "{{type}} from Branch {{branch}}",
@@ -984,6 +986,7 @@
     "exchangeProcessed": "Exchange processed. Replacement {{replacement}}, returned {{returned}}, net {{net}}.",
     "newSaleId": " New sale ID: {{id}}",
     "exchangeFailed": "Exchange failed{{status}}: {{message}}",
+    "branchMismatch": "Exchange branch {{saleBranch}} does not match replacement item branch {{itemBranch}}.",
     "defaultCustomer": "Exchange Customer",
     "defaultPlainCloth": "Plain Cloth",
     "itemDetected": "{{type}} detected: enter {{unit}}."

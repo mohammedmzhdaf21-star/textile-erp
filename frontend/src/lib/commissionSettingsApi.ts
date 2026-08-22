@@ -1,46 +1,65 @@
 import api from './api';
-import {
-  readCommissionSettings,
-  readItemMinimumPrices,
-  saveCommissionSettings,
-  saveItemMinimumPrice,
-  type CommissionSettings,
-  type ItemMinimumPrice,
-} from './dashboardSettings';
 import { normalizeStoredAmount } from './currency';
+import type { CommissionSettings, ItemMinimumPrice } from './dashboardSettings';
 
 type SettingsResponse = {
   rate: CommissionSettings;
   prices: Record<string, ItemMinimumPrice>;
 };
 
-export async function syncCommissionSettingsFromServer() {
-  try {
-    const response = await api.get<SettingsResponse>('/commissions/settings');
-    const { rate, prices } = response.data;
+const defaultRate = (): CommissionSettings => ({
+  ratePercent: 5,
+  baseAmountPerUnit: 0,
+});
 
-    if (rate && Number.isFinite(rate.ratePercent)) {
-      saveCommissionSettings({
-        ratePercent: rate.ratePercent,
-        baseAmountPerUnit: normalizeStoredAmount(
-          Number.isFinite(rate.baseAmountPerUnit) ? rate.baseAmountPerUnit : 0
-        ),
-      });
-    }
+let cachedRate: CommissionSettings = defaultRate();
+let cachedPrices: Record<string, ItemMinimumPrice> = {};
 
-    if (prices && typeof prices === 'object') {
-      for (const price of Object.values(prices)) {
-        if (price?.itemId) {
-          saveItemMinimumPrice({
-            ...price,
-            minimumPrice: normalizeStoredAmount(price.minimumPrice),
-          });
-        }
-      }
-    }
-  } catch {
-    // Keep local settings when offline or unauthorized
+export function getCachedCommissionSettings(): CommissionSettings {
+  return cachedRate;
+}
+
+export function getCachedItemMinimumPrices(): Record<string, ItemMinimumPrice> {
+  return cachedPrices;
+}
+
+export function getCachedItemMinimumPrice(itemId: string): ItemMinimumPrice | undefined {
+  const entry = cachedPrices[itemId.trim()];
+  if (!entry) return undefined;
+  return {
+    ...entry,
+    minimumPrice: normalizeStoredAmount(entry.minimumPrice),
+  };
+}
+
+export async function fetchCommissionSettingsFromServer() {
+  const response = await api.get<SettingsResponse>('/commissions/settings');
+  const { rate, prices } = response.data;
+
+  if (rate && Number.isFinite(rate.ratePercent)) {
+    cachedRate = {
+      ratePercent: rate.ratePercent,
+      baseAmountPerUnit: normalizeStoredAmount(
+        Number.isFinite(rate.baseAmountPerUnit) ? rate.baseAmountPerUnit : 0
+      ),
+    };
   }
+
+  if (prices && typeof prices === 'object') {
+    cachedPrices = Object.fromEntries(
+      Object.entries(prices).map(([key, price]) => [
+        key,
+        price?.itemId
+          ? {
+              ...price,
+              minimumPrice: normalizeStoredAmount(price.minimumPrice),
+            }
+          : price,
+      ])
+    );
+  }
+
+  return { rate: cachedRate, prices: cachedPrices };
 }
 
 export async function pushCommissionRateToServer(
@@ -51,42 +70,24 @@ export async function pushCommissionRateToServer(
     ratePercent,
     ...(baseAmountPerUnit !== undefined ? { baseAmountPerUnit } : {}),
   });
+  cachedRate = {
+    ratePercent,
+    baseAmountPerUnit: normalizeStoredAmount(baseAmountPerUnit ?? cachedRate.baseAmountPerUnit),
+  };
 }
 
 export async function pushItemMinimumPriceToServer(price: ItemMinimumPrice) {
   await api.put('/commissions/settings/prices', { price });
-}
-
-export async function pushLocalPricesToServer() {
-  const prices = readItemMinimumPrices();
-  if (Object.keys(prices).length === 0) return;
-  await api.put('/commissions/settings/prices', { prices });
-}
-
-export async function pushLocalRateToServer() {
-  const rate = readCommissionSettings();
-  await api.put('/commissions/settings/rate', {
-    ratePercent: rate.ratePercent,
-    baseAmountPerUnit: rate.baseAmountPerUnit,
-  });
+  cachedPrices[price.itemId] = {
+    ...price,
+    minimumPrice: normalizeStoredAmount(price.minimumPrice),
+  };
 }
 
 export async function ensureCommissionSettingsSynced() {
-  const localPrices = readItemMinimumPrices();
-  const hasLocal = Object.keys(localPrices).length > 0;
-
   try {
-    const response = await api.get<SettingsResponse>('/commissions/settings');
-    const serverPrices = response.data.prices || {};
-    const hasServer = Object.keys(serverPrices).length > 0;
-
-    if (hasServer) {
-      await syncCommissionSettingsFromServer();
-    } else if (hasLocal) {
-      await pushLocalPricesToServer();
-      await pushLocalRateToServer();
-    }
+    await fetchCommissionSettingsFromServer();
   } catch {
-    // Ignore sync errors on startup
+    // Keep in-memory defaults when offline or unauthorized
   }
 }

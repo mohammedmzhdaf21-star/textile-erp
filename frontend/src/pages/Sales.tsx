@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import QrScanInput from '../components/QrScanInput';
 import api from '../lib/api';
 import { getCurrentUser } from '../lib/auth';
-import { getItemMinimumPrice } from '../lib/dashboardSettings';
+import { getCachedItemMinimumPrice } from '../lib/commissionSettingsApi';
 import { formatCurrency, parsePriceInput, toPriceInputNumber } from '../lib/currency';
 import { fetchPlainClothTypes, type PlainClothType } from '../lib/plainClothApi';
 import type { SalePaymentChannel } from '../lib/paymentMethod';
@@ -293,7 +293,7 @@ const SalesView: React.FC = () => {
     if (item) {
       const unit = soldAsUnitForItem(item);
       const components = parsePackageComponents(item.packageComponents);
-      const savedPrice = getItemMinimumPrice(item.id);
+      const savedPrice = getCachedItemMinimumPrice(item.id);
       if (savedPrice) {
         setScanState((current) => {
           const amount = Math.max(current.amount || 1, 1);
@@ -382,9 +382,16 @@ const SalesView: React.FC = () => {
       return alert(t('sales.enterValidPrice'));
     }
 
+    if (scanState.sourceBranch !== branch) {
+      return alert(t('sales.branchMismatch', { saleBranch: branch, itemBranch: scanState.sourceBranch }));
+    }
+
     try {
       const item = detectedScanItem?.id === inventoryItemId ? detectedScanItem : await detectScanItem();
       if (!item) return;
+      if (item.branchId && item.branchId !== resolveBranchId(branch)) {
+        return alert(t('sales.inventoryBranchMismatch', { saleBranch: branch, itemBranch: scanState.sourceBranch }));
+      }
       const soldAsUnit = soldAsUnitForItem(item);
       const components = parsePackageComponents(item.packageComponents);
       const isPiecePackage = Boolean(item.isPiecePackage && components.length > 0);
@@ -618,6 +625,19 @@ const SalesView: React.FC = () => {
     if (!currentUser) {
       setIsSubmitting(false);
       return alert(t('sales.mustBeLoggedIn'));
+    }
+
+    const branchMismatch = cart.find(
+      (line) => line.type === 'inventory' && line.sourceBranch !== branch
+    );
+    if (branchMismatch) {
+      setIsSubmitting(false);
+      return alert(
+        t('sales.branchMismatch', {
+          saleBranch: branch,
+          itemBranch: branchMismatch.type === 'inventory' ? branchMismatch.sourceBranch : branch,
+        })
+      );
     }
 
     try {

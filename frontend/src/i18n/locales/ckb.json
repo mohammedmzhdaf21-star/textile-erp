@@ -640,6 +640,8 @@
     "enterPartialPayment": "بڕی پارەدانی بەشەکی بنووسە",
     "mustBeLoggedIn": "پێویستە بچیتە ژوورەوە بۆ دروستکردنی فرۆشتن",
     "failedToCreate": "دروستکردنی فرۆشتن سەرنەکەوت",
+    "branchMismatch": "لقی فرۆشتن {{saleBranch}} لەگەڵ لقی بەرهەم {{itemBranch}} ناگونجێت. لقی فرۆشتن بگۆڕە یان لە لقی دروستدا سکان بکە.",
+    "inventoryBranchMismatch": "ئەم بەرهەمە سەر بە لقی {{itemBranch}}ە، نەک لقی فرۆشتن {{saleBranch}}.",
     "saleCreated": "فرۆشتن بۆ لقی {{branch}} دروست کرا. کۆی گشتی {{total}}",
     "saleCreatedWithTasks": "فرۆشتن بۆ لقی {{branch}} دروست کرا. کۆی گشتی {{total}}. {{count}} ئەرکی بڕین زیاد کرا بۆ کارمەندان.",
     "descriptionInventory": "{{type}} لە لقی {{branch}}",
@@ -981,6 +983,7 @@
     "exchangeProcessed": "گۆڕینەوە جێبەجێ کرا. جێگرەوە {{replacement}}، گەڕاوە {{returned}}، خالص {{net}}.",
     "newSaleId": " ناسنامەی فرۆشتی نوێ: {{id}}",
     "exchangeFailed": "گۆڕینەوە سەرنەکەوت{{status}}: {{message}}",
+    "branchMismatch": "لقی گۆڕینەوە {{saleBranch}} لەگەڵ لقی بەرهەمی جێگرەوە {{itemBranch}} ناگونجێت.",
     "defaultCustomer": "کڕیاری گۆڕینەوە",
     "defaultPlainCloth": "قوماشی سادە",
     "itemDetected": "{{type}} دەستنیشانکرا: {{unit}} بنووسە."

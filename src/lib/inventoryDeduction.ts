@@ -24,6 +24,7 @@ export type SaleInventoryDeductionInput = {
 
 export type SaleInventoryItemSnapshot = {
   id: string;
+  branchId: string;
   type: string;
   meters: Prisma.Decimal | null;
   quantity: number;
@@ -38,6 +39,15 @@ export type SaleInventoryItemSnapshot = {
 
 const concurrencyError = (inventoryItemId: string) =>
   `Inventory item ${inventoryItemId} was modified by another transaction. Please refresh and try again.`;
+
+export const inventoryBranchMismatchMessage = (
+  inventoryBranchId: string,
+  saleBranchId: string,
+  inventoryItemId: string
+) => {
+  if (inventoryBranchId === saleBranchId) return null;
+  return `Inventory item ${inventoryItemId} belongs to branch ${inventoryBranchId}, but this sale is for branch ${saleBranchId}`;
+};
 
 async function applyPackageSaleToInventoryWithLock(
   tx: Prisma.TransactionClient,
@@ -130,7 +140,8 @@ async function applyPackageSaleToInventoryWithLock(
 
 export async function deductInventoryForSaleItem(
   tx: Prisma.TransactionClient,
-  item: SaleInventoryDeductionInput
+  item: SaleInventoryDeductionInput,
+  saleBranchId: string
 ): Promise<SaleInventoryItemSnapshot> {
   const invItem = await tx.inventoryItem.findUnique({
     where: { id: item.inventoryItemId },
@@ -141,6 +152,15 @@ export async function deductInventoryForSaleItem(
   }
   if (invItem.isArchived) {
     throw new Error(`Inventory item ${item.inventoryItemId} is archived`);
+  }
+
+  const branchError = inventoryBranchMismatchMessage(
+    invItem.branchId,
+    saleBranchId,
+    item.inventoryItemId
+  );
+  if (branchError) {
+    throw new Error(branchError);
   }
 
   if (item.soldAsUnit === 'METER') {

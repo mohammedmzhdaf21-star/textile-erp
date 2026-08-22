@@ -98,6 +98,7 @@ router.post('/', async (req: Request, res: Response) => {
     if (
       msg.includes('Not enough stock') ||
       msg.includes('Not enough pieces') ||
+      msg.includes('belongs to branch') ||
       msg.includes('archived') ||
       msg.includes('positive') ||
       msg.includes('negative') ||
@@ -174,6 +175,7 @@ router.post('/exchange', async (req: Request, res: Response) => {
       msg.includes('negative') ||
       msg.includes('archived') ||
       msg.includes('Not enough') ||
+      msg.includes('belongs to branch') ||
       msg.includes('Partial exchange') ||
       msg.includes('must include')
     ) {

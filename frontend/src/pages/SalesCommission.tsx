@@ -1,12 +1,12 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import api from "../lib/api";
 import {
-  readCommissionSettings,
-  readItemMinimumPrices,
-  saveCommissionSettings,
-} from "../lib/dashboardSettings";
-import { pushCommissionRateToServer } from "../lib/commissionSettingsApi";
+  fetchCommissionSettingsFromServer,
+  getCachedCommissionSettings,
+  getCachedItemMinimumPrices,
+  pushCommissionRateToServer,
+} from "../lib/commissionSettingsApi";
 import { formatCurrency, parsePriceInput, toPriceInput } from "../lib/currency";
 
 type SaleItem = {
@@ -24,15 +24,33 @@ type Sale = {
 
 export default function SalesCommission() {
   const { t } = useTranslation();
-  const initialSettings = readCommissionSettings();
+  const initialSettings = getCachedCommissionSettings();
   const [commissionRate, setCommissionRate] = useState(String(initialSettings.ratePercent));
   const [baseCommission, setBaseCommission] = useState(
     toPriceInput(initialSettings.baseAmountPerUnit)
   );
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
   const [commissionRows, setCommissionRows] = useState<
     Array<{ employee: string; saleId: string; itemId: string; commission: number }>
   >([]);
   const [commissionMessage, setCommissionMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    void fetchCommissionSettingsFromServer()
+      .then(({ rate }) => {
+        if (!active) return;
+        setCommissionRate(String(rate.ratePercent));
+        setBaseCommission(toPriceInput(rate.baseAmountPerUnit));
+        setSettingsLoaded(true);
+      })
+      .catch(() => {
+        if (active) setSettingsLoaded(true);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const commissionTotal = useMemo(
     () => commissionRows.reduce((sum, row) => sum + row.commission, 0),
@@ -46,18 +64,18 @@ export default function SalesCommission() {
     if (!Number.isFinite(Number(baseCommission)) || Number(baseCommission) < 0) {
       return alert(t("dashboard.enterValidBaseCommission"));
     }
-    saveCommissionSettings({ ratePercent: rate, baseAmountPerUnit: baseAmount });
+
     try {
       await pushCommissionRateToServer(rate, baseAmount);
     } catch {
-      // Rate saved locally; server sync can retry on next save
+      return alert(t("dashboard.failedToCalculate"));
     }
     setCommissionMessage(null);
 
     try {
       const response = await api.get("/sales", { params: { pageSize: 200 } });
       const sales = (response.data?.sales || response.data?.items || []) as Sale[];
-      const prices = readItemMinimumPrices();
+      const prices = getCachedItemMinimumPrices();
       const rows: Array<{ employee: string; saleId: string; itemId: string; commission: number }> = [];
       const priceEps = 0.001;
 
@@ -116,6 +134,9 @@ export default function SalesCommission() {
       <div>
         <h1 className="text-3xl font-bold text-black">{t("nav.salesCommission")}</h1>
         <p className="mt-1 text-sm text-gray-600">{t("dashboard.commissionDescription")}</p>
+        {!settingsLoaded && (
+          <p className="mt-1 text-xs text-gray-500">{t("common.loading")}</p>
+        )}
       </div>
 
       <section className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">

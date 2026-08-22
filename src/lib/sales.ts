@@ -197,11 +197,12 @@ async function applyPackageSaleToInventory(
     version?: number;
   },
   item: SaleItemInput,
-  direction: 'deduct' | 'restore'
+  direction: 'deduct' | 'restore',
+  saleBranchId?: string
 ) {
-  await (direction === 'deduct' ? deductInventoryForSaleItem : restoreInventoryForSaleItem)(tx, {
+  const payload = {
     inventoryItemId: invItem.id,
-    soldAsUnit: 'PIECE',
+    soldAsUnit: 'PIECE' as const,
     quantitySold: item.packageSaleMode === 'FULL'
       ? Math.floor(item.packagesSold ?? item.quantitySold)
       : parseFloat(String(item.quantitySold)),
@@ -209,7 +210,15 @@ async function applyPackageSaleToInventory(
     packageSaleMode: item.packageSaleMode,
     packagesSold: item.packagesSold,
     packageComponentsSold: item.packageComponentsSold,
-  });
+  };
+
+  if (direction === 'deduct') {
+    if (!saleBranchId) throw new Error('Sale branch is required for inventory deduction');
+    await deductInventoryForSaleItem(tx, payload, saleBranchId);
+    return;
+  }
+
+  await restoreInventoryForSaleItem(tx, payload);
 }
 
 // ============================================================
@@ -308,15 +317,19 @@ export async function createSale(
 
       // If it has an inventoryItemId, deduct from inventory
       if (item.inventoryItemId) {
-        invItem = await deductInventoryForSaleItem(tx, {
-          inventoryItemId: item.inventoryItemId,
-          soldAsUnit: item.soldAsUnit,
-          quantitySold: item.quantitySold,
-          isPiecePackage: item.isPiecePackage,
-          packageSaleMode: item.packageSaleMode,
-          packagesSold: item.packagesSold,
-          packageComponentsSold: item.packageComponentsSold,
-        });
+        invItem = await deductInventoryForSaleItem(
+          tx,
+          {
+            inventoryItemId: item.inventoryItemId,
+            soldAsUnit: item.soldAsUnit,
+            quantitySold: item.quantitySold,
+            isPiecePackage: item.isPiecePackage,
+            packageSaleMode: item.packageSaleMode,
+            packagesSold: item.packagesSold,
+            packageComponentsSold: item.packageComponentsSold,
+          },
+          input.branchId
+        );
       }
 
       // Verify or create a plain cloth color placeholder when needed
@@ -583,15 +596,19 @@ export async function processExchange(
       } | null = null;
 
       if (item.inventoryItemId) {
-        invItem = await deductInventoryForSaleItem(tx, {
-          inventoryItemId: item.inventoryItemId,
-          soldAsUnit: item.soldAsUnit,
-          quantitySold: item.quantitySold,
-          isPiecePackage: item.isPiecePackage,
-          packageSaleMode: item.packageSaleMode,
-          packagesSold: item.packagesSold,
-          packageComponentsSold: item.packageComponentsSold,
-        });
+        invItem = await deductInventoryForSaleItem(
+          tx,
+          {
+            inventoryItemId: item.inventoryItemId,
+            soldAsUnit: item.soldAsUnit,
+            quantitySold: item.quantitySold,
+            isPiecePackage: item.isPiecePackage,
+            packageSaleMode: item.packageSaleMode,
+            packagesSold: item.packagesSold,
+            packageComponentsSold: item.packageComponentsSold,
+          },
+          input.branchId
+        );
       }
 
       let colorId = item.colorId;
