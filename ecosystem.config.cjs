@@ -20,5 +20,15 @@ module.exports = {
       restart_delay: 5000,
       min_uptime: '30s',
     },
+    {
+      name: 'textile-tunnel-guard',
+      script: path.join(root, 'scripts/tunnel-guard-loop.sh'),
+      interpreter: 'bash',
+      cwd: root,
+      autorestart: true,
+      max_restarts: 100,
+      restart_delay: 5000,
+      min_uptime: '10s',
+    },
   ],
 };

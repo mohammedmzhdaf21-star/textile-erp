@@ -44,7 +44,7 @@ else
   fail=$((fail + 1))
 fi
 
-if pgrep -f "/usr/bin/cloudflared.*tunnel run" >/dev/null; then
+if pgrep -f "cloudflared.*tunnel run" >/dev/null; then
   log "PASS: cloudflared system service running"
   pass=$((pass + 1))
 else
