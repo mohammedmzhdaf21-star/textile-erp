@@ -6,7 +6,8 @@ import { formatCurrency, parsePriceInput, toPriceInputNumber } from '../lib/curr
 import { fetchPlainClothTypes, type PlainClothType } from '../lib/plainClothApi';
 import QrScanInput from '../components/QrScanInput';
 import { resolveInventoryItem } from '../lib/inventoryLookup';
-import { BRANCH_ID_BY_CODE } from '../lib/inventoryCodes';
+import { BRANCH_ID_BY_CODE, resolveBranchId } from '../lib/inventoryCodes';
+import { formatApiError } from '../lib/apiErrors';
 
 type BranchCode = 'A' | 'B' | 'C' | 'E' | 'F';
 
@@ -222,27 +223,11 @@ const ExchangePage: React.FC = () => {
   const detectNewItem = () => detectNewItemForCode(newScan.inventoryItemId, newScan.sourceBranch);
 
   const handleReturnedScanLookupError = (error: unknown) => {
-    const apiError = error as { response?: { status?: number; data?: { error?: string; message?: string } }; message?: string };
-    const status = apiError?.response?.status;
-    const body = apiError?.response?.data;
-    setReturnedScanMessage(
-      t('common.notFound', {
-        status: status ? t('common.notFoundStatus', { status }) : '',
-        message: body?.error ?? body?.message ?? apiError?.message,
-      })
-    );
+    setReturnedScanMessage(formatApiError(t, error));
   };
 
   const handleNewScanLookupError = (error: unknown) => {
-    const apiError = error as { response?: { status?: number; data?: { error?: string; message?: string } }; message?: string };
-    const status = apiError?.response?.status;
-    const body = apiError?.response?.data;
-    setNewScanMessage(
-      t('common.notFound', {
-        status: status ? t('common.notFoundStatus', { status }) : '',
-        message: body?.error ?? body?.message ?? apiError?.message,
-      })
-    );
+    setNewScanMessage(formatApiError(t, error));
   };
 
   const addReturnedInventory = async () => {
@@ -289,15 +274,8 @@ const ExchangePage: React.FC = () => {
       }));
       setDetectedReturnedItem(null);
       setReturnedScanMessage(null);
-    } catch (error: any) {
-      const status = error?.response?.status;
-      const body = error?.response?.data;
-      alert(
-        t('exchange.unableToLoadReturned', {
-          status: status ? t('common.requestFailedStatus', { status }) : '',
-          message: body?.error ?? body?.message ?? error?.message,
-        })
-      );
+    } catch (error: unknown) {
+      alert(formatApiError(t, error));
     }
   };
 
@@ -336,15 +314,8 @@ const ExchangePage: React.FC = () => {
       setNewScan((current) => ({ ...current, inventoryItemId: '', amount: 0 }));
       setDetectedNewItem(null);
       setNewScanMessage(null);
-    } catch (error: any) {
-      const status = error?.response?.status;
-      const body = error?.response?.data;
-      alert(
-        t('exchange.unableToLoadSaleItem', {
-          status: status ? t('common.requestFailedStatus', { status }) : '',
-          message: body?.error ?? body?.message ?? error?.message,
-        })
-      );
+    } catch (error: unknown) {
+      alert(formatApiError(t, error));
     }
   };
 
@@ -439,7 +410,7 @@ const ExchangePage: React.FC = () => {
       });
 
       const exchangePayload = {
-        branchId: BRANCH_ID_BY_CODE[selectedBranch],
+        branchId: resolveBranchId(selectedBranch),
         employeeId: currentUser.id,
         customerName: customerName.trim(),
         customerPhone: customerPhone.trim(),
@@ -477,15 +448,8 @@ const ExchangePage: React.FC = () => {
       setNewSaleLines([]);
       setAmountPaid('0');
       setPaymentStatus('FULL');
-    } catch (error: any) {
-      const status = error?.response?.status;
-      const body = error?.response?.data;
-      setErrorMessage(
-        t('exchange.exchangeFailed', {
-          status: status ? t('common.requestFailedStatus', { status }) : '',
-          message: body?.error ?? body?.message ?? error?.message ?? t('errors.unexpected'),
-        })
-      );
+    } catch (error: unknown) {
+      setErrorMessage(formatApiError(t, error));
       console.error('Exchange error:', error);
     } finally {
       setIsProcessing(false);
