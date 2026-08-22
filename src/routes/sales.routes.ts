@@ -100,6 +100,9 @@ router.post('/', async (req: Request, res: Response) => {
     ) {
       return res.status(400).json({ error: msg });
     }
+    if (msg.includes('modified by another')) {
+      return res.status(409).json({ error: msg });
+    }
     return res.status(500).json({ error: msg });
   }
 });
@@ -170,6 +173,9 @@ router.post('/exchange', async (req: Request, res: Response) => {
       msg.includes('must include')
     ) {
       return res.status(400).json({ error: msg });
+    }
+    if (msg.includes('modified by another')) {
+      return res.status(409).json({ error: msg });
     }
     return res.status(500).json({ error: msg });
   }

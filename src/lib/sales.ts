@@ -1,17 +1,9 @@
 import { prisma } from './prisma';
 import { Prisma } from '@prisma/client';
 import {
-  countCompletePackages,
-  deductFullPackageSale,
-  deductPartialPackageSale,
-  parsePackageComponents,
-  restoreFullPackageSale,
-  restorePartialPackageSale,
-  resolvePackageComponentStock,
-  validateFullPackageSale,
-  validatePartialPackageSale,
-} from './packageStock';
-import { meterStockUpdateAfterDeduction } from './inventoryRules';
+  deductInventoryForSaleItem,
+  restoreInventoryForSaleItem,
+} from './inventoryDeduction';
 import {
   recordCommissionForSaleItem,
   removePendingCommissionsForSale,
@@ -201,68 +193,22 @@ async function applyPackageSaleToInventory(
     packageComponents: unknown;
     packageComponentStock: unknown;
     isPiecePackage: boolean;
+    version?: number;
   },
   item: SaleItemInput,
   direction: 'deduct' | 'restore'
 ) {
-  if (!invItem.isPiecePackage) return;
-
-  const components = parsePackageComponents(invItem.packageComponents);
-  const currentStock = resolvePackageComponentStock({
-    packageComponents: invItem.packageComponents,
-    packageComponentStock: invItem.packageComponentStock,
-    quantity: invItem.quantity,
+  await (direction === 'deduct' ? deductInventoryForSaleItem : restoreInventoryForSaleItem)(tx, {
+    inventoryItemId: invItem.id,
+    soldAsUnit: 'PIECE',
+    quantitySold: item.packageSaleMode === 'FULL'
+      ? Math.floor(item.packagesSold ?? item.quantitySold)
+      : parseFloat(String(item.quantitySold)),
+    isPiecePackage: true,
+    packageSaleMode: item.packageSaleMode,
+    packagesSold: item.packagesSold,
+    packageComponentsSold: item.packageComponentsSold,
   });
-
-  if (item.packageSaleMode === 'FULL') {
-    const packagesSold = Math.floor(item.packagesSold ?? item.quantitySold);
-    const error =
-      direction === 'deduct'
-        ? validateFullPackageSale(components, currentStock, packagesSold)
-        : null;
-    if (error) throw new Error(error);
-
-    const nextStock =
-      direction === 'deduct'
-        ? deductFullPackageSale(components, currentStock, packagesSold)
-        : restoreFullPackageSale(components, currentStock, packagesSold);
-
-    await tx.inventoryItem.update({
-      where: { id: invItem.id },
-      data: {
-        packageComponentStock: nextStock as Prisma.InputJsonValue,
-        quantity:
-          direction === 'deduct'
-            ? { decrement: packagesSold }
-            : { increment: packagesSold },
-        version: { increment: 1 },
-      },
-    });
-    return;
-  }
-
-  if (item.packageSaleMode === 'PARTIAL') {
-    const componentsSold = item.packageComponentsSold ?? [];
-    const error =
-      direction === 'deduct'
-        ? validatePartialPackageSale(currentStock, componentsSold)
-        : null;
-    if (error) throw new Error(error);
-
-    const nextStock =
-      direction === 'deduct'
-        ? deductPartialPackageSale(currentStock, componentsSold)
-        : restorePartialPackageSale(currentStock, componentsSold);
-
-    await tx.inventoryItem.update({
-      where: { id: invItem.id },
-      data: {
-        packageComponentStock: nextStock as Prisma.InputJsonValue,
-        quantity: countCompletePackages(components, nextStock),
-        version: { increment: 1 },
-      },
-    });
-  }
 }
 
 // ============================================================
@@ -348,54 +294,15 @@ export async function createSale(
 
       // If it has an inventoryItemId, deduct from inventory
       if (item.inventoryItemId) {
-        invItem = await tx.inventoryItem.findUnique({
-          where: { id: item.inventoryItemId },
+        invItem = await deductInventoryForSaleItem(tx, {
+          inventoryItemId: item.inventoryItemId,
+          soldAsUnit: item.soldAsUnit,
+          quantitySold: item.quantitySold,
+          isPiecePackage: item.isPiecePackage,
+          packageSaleMode: item.packageSaleMode,
+          packagesSold: item.packagesSold,
+          packageComponentsSold: item.packageComponentsSold,
         });
-
-        if (!invItem) {
-          throw new Error(`Inventory item ${item.inventoryItemId} not found`);
-        }
-
-        if (invItem.isArchived) {
-          throw new Error(`Inventory item ${item.inventoryItemId} is archived`);
-        }
-
-        // Check stock & deduct
-        if (item.soldAsUnit === 'METER') {
-          const currentMeters = invItem.meters
-            ? parseFloat(invItem.meters.toString())
-            : 0;
-          if (currentMeters < item.quantitySold) {
-            throw new Error(
-              `Not enough stock for ${item.inventoryItemId}. Available: ${currentMeters}m, Requested: ${item.quantitySold}m`
-            );
-          }
-          const remainingMeters = currentMeters - item.quantitySold;
-          const meterUpdate = meterStockUpdateAfterDeduction(invItem.type, remainingMeters);
-          await tx.inventoryItem.update({
-            where: { id: item.inventoryItemId },
-            data: {
-              meters: new Prisma.Decimal(meterUpdate.meters.toFixed(2)),
-              ...(meterUpdate.type ? { type: meterUpdate.type } : {}),
-              version: { increment: 1 },
-            },
-          });
-        } else if (invItem.isPiecePackage && item.isPiecePackage) {
-          await applyPackageSaleToInventory(tx, invItem, item, 'deduct');
-        } else if (item.soldAsUnit === 'PIECE') {
-          if (invItem.quantity < item.quantitySold) {
-            throw new Error(
-              `Not enough pieces for ${item.inventoryItemId}. Available: ${invItem.quantity}, Requested: ${item.quantitySold}`
-            );
-          }
-          await tx.inventoryItem.update({
-            where: { id: item.inventoryItemId },
-            data: {
-              quantity: { decrement: Math.floor(item.quantitySold) },
-              version: { increment: 1 },
-            },
-          });
-        }
       }
 
       // Verify or create a plain cloth color placeholder when needed
@@ -646,46 +553,15 @@ export async function processExchange(
       } | null = null;
 
       if (item.inventoryItemId) {
-        invItem = await tx.inventoryItem.findUnique({
-          where: { id: item.inventoryItemId },
+        invItem = await deductInventoryForSaleItem(tx, {
+          inventoryItemId: item.inventoryItemId,
+          soldAsUnit: item.soldAsUnit,
+          quantitySold: item.quantitySold,
+          isPiecePackage: item.isPiecePackage,
+          packageSaleMode: item.packageSaleMode,
+          packagesSold: item.packagesSold,
+          packageComponentsSold: item.packageComponentsSold,
         });
-
-        if (!invItem) throw new Error(`Inventory item ${item.inventoryItemId} not found`);
-        if (invItem.isArchived) throw new Error(`Inventory item ${item.inventoryItemId} is archived`);
-
-        if (item.soldAsUnit === 'METER') {
-          const currentMeters = invItem.meters ? parseFloat(invItem.meters.toString()) : 0;
-          if (currentMeters < item.quantitySold) {
-            throw new Error(
-              `Not enough stock for ${item.inventoryItemId}. Available: ${currentMeters}m, Requested: ${item.quantitySold}m`
-            );
-          }
-          const remainingMeters = currentMeters - item.quantitySold;
-          const meterUpdate = meterStockUpdateAfterDeduction(invItem.type, remainingMeters);
-          await tx.inventoryItem.update({
-            where: { id: item.inventoryItemId },
-            data: {
-              meters: new Prisma.Decimal(meterUpdate.meters.toFixed(2)),
-              ...(meterUpdate.type ? { type: meterUpdate.type } : {}),
-              version: { increment: 1 },
-            },
-          });
-        } else if (invItem.isPiecePackage && item.isPiecePackage) {
-          await applyPackageSaleToInventory(tx, invItem, item, 'deduct');
-        } else if (item.soldAsUnit === 'PIECE') {
-          if (invItem.quantity < item.quantitySold) {
-            throw new Error(
-              `Not enough pieces for ${item.inventoryItemId}. Available: ${invItem.quantity}, Requested: ${item.quantitySold}`
-            );
-          }
-          await tx.inventoryItem.update({
-            where: { id: item.inventoryItemId },
-            data: {
-              quantity: { decrement: Math.floor(item.quantitySold) },
-              version: { increment: 1 },
-            },
-          });
-        }
       }
 
       let colorId = item.colorId;
@@ -955,54 +831,41 @@ export async function voidSale(
 
     // Restock each item back to inventory
     for (const item of sale.items) {
-      if (item.inventoryItemId) {
-        const invItem = await tx.inventoryItem.findUnique({
-          where: { id: item.inventoryItemId },
-        });
+      if (!item.inventoryItemId) continue;
 
-        if (invItem && !invItem.isArchived) {
-          if (item.soldAsUnit === 'METER') {
-            const currentMeters = invItem.meters
-              ? parseFloat(invItem.meters.toString())
-              : 0;
-            const qty = parseFloat(item.quantitySold.toString());
-            await tx.inventoryItem.update({
-              where: { id: item.inventoryItemId },
-              data: {
-                meters: new Prisma.Decimal((currentMeters + qty).toFixed(2)),
-                version: { increment: 1 },
-              },
-            });
-          } else if (item.isPiecePackage && item.packageSaleMode) {
-            await applyPackageSaleToInventory(
-              tx,
-              invItem,
-              {
-                inventoryItemId: item.inventoryItemId,
-                colorId: item.colorId,
-                soldAsUnit: 'PIECE',
-                quantitySold: parseFloat(item.quantitySold.toString()),
-                soldPrice: parseFloat(item.soldPrice.toString()),
-                isPiecePackage: true,
-                packageSaleMode: item.packageSaleMode as 'FULL' | 'PARTIAL',
-                packagesSold: item.packagesSold ?? undefined,
-                packageComponentsSold: Array.isArray(item.packageComponentsSold)
-                  ? (item.packageComponentsSold as Array<{ name: string; quantity: number }>)
-                  : undefined,
-              },
-              'restore'
-            );
-          } else if (item.soldAsUnit === 'PIECE') {
-            await tx.inventoryItem.update({
-              where: { id: item.inventoryItemId },
-              data: {
-                quantity: { increment: Math.floor(parseFloat(item.quantitySold.toString())) },
-                version: { increment: 1 },
-              },
-            });
-          }
-        }
+      if (item.isPiecePackage && item.packageSaleMode) {
+        await applyPackageSaleToInventory(
+          tx,
+          {
+            id: item.inventoryItemId,
+            quantity: 0,
+            packageComponents: null,
+            packageComponentStock: null,
+            isPiecePackage: true,
+          },
+          {
+            inventoryItemId: item.inventoryItemId,
+            colorId: item.colorId,
+            soldAsUnit: 'PIECE',
+            quantitySold: parseFloat(item.quantitySold.toString()),
+            soldPrice: parseFloat(item.soldPrice.toString()),
+            isPiecePackage: true,
+            packageSaleMode: item.packageSaleMode as 'FULL' | 'PARTIAL',
+            packagesSold: item.packagesSold ?? undefined,
+            packageComponentsSold: Array.isArray(item.packageComponentsSold)
+              ? (item.packageComponentsSold as Array<{ name: string; quantity: number }>)
+              : undefined,
+          },
+          'restore'
+        );
+        continue;
       }
+
+      await restoreInventoryForSaleItem(tx, {
+        inventoryItemId: item.inventoryItemId,
+        soldAsUnit: item.soldAsUnit,
+        quantitySold: parseFloat(item.quantitySold.toString()),
+      });
     }
 
     // Remove pending commission entries for voided sale
