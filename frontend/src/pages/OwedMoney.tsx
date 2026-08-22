@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import api from '../lib/api';
 import { useTranslation } from 'react-i18next';
 import { formatCurrency, parsePriceInput } from '../lib/currency';
-import { isImmediatePaymentMethod } from '../lib/paymentMethod';
 import { BRANCH_ID_BY_CODE } from '../lib/inventoryCodes';
 
 type Sale = {
@@ -22,15 +21,7 @@ type Sale = {
   paymentMethod?: string;
   paymentStatus?: 'PAID' | 'PARTIAL' | 'UNPAID';
   paidAmount?: number;
-};
-
-type OwedPayment = {
-  saleId: string;
-  branchId: string;
-  amount: number;
-  paidAt: string;
-  customerName?: string;
-  employeeName?: string;
+  outstandingAmount?: number;
 };
 
 type OwedRow = Sale & {
@@ -41,8 +32,6 @@ type OwedRow = Sale & {
 
 const branches = ['A', 'B', 'C', 'E', 'F'] as const;
 type BranchId = typeof branches[number];
-
-const OWED_PAYMENTS_KEY = 'textile-erp-owed-payments';
 
 const toMoneyNumber = (value: unknown) => {
   const parsed = Number(value ?? 0);
@@ -57,33 +46,6 @@ const formatTime = (dateString: string) =>
     hour: '2-digit',
     minute: '2-digit',
   });
-
-const readOwedPayments = (): OwedPayment[] => {
-  try {
-    const raw = localStorage.getItem(OWED_PAYMENTS_KEY);
-    return raw ? (JSON.parse(raw) as OwedPayment[]) : [];
-  } catch {
-    return [];
-  }
-};
-
-const writeOwedPayments = (payments: OwedPayment[]) => {
-  localStorage.setItem(OWED_PAYMENTS_KEY, JSON.stringify(payments));
-  window.dispatchEvent(new Event('owed-payments-updated'));
-};
-
-const paidFromSale = (sale: Sale) => {
-  const notes = sale.notes || '';
-  const refundMatch = /Refunded\s+([0-9]+(?:\.[0-9]+)?)/i.exec(notes);
-  const paidMatch = /Paid\s+(-?[0-9]+(?:\.[0-9]+)?)/i.exec(notes);
-
-  if (refundMatch) return -toMoneyNumber(refundMatch[1]);
-  if (paidMatch) return toMoneyNumber(paidMatch[1]);
-  if (sale.paymentStatus === 'PAID' || isImmediatePaymentMethod(sale.paymentMethod)) {
-    return toMoneyNumber(sale.total ?? sale.totalPrice ?? 0);
-  }
-  return toMoneyNumber(sale.paidAmount);
-};
 
 const extractSales = (data: unknown): Sale[] => {
   if (Array.isArray(data)) return data as Sale[];
@@ -100,8 +62,8 @@ const OwedMoney: React.FC = () => {
   const { t } = useTranslation();
   const [selectedBranch, setSelectedBranch] = useState<BranchId | null>(null);
   const [sales, setSales] = useState<Sale[]>([]);
-  const [localPayments, setLocalPayments] = useState<OwedPayment[]>(() => readOwedPayments());
   const [loading, setLoading] = useState(false);
+  const [savingPayment, setSavingPayment] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [paymentSale, setPaymentSale] = useState<OwedRow | null>(null);
   const [paymentAmount, setPaymentAmount] = useState('');
@@ -120,20 +82,19 @@ const OwedMoney: React.FC = () => {
 
   const owedRows = useMemo<OwedRow[]>(() => {
     if (!selectedBranch) return [];
-    const branchId = BRANCH_ID_BY_CODE[selectedBranch];
 
     return sales
       .map((sale) => {
         const totalAmount = toMoneyNumber(sale.total ?? sale.totalPrice ?? 0);
-        const apiPaidAmount = paidFromSale(sale);
-        const localPaidAmount = localPayments
-          .filter((payment) => payment.saleId === sale.id && payment.branchId === branchId)
-          .reduce((sum, payment) => sum + payment.amount, 0);
-        const paidAmount = Math.min(totalAmount, apiPaidAmount + localPaidAmount);
-        const outstandingAmount = Math.max(0, totalAmount - paidAmount);
+        const paidAmount = toMoneyNumber(sale.paidAmount);
+        const outstandingAmount =
+          sale.outstandingAmount !== undefined
+            ? toMoneyNumber(sale.outstandingAmount)
+            : Math.max(0, totalAmount - paidAmount);
 
         const paymentStatus: 'PAID' | 'PARTIAL' | 'UNPAID' =
-          outstandingAmount <= 0 ? 'PAID' : paidAmount > 0 ? 'PARTIAL' : 'UNPAID';
+          sale.paymentStatus ??
+          (outstandingAmount <= 0 ? 'PAID' : paidAmount > 0 ? 'PARTIAL' : 'UNPAID');
 
         return {
           ...sale,
@@ -145,7 +106,7 @@ const OwedMoney: React.FC = () => {
       })
       .filter((sale) => sale.totalAmount > 0)
       .sort((a, b) => b.outstandingAmount - a.outstandingAmount);
-  }, [localPayments, sales, selectedBranch]);
+  }, [sales, selectedBranch]);
 
   const outstandingRows = owedRows.filter((sale) => sale.outstandingAmount > 0);
   const settledRows = owedRows.filter((sale) => sale.outstandingAmount <= 0);
@@ -165,7 +126,6 @@ const OwedMoney: React.FC = () => {
         },
       });
       setSales(extractSales(response.data));
-      setLocalPayments(readOwedPayments());
     } catch (err: any) {
       const status = err?.response?.status;
       const body = err?.response?.data;
@@ -193,7 +153,7 @@ const OwedMoney: React.FC = () => {
     setPaymentError(null);
   };
 
-  const recordPayment = () => {
+  const recordPayment = async () => {
     if (!selectedBranch || !paymentSale) return;
 
     const amount = parsePriceInput(paymentAmount);
@@ -208,18 +168,26 @@ const OwedMoney: React.FC = () => {
       return;
     }
 
-    const payment: OwedPayment = {
-      saleId: paymentSale.id,
-      branchId: BRANCH_ID_BY_CODE[selectedBranch],
-      amount,
-      paidAt: new Date().toISOString(),
-      customerName: paymentSale.customerName,
-      employeeName: paymentSale.employee?.name || paymentSale.employeeName,
-    };
-    const nextPayments = [...readOwedPayments(), payment];
-    writeOwedPayments(nextPayments);
-    setLocalPayments(nextPayments);
-    closePaymentModal();
+    setSavingPayment(true);
+    setPaymentError(null);
+
+    try {
+      const response = await api.post(`/sales/${paymentSale.id}/payments`, { amount });
+      const updatedSale = response.data?.sale as Sale | undefined;
+      if (updatedSale) {
+        setSales((current) =>
+          current.map((sale) => (sale.id === updatedSale.id ? { ...sale, ...updatedSale } : sale))
+        );
+      } else if (selectedBranch) {
+        await loadBranchOwed(selectedBranch);
+      }
+      closePaymentModal();
+    } catch (err: any) {
+      const body = err?.response?.data;
+      setPaymentError(body?.error ?? body?.message ?? err?.message ?? t('owedMoney.failedToLoad'));
+    } finally {
+      setSavingPayment(false);
+    }
   };
 
   const rowClass = (sale: OwedRow) => {
@@ -419,13 +387,19 @@ const OwedMoney: React.FC = () => {
             )}
 
             <div className="mt-6 flex flex-wrap gap-3">
-              <button type="button" className="btn-primary" onClick={recordPayment}>
-                {t('common.savePayment')}
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={() => void recordPayment()}
+                disabled={savingPayment}
+              >
+                {savingPayment ? t('common.saving') : t('common.savePayment')}
               </button>
               <button
                 type="button"
                 className="rounded-xl border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700"
                 onClick={closePaymentModal}
+                disabled={savingPayment}
               >
                 {t('common.cancel')}
               </button>

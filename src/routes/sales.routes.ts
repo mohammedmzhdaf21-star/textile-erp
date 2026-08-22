@@ -7,6 +7,8 @@ import {
   processRefund,
   processExchange,
   getSalesStats,
+  recordSalePayment,
+  listSalePayments,
 } from '../lib/sales';
 import { authenticate, requireRole } from '../middleware/authenticate';
 
@@ -30,6 +32,7 @@ router.post('/', async (req: Request, res: Response) => {
       discount,
       paymentMethod,
       notes,
+      amountPaid,
     } = req.body;
 
     if (!branchId || !employeeId || !customerName || !customerPhone) {
@@ -69,6 +72,10 @@ router.post('/', async (req: Request, res: Response) => {
         discount: discount !== undefined ? parseFloat(String(discount)) : 0,
         paymentMethod,
         notes,
+        amountPaid:
+          amountPaid !== undefined && amountPaid !== null
+            ? parseFloat(String(amountPaid))
+            : undefined,
       },
       req.user?.userId,
       req.user?.email
@@ -213,6 +220,34 @@ router.get('/', async (req: Request, res: Response) => {
 });
 
 // ============================================================
+// GET /api/sales/payments (list payments by branch/date)
+// ============================================================
+router.get('/payments', async (req: Request, res: Response) => {
+  try {
+    const branchId = req.query.branchId as string | undefined;
+    const fromDateRaw = req.query.fromDate as string | undefined;
+    const toDateRaw = req.query.toDate as string | undefined;
+
+    if (!branchId) {
+      return res.status(400).json({ error: 'branchId is required' });
+    }
+
+    const fromDate = fromDateRaw ? new Date(fromDateRaw) : undefined;
+    let toDate = toDateRaw ? new Date(toDateRaw) : undefined;
+    if (toDate) {
+      toDate.setHours(23, 59, 59, 999);
+    }
+
+    const payments = await listSalePayments({ branchId, fromDate, toDate });
+    return res.status(200).json({ payments });
+  } catch (error: any) {
+    return res.status(500).json({
+      error: error.message || 'Failed to list sale payments',
+    });
+  }
+});
+
+// ============================================================
 // GET /api/sales/stats/summary (MANAGER+ only)
 // ============================================================
 router.get(
@@ -301,6 +336,62 @@ router.post(
     }
   }
 );
+
+// ============================================================
+// POST /api/sales/:id/payments (record owed/partial payment)
+// ============================================================
+router.post('/:id/payments', async (req: Request, res: Response) => {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const { amount, notes, paidAt } = req.body;
+
+    if (!id) {
+      return res.status(400).json({ error: 'Sale id is required' });
+    }
+
+    if (amount === undefined || amount === null) {
+      return res.status(400).json({ error: 'amount is required' });
+    }
+
+    if (!req.user?.userId) {
+      return res.status(401).json({ error: 'User identification missing' });
+    }
+
+    const parsedAmount = parseFloat(String(amount));
+    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+      return res.status(400).json({ error: 'amount must be a positive number' });
+    }
+
+    const result = await recordSalePayment(
+      id,
+      {
+        amount: parsedAmount,
+        notes: typeof notes === 'string' ? notes : undefined,
+        paidAt: paidAt ? new Date(paidAt) : undefined,
+      },
+      req.user.userId,
+      req.user.email
+    );
+
+    return res.status(201).json({
+      message: 'Payment recorded successfully',
+      ...result,
+    });
+  } catch (error: any) {
+    const msg = error.message || 'Failed to record payment';
+    if (msg.includes('not found')) {
+      return res.status(404).json({ error: msg });
+    }
+    if (
+      msg.includes('voided') ||
+      msg.includes('positive') ||
+      msg.includes('exceeds')
+    ) {
+      return res.status(400).json({ error: msg });
+    }
+    return res.status(500).json({ error: msg });
+  }
+});
 
 // ============================================================
 // POST /api/sales/:id/refund (MANAGER+ only)
