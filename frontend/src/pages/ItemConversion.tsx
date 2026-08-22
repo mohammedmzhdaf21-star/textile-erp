@@ -2,9 +2,9 @@ import React, { useState } from 'react';
 import QRCode from 'qrcode';
 import api from '../lib/api';
 import { completeCuttingTasksAfterRollToPiece } from '../lib/cuttingTasks';
-import { buildInventoryItemId, BRANCH_CODE_BY_ID, BRANCH_ID_BY_CODE } from '../lib/inventoryCodes';
+import { BRANCH_CODE_BY_ID, BRANCH_ID_BY_CODE } from '../lib/inventoryCodes';
+import { cutRollToPieceStock, type RollInventoryItem } from '../lib/rollToPiece';
 import { getColorLabel } from '../lib/colorLabels';
-import { isBelowRemnantThreshold } from '../lib/inventoryRules';
 import { useTranslation } from 'react-i18next';
 import QrScanInput from '../components/QrScanInput';
 
@@ -131,26 +131,78 @@ const ItemConversion: React.FC = () => {
     }
   };
 
-  const findExistingPieceForRollCut = async (rollSource: InventoryItem, pieceLength: number) => {
-    const response = await api.get('/inventory', {
-      params: {
+  const cutRollToPiece = async () => {
+    if (!rollSource) return alert(t('itemConversion.loadRollFirst'));
+    const amount = Number(cutMeters);
+    if (rollSource.type !== 'ROLL' && rollSource.type !== 'REMANENT') {
+      return alert(t('itemConversion.onlyRollsRemnants'));
+    }
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return alert(t('itemConversion.enterValidMetersToCut'));
+    }
+    if (amount > toNumber(rollSource.meters)) {
+      return alert(t('itemConversion.cutExceedsRoll'));
+    }
+
+    setIsProcessing(true);
+    setError(null);
+    setMessage(null);
+
+    try {
+      const result = await cutRollToPieceStock(rollSource as RollInventoryItem, amount, {
+        uniquePiece: false,
+      });
+
+      setRollSource((current) =>
+        result.roll && current
+          ? {
+              ...current,
+              meters: result.roll.meters,
+              version: result.roll.version,
+              type: result.roll.type as ItemType,
+            }
+          : current
+      );
+
+      setSummary({
+        title: result.addedToExisting
+          ? t('itemConversion.summaryStockAdded')
+          : result.createAsRemnant
+            ? t('itemConversion.summaryRemnantCreated')
+            : t('itemConversion.summaryPieceCreated'),
+        sourceId: rollSource.id,
+        newItemId: result.pieceItemId,
+        qrCodeDataUrl: result.qrCodeDataUrl,
+        details: result.addedToExisting
+          ? `Cut ${amount.toFixed(2)} meters and added 1 piece to existing item ${result.pieceItemId} (code ${rollSource.code}, color ${rollSource.color?.name || rollSource.colorId}).`
+          : result.createAsRemnant
+            ? `Cut ${amount.toFixed(2)} meters into a remnant (under 2 m rule).`
+            : `Cut ${amount.toFixed(2)} meters into one new piece with code ${rollSource.code} and color ${rollSource.color?.name || rollSource.colorId}.`,
+      });
+
+      const completedTasks = await completeCuttingTasksAfterRollToPiece({
+        rollItemId: rollSource.id,
         branchId: rollSource.branchId,
-        colorId: rollSource.colorId,
-        type: 'PIECE',
         code: rollSource.code,
-        pageSize: 200,
-      },
-    });
-    const items = (response.data?.items ?? []) as InventoryItem[];
-
-    const matches = items.filter((item) => {
-      if (item.isPiecePackage || (item.packageKey ?? '')) return false;
-      if (Math.abs(toNumber(item.pieceLength) - pieceLength) >= 0.001) return false;
-      return true;
-    });
-
-    // Prefer the sold-out piece (qty 0) — same family code, color, and cut length.
-    return matches.find((item) => item.quantity === 0) ?? matches[0] ?? null;
+        colorName: rollSource.color?.name,
+        newPieceId: result.pieceItemId,
+      });
+      setMessage(
+        completedTasks.length > 0
+          ? `Roll-to-piece conversion complete. ${completedTasks.length} cutting task(s) marked done automatically.`
+          : result.addedToExisting
+            ? t('itemConversion.rollToPieceAddedExisting')
+            : result.createAsRemnant
+              ? t('itemConversion.rollToRemnantComplete')
+              : t('itemConversion.rollToPieceNewQr')
+      );
+      await loadItem(rollSource.id, setRollSource);
+    } catch (err: any) {
+      const body = err?.response?.data;
+      setError(body?.error ?? body?.message ?? err?.message ?? t('itemConversion.failedToCut'));
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const patchSourceStock = async (item: InventoryItem, amount: number) => {
@@ -237,126 +289,6 @@ const ItemConversion: React.FC = () => {
     } catch (err: any) {
       const body = err?.response?.data;
       setError(body?.error ?? body?.message ?? err?.message ?? t('itemConversion.failedToTransfer'));
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  const cutRollToPiece = async () => {
-    if (!rollSource) return alert(t('itemConversion.loadRollFirst'));
-    const amount = Number(cutMeters);
-    if (rollSource.type !== 'ROLL' && rollSource.type !== 'REMANENT') {
-      return alert(t('itemConversion.onlyRollsRemnants'));
-    }
-    if (!Number.isFinite(amount) || amount <= 0) {
-      return alert(t('itemConversion.enterValidMetersToCut'));
-    }
-    if (amount > toNumber(rollSource.meters)) {
-      return alert(t('itemConversion.cutExceedsRoll'));
-    }
-
-    setIsProcessing(true);
-    setError(null);
-    setMessage(null);
-
-    try {
-      const createAsRemnant = isBelowRemnantThreshold(amount);
-      const existingPiece =
-        createAsRemnant ? null : await findExistingPieceForRollCut(rollSource, amount);
-      let pieceItemId: string;
-      let qrCodeDataUrl: string;
-      let addedToExisting = false;
-
-      if (existingPiece) {
-        pieceItemId = existingPiece.id;
-        qrCodeDataUrl =
-          existingPiece.qrCodeDataUrl || (await createQrDataUrl(existingPiece.id));
-        addedToExisting = true;
-      } else {
-        pieceItemId = buildInventoryItemId({
-          branchId: rollSource.branchId,
-          familyCode: rollSource.code,
-          subCode: itemSubCode(rollSource),
-          colorName: rollSource.color?.name || rollSource.colorId,
-          colorId: rollSource.colorId,
-          type: createAsRemnant ? 'REMANENT' : 'PIECE',
-          pieceLength: createAsRemnant ? undefined : amount,
-        });
-        qrCodeDataUrl = await createQrDataUrl(pieceItemId);
-      }
-
-      await patchSourceStock(rollSource, amount);
-      setRollSource((current) =>
-        current
-          ? {
-              ...current,
-              meters: Number((toNumber(current.meters) - amount).toFixed(2)),
-              version: current.version + 1,
-            }
-          : current
-      );
-
-      if (addedToExisting && existingPiece) {
-        await api.patch(`/inventory/${encodeURIComponent(pieceItemId)}`, {
-          version: existingPiece.version,
-          quantity: existingPiece.quantity + 1,
-        });
-      } else {
-        await api.post('/inventory', {
-          id: pieceItemId,
-          branchId: rollSource.branchId,
-          code: rollSource.code,
-          subCode: itemSubCode(rollSource),
-          colorId: rollSource.colorId,
-          type: createAsRemnant ? 'REMANENT' : 'PIECE',
-          meters: createAsRemnant ? amount : undefined,
-          pieceLength: createAsRemnant ? undefined : amount,
-          quantity: createAsRemnant ? 1 : 1,
-          costPrice: rollSource.costPrice ? toNumber(rollSource.costPrice) : undefined,
-          qrCodeValue: pieceItemId,
-          qrCodeDataUrl,
-          pictureName: rollSource.id,
-          pictureDataUrl: rollSource.qrCodeDataUrl || undefined,
-          sourceItemId: rollSource.id,
-          conversionType: createAsRemnant ? 'ROLL_TO_REMANENT' : 'ROLL_TO_PIECE',
-        });
-      }
-
-      setSummary({
-        title: addedToExisting
-          ? t('itemConversion.summaryStockAdded')
-          : createAsRemnant
-            ? t('itemConversion.summaryRemnantCreated')
-            : t('itemConversion.summaryPieceCreated'),
-        sourceId: rollSource.id,
-        newItemId: pieceItemId,
-        qrCodeDataUrl,
-        details: addedToExisting
-          ? `Cut ${amount.toFixed(2)} meters and added 1 piece to existing item ${pieceItemId} (code ${rollSource.code}, color ${rollSource.color?.name || rollSource.colorId}).`
-          : createAsRemnant
-            ? `Cut ${amount.toFixed(2)} meters into a remnant (under 2 m rule).`
-            : `Cut ${amount.toFixed(2)} meters into one new piece with code ${rollSource.code} and color ${rollSource.color?.name || rollSource.colorId}.`,
-      });
-      const completedTasks = await completeCuttingTasksAfterRollToPiece({
-        rollItemId: rollSource.id,
-        branchId: rollSource.branchId,
-        code: rollSource.code,
-        colorName: rollSource.color?.name,
-        newPieceId: pieceItemId,
-      });
-      setMessage(
-        completedTasks.length > 0
-          ? `Roll-to-piece conversion complete. ${completedTasks.length} cutting task(s) marked done automatically.`
-          : addedToExisting
-            ? t('itemConversion.rollToPieceAddedExisting')
-            : createAsRemnant
-              ? t('itemConversion.rollToRemnantComplete')
-              : t('itemConversion.rollToPieceNewQr')
-      );
-      await loadItem(rollSource.id, setRollSource);
-    } catch (err: any) {
-      const body = err?.response?.data;
-      setError(body?.error ?? body?.message ?? err?.message ?? t('itemConversion.failedToCut'));
     } finally {
       setIsProcessing(false);
     }

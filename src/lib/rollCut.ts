@@ -94,19 +94,27 @@ export async function cutRollToPiece(
         },
       });
 
+      const sameLength = (item: (typeof familyPieces)[number]) => {
+        const packageKey = item.packageKey ?? '';
+        if (packageKey.startsWith('piece-')) return false;
+        return Math.abs(parseFloat(item.pieceLength.toString()) - cutMeters) < 0.001;
+      };
+
       existingPiece =
+        familyPieces.filter(sameLength).find((item) => item.quantity === 0) ??
+        familyPieces.find(sameLength) ??
         familyPieces
-          .filter((item) => {
-            const packageKey = item.packageKey ?? '';
-            if (packageKey.startsWith('piece-')) return false;
-            return Math.abs(parseFloat(item.pieceLength.toString()) - cutMeters) < 0.001;
-          })
-          .find((item) => item.quantity === 0) ??
-        familyPieces.find((item) => {
-          const packageKey = item.packageKey ?? '';
-          if (packageKey.startsWith('piece-')) return false;
-          return Math.abs(parseFloat(item.pieceLength.toString()) - cutMeters) < 0.001;
-        }) ??
+          .filter(
+            (item) =>
+              Math.abs(parseFloat(item.pieceLength.toString()) - cutMeters) < 0.001 &&
+              item.quantity === 0
+          )
+          .find((item) => !(item.packageKey ?? '').startsWith('piece-')) ??
+        familyPieces.find(
+          (item) =>
+            Math.abs(parseFloat(item.pieceLength.toString()) - cutMeters) < 0.001 &&
+            item.quantity === 0
+        ) ??
         null;
     }
 
@@ -130,6 +138,7 @@ export async function cutRollToPiece(
         });
         pieceInstanceKey = resolvePieceInstanceKey({
           items: familyPieces.map((item) => ({
+            id: item.id,
             branchId: item.branchId,
             code: item.code,
             subCode: parseFloat(item.subCode.toString()),
@@ -158,6 +167,29 @@ export async function cutRollToPiece(
         pieceLength: createAsRemnant ? undefined : cutMeters,
         instanceKey: pieceInstanceKey,
       });
+
+      if (uniquePiece && !createAsRemnant) {
+        let attempt = 0;
+        while (attempt < 50) {
+          const taken = await tx.inventoryItem.findUnique({ where: { id: pieceItemId } });
+          if (!taken || taken.isArchived) break;
+          attempt += 1;
+          const nextInstance = (pieceInstanceKey?.match(/^piece-(\d+)$/)?.[1]
+            ? Number(pieceInstanceKey.match(/^piece-(\d+)$/)![1])
+            : 0) + 1;
+          pieceInstanceKey = `piece-${nextInstance}`;
+          pieceItemId = buildInventoryItemId({
+            branchId: roll.branchId,
+            familyCode: roll.code,
+            subCode,
+            colorName: roll.color.name,
+            colorId: roll.colorId,
+            type: 'PIECE',
+            pieceLength: cutMeters,
+            instanceKey: pieceInstanceKey,
+          });
+        }
+      }
     }
 
     const remainingMeters = currentMeters - cutMeters;
