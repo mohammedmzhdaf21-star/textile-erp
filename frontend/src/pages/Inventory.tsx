@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import QrScanInput from '../components/QrScanInput';
 import api from '../lib/api';
+import { formatApiError } from '../lib/apiErrors';
 import { getCurrentUser } from '../lib/auth';
 import { formatCurrency, parsePriceInput, toPriceInput } from '../lib/currency';
 import {
@@ -98,14 +99,7 @@ const InventoryView: React.FC = () => {
         setItems(list as InventoryItemView[]);
       })
       .catch((err) => {
-        const status = err?.response?.status;
-        const body = err?.response?.data;
-        setError(
-          t('common.requestFailed', {
-            status: status ? t('common.requestFailedStatus', { status }) : '',
-            message: body?.error ?? body?.message ?? err?.message ?? t('inventory.failedToLoad'),
-          })
-        );
+        setError(formatApiError(err, t('inventory.failedToLoad')));
         console.error('Inventory load error:', err);
       })
       .finally(() => setLoading(false));
