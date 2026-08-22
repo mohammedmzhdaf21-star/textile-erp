@@ -8,6 +8,7 @@ import {
 } from "../lib/auth";
 import { dashboardSections, type DashboardSectionKey } from "../lib/dashboardSettings";
 import SignInApprovalsPanel from "../components/SignInApprovalsPanel";
+import RegistrationApprovalsPanel from "../components/RegistrationApprovalsPanel";
 
 type Branch = { id: string; name: string };
 
@@ -262,6 +263,7 @@ export default function EmployeeAccounts() {
         )}
       </div>
 
+      <RegistrationApprovalsPanel className="mb-6" />
       <SignInApprovalsPanel />
 
       {canEdit && (

@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import SignInApprovalsPanel from "../components/SignInApprovalsPanel";
+import RegistrationApprovalsPanel from "../components/RegistrationApprovalsPanel";
 import { getCurrentUser, logout } from "../lib/auth";
 
 export default function Dashboard() {
@@ -28,6 +29,7 @@ export default function Dashboard() {
           </button>
         </div>
 
+        <RegistrationApprovalsPanel className="mb-8" />
         <SignInApprovalsPanel className="mb-8" />
 
         <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-3">
