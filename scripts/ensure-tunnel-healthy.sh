@@ -29,7 +29,11 @@ case "$reason" in
     log "Cron recovery: local app down — restarting textile-erp + tunnel"
     tunnel_pm2_restart textile-erp "$LOG_FILE"
     sleep 12
-    tunnel_pm2_restart textile-tunnel "$LOG_FILE"
+    if [[ -x "$ROOT/scripts/restart-cloudflared-service.sh" ]]; then
+      bash "$ROOT/scripts/restart-cloudflared-service.sh" "$LOG_FILE" >>"$LOG_FILE" 2>&1 || true
+    elif tunnel_pm2_cmd describe textile-tunnel >/dev/null 2>&1; then
+      tunnel_pm2_restart textile-tunnel "$LOG_FILE"
+    fi
     ;;
   ha_zero|ha_degraded:*|public_down)
     log "Cron recovery: $reason — recovering tunnel"

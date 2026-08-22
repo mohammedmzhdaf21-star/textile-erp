@@ -30,12 +30,16 @@ while true; do
   case "$reason" in
     ok)
       ;;
-    local_down)
-      log "Local app down — restarting textile-erp + tunnel"
-      tunnel_pm2_restart textile-erp "$LOG_FILE"
-      sleep 12
+  local_down)
+    log "Local app down — restarting textile-erp + tunnel"
+    tunnel_pm2_restart textile-erp "$LOG_FILE"
+    sleep 12
+    if [[ -x "$ROOT/scripts/restart-cloudflared-service.sh" ]]; then
+      bash "$ROOT/scripts/restart-cloudflared-service.sh" "$LOG_FILE" >>"$LOG_FILE" 2>&1 || true
+    elif tunnel_pm2_cmd describe textile-tunnel >/dev/null 2>&1; then
       tunnel_pm2_restart textile-tunnel "$LOG_FILE"
-      ;;
+    fi
+    ;;
     ha_zero|ha_degraded:*|public_down)
       log "Tunnel needs recovery ($reason) — recovering tunnel"
       tunnel_recover "$ROOT" "$LOG_FILE" "$PUBLIC_HEALTH" || true

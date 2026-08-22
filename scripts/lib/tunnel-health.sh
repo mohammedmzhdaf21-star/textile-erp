@@ -119,7 +119,11 @@ tunnel_recover() {
 
   printf '%s %s\n' "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" "RECOVER: restarting tunnel (1033 prevention)" >>"$log_file"
 
-  tunnel_pm2_restart textile-tunnel "$log_file"
+  if [[ -x "$root/scripts/restart-cloudflared-service.sh" ]]; then
+    bash "$root/scripts/restart-cloudflared-service.sh" "$log_file" >>"$log_file" 2>&1 || true
+  elif tunnel_pm2_cmd describe textile-tunnel >/dev/null 2>&1; then
+    tunnel_pm2_restart textile-tunnel "$log_file"
+  fi
   sleep 10
 
   if ! tunnel_check_public "$public_health"; then
@@ -127,7 +131,11 @@ tunnel_recover() {
     if [[ -x "$root/scripts/setup-custom-domain.sh" ]]; then
       bash "$root/scripts/setup-custom-domain.sh" >>"$log_file" 2>&1 || true
     fi
-    tunnel_pm2_restart textile-tunnel "$log_file"
+    if [[ -x "$root/scripts/restart-cloudflared-service.sh" ]]; then
+      bash "$root/scripts/restart-cloudflared-service.sh" "$log_file" >>"$log_file" 2>&1 || true
+    elif tunnel_pm2_cmd describe textile-tunnel >/dev/null 2>&1; then
+      tunnel_pm2_restart textile-tunnel "$log_file"
+    fi
     sleep 10
   fi
 

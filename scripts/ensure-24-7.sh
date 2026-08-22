@@ -53,7 +53,7 @@ pm2_cmd save >>"$LOG_FILE" 2>&1 || true
 
 # Ensure official cloudflared service is running.
 if [[ -x /etc/init.d/cloudflared ]]; then
-  if ! pgrep -f "/usr/bin/cloudflared.*tunnel run" >/dev/null 2>&1; then
+  if ! pgrep -f "cloudflared.*tunnel run" >/dev/null 2>&1; then
     log "ensure-24-7: starting cloudflared system service"
     sudo /etc/init.d/cloudflared start >>"$LOG_FILE" 2>&1 || true
   fi
