@@ -106,6 +106,28 @@ const plainClothPricePerMeter = (linePriceShorthand: number, meters: number) =>
 
 type SalesInputSection = 'pieceScan' | 'rollScan' | 'plainCloth';
 
+type PieceCutSummary = {
+  soldPieceItemId: string;
+  soldQrCodeDataUrl: string;
+  soldType: 'PIECE' | 'REMANENT';
+  soldMeters: number;
+  remnantPieceItemId: string;
+  remnantQrCodeDataUrl: string;
+  remnantMeters: number;
+  familyCode: number;
+  subCode: number;
+  colorName?: string;
+  branchId: string;
+};
+
+type RollCutSummary = {
+  pieceItemId: string;
+  qrCodeDataUrl: string;
+  rollSourceId: string;
+  createAsRemnant: boolean;
+  pieceLength: number;
+};
+
 function SalesCollapsibleSection({
   title,
   expanded,
@@ -179,12 +201,8 @@ const SalesView: React.FC = () => {
   const [rollCutScan, setRollCutScan] = useState({ rollId: '', cutMeters: 2.25, price: 15 });
   const [rollCutSource, setRollCutSource] = useState<RollInventoryItem | null>(null);
   const [isCuttingRoll, setIsCuttingRoll] = useState(false);
-  const [cutSaleSummary, setCutSaleSummary] = useState<{
-    pieceItemId: string;
-    qrCodeDataUrl: string;
-    rollSourceId: string;
-    labelPrinted: boolean;
-  } | null>(null);
+  const [cutSaleSummary, setCutSaleSummary] = useState<RollCutSummary | null>(null);
+  const [pieceCutSummary, setPieceCutSummary] = useState<PieceCutSummary | null>(null);
   const [expandedSection, setExpandedSection] = useState<SalesInputSection | null>(null);
 
   const toggleSection = (section: SalesInputSection) => {
@@ -487,28 +505,21 @@ const SalesView: React.FC = () => {
             remnantId: cutResult.remnantPieceItemId,
             remnantMeters: (cutResult.remnantMeters ?? 0).toFixed(2),
           });
-          printPieceInventoryLabel({
-            t,
-            itemId: cutResult.remnantPieceItemId,
-            qrDataUrl: cutResult.remnantQrCodeDataUrl ?? '',
+          setPieceCutSummary({
+            soldPieceItemId: cutResult.soldPieceItemId,
+            soldQrCodeDataUrl: cutResult.soldQrCodeDataUrl ?? '',
+            soldType: cutResult.soldType,
+            soldMeters: cutResult.soldMeters,
+            remnantPieceItemId: cutResult.remnantPieceItemId,
+            remnantQrCodeDataUrl: cutResult.remnantQrCodeDataUrl ?? '',
+            remnantMeters: cutResult.remnantMeters ?? 0,
             familyCode: item.code ?? 0,
             subCode: Number(item.subCode ?? item.costPrice ?? 0),
-            type: 'REMANENT',
-            pieceLength: cutResult.remnantMeters,
             colorName: item.color?.name,
             branchId: item.branchId,
           });
-          printPieceInventoryLabel({
-            t,
-            itemId: cutResult.soldPieceItemId,
-            qrDataUrl: cutResult.soldQrCodeDataUrl ?? '',
-            familyCode: item.code ?? 0,
-            subCode: Number(item.subCode ?? item.costPrice ?? 0),
-            type: cutResult.soldType === 'REMANENT' ? 'REMANENT' : 'PIECE',
-            pieceLength: cutResult.soldMeters,
-            colorName: item.color?.name,
-            branchId: item.branchId,
-          });
+        } else {
+          setPieceCutSummary(null);
         }
       }
 
@@ -618,18 +629,6 @@ const SalesView: React.FC = () => {
     try {
       const result = await cutRollToPieceStock(rollCutSource, meters, { uniquePiece: true });
 
-      printPieceInventoryLabel({
-        t,
-        itemId: result.pieceItemId,
-        qrDataUrl: result.qrCodeDataUrl,
-        familyCode: rollCutSource.code,
-        subCode: itemSubCode(rollCutSource),
-        type: result.createAsRemnant ? 'REMANENT' : 'PIECE',
-        pieceLength: result.pieceLength ?? meters,
-        colorName: rollCutSource.color?.name,
-        branchId: rollCutSource.branchId,
-      });
-
       await completeCuttingTasksAfterRollToPiece({
         rollItemId: rollCutSource.id,
         branchId: rollCutSource.branchId,
@@ -669,7 +668,8 @@ const SalesView: React.FC = () => {
         pieceItemId: result.pieceItemId,
         qrCodeDataUrl: result.qrCodeDataUrl,
         rollSourceId: rollCutSource.id,
-        labelPrinted: true,
+        createAsRemnant: result.createAsRemnant,
+        pieceLength: result.pieceLength ?? meters,
       });
       setExpandedSection(null);
       setScanMessage(
@@ -692,7 +692,7 @@ const SalesView: React.FC = () => {
     }
   };
 
-  const reprintCutSaleLabel = () => {
+  const printRollCutLabel = () => {
     if (!cutSaleSummary || !rollCutSource) return;
     const printed = printPieceInventoryLabel({
       t,
@@ -700,12 +700,49 @@ const SalesView: React.FC = () => {
       qrDataUrl: cutSaleSummary.qrCodeDataUrl,
       familyCode: rollCutSource.code,
       subCode: itemSubCode(rollCutSource),
-      type: 'PIECE',
-      pieceLength: Number(rollCutScan.cutMeters),
+      type: cutSaleSummary.createAsRemnant ? 'REMANENT' : 'PIECE',
+      pieceLength: cutSaleSummary.pieceLength,
       colorName: rollCutSource.color?.name,
       branchId: rollCutSource.branchId,
     });
     if (!printed) alert(t('errors.allowPopups'));
+  };
+
+  const printPieceStoreRemnantLabel = () => {
+    if (!pieceCutSummary) return;
+    const printed = printPieceInventoryLabel({
+      t,
+      itemId: pieceCutSummary.remnantPieceItemId,
+      qrDataUrl: pieceCutSummary.remnantQrCodeDataUrl,
+      familyCode: pieceCutSummary.familyCode,
+      subCode: pieceCutSummary.subCode,
+      type: 'REMANENT',
+      pieceLength: pieceCutSummary.remnantMeters,
+      colorName: pieceCutSummary.colorName,
+      branchId: pieceCutSummary.branchId,
+    });
+    if (!printed) alert(t('errors.allowPopups'));
+  };
+
+  const printPieceCustomerLabel = () => {
+    if (!pieceCutSummary) return;
+    const printed = printPieceInventoryLabel({
+      t,
+      itemId: pieceCutSummary.soldPieceItemId,
+      qrDataUrl: pieceCutSummary.soldQrCodeDataUrl,
+      familyCode: pieceCutSummary.familyCode,
+      subCode: pieceCutSummary.subCode,
+      type: pieceCutSummary.soldType === 'REMANENT' ? 'REMANENT' : 'PIECE',
+      pieceLength: pieceCutSummary.soldMeters,
+      colorName: pieceCutSummary.colorName,
+      branchId: pieceCutSummary.branchId,
+    });
+    if (!printed) alert(t('errors.allowPopups'));
+  };
+
+  const printBothPieceCutLabels = () => {
+    printPieceStoreRemnantLabel();
+    printPieceCustomerLabel();
   };
 
   const createSale = async () => {
@@ -914,12 +951,14 @@ const SalesView: React.FC = () => {
                     setDetectedScanItem(null);
                     setScanMessage(null);
                     setMinimumPriceMessage(null);
+                    setPieceCutSummary(null);
                     setScanState((s) => ({ ...s, inventoryItemId: value }));
                   }}
                   onScan={(value) => {
                     setDetectedScanItem(null);
                     setScanMessage(null);
                     setMinimumPriceMessage(null);
+                    setPieceCutSummary(null);
                     setScanState((s) => ({ ...s, inventoryItemId: value }));
                     detectScanItemForCode(value, scanState.sourceBranch).catch((error) =>
                       handleScanLookupError(error, value)
@@ -1088,6 +1127,88 @@ const SalesView: React.FC = () => {
             >
               {t('sales.addPieceScannedItem')}
             </button>
+
+            {pieceCutSummary && (
+              <div className="mt-5 rounded-2xl border border-green-200 bg-white p-4">
+                <p className="text-sm font-semibold text-green-800">{t('sales.pieceSplitQrTitle')}</p>
+                <p className="mt-1 text-sm text-green-700">{t('sales.pieceSplitQrHint')}</p>
+                <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                  <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
+                    <p className="text-sm font-semibold text-black">{t('sales.storeRemnantLabel')}</p>
+                    <div className="mt-3 grid gap-3 sm:grid-cols-[140px_1fr]">
+                      <img
+                        src={pieceCutSummary.remnantQrCodeDataUrl}
+                        alt={t('itemConversion.qrAlt', { id: pieceCutSummary.remnantPieceItemId })}
+                        className="h-36 w-36 rounded-xl bg-white p-2"
+                      />
+                      <div className="text-sm">
+                        <div className="break-all text-gray-700">{pieceCutSummary.remnantPieceItemId}</div>
+                        <div className="mt-1 text-gray-500">
+                          {pieceCutSummary.remnantMeters.toFixed(2)} m
+                        </div>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={printPieceStoreRemnantLabel}
+                            className="rounded-xl bg-black px-4 py-2 text-sm font-semibold text-white"
+                          >
+                            {t('sales.printStoreRemnantLabel')}
+                          </button>
+                          <a
+                            className="inline-flex rounded-xl border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700"
+                            href={pieceCutSummary.remnantQrCodeDataUrl}
+                            download={`${pieceCutSummary.remnantPieceItemId}-qr.png`}
+                          >
+                            {t('itemConversion.downloadQr')}
+                          </a>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="rounded-2xl border border-magenta-200 bg-magenta-50/40 p-4">
+                    <p className="text-sm font-semibold text-black">{t('sales.customerPieceLabel')}</p>
+                    <div className="mt-3 grid gap-3 sm:grid-cols-[140px_1fr]">
+                      <img
+                        src={pieceCutSummary.soldQrCodeDataUrl}
+                        alt={t('itemConversion.qrAlt', { id: pieceCutSummary.soldPieceItemId })}
+                        className="h-36 w-36 rounded-xl bg-white p-2"
+                      />
+                      <div className="text-sm">
+                        <div className="break-all text-gray-700">{pieceCutSummary.soldPieceItemId}</div>
+                        <div className="mt-1 text-gray-500">
+                          {pieceCutSummary.soldMeters.toFixed(2)} m
+                        </div>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={printPieceCustomerLabel}
+                            className="rounded-xl bg-black px-4 py-2 text-sm font-semibold text-white"
+                          >
+                            {t('sales.printCustomerLabel')}
+                          </button>
+                          <a
+                            className="inline-flex rounded-xl border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700"
+                            href={pieceCutSummary.soldQrCodeDataUrl}
+                            download={`${pieceCutSummary.soldPieceItemId}-qr.png`}
+                          >
+                            {t('itemConversion.downloadQr')}
+                          </a>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div className="mt-4">
+                  <button
+                    type="button"
+                    onClick={printBothPieceCutLabels}
+                    className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-800"
+                  >
+                    {t('sales.printBothLabels')}
+                  </button>
+                </div>
+              </div>
+            )}
           </SalesCollapsibleSection>
 
           <SalesCollapsibleSection
@@ -1163,10 +1284,8 @@ const SalesView: React.FC = () => {
 
             {cutSaleSummary && (
               <div className="mt-5 rounded-2xl border border-green-200 bg-white p-4">
-                <p className="text-sm font-semibold text-green-800">{t('sales.saleRecordedForPiece')}</p>
-                {cutSaleSummary.labelPrinted && (
-                  <p className="mt-1 text-sm text-green-700">{t('sales.labelSentToPrinter')}</p>
-                )}
+                <p className="text-sm font-semibold text-green-800">{t('sales.rollCutQrTitle')}</p>
+                <p className="mt-1 text-sm text-green-700">{t('sales.rollCutQrHint')}</p>
                 <div className="mt-4 grid gap-4 md:grid-cols-[220px_1fr]">
                   <div className="rounded-2xl bg-gray-50 p-3">
                     <img
@@ -1183,10 +1302,10 @@ const SalesView: React.FC = () => {
                     <div className="mt-4 flex flex-wrap gap-2">
                       <button
                         type="button"
-                        onClick={reprintCutSaleLabel}
+                        onClick={printRollCutLabel}
                         className="rounded-xl bg-black px-4 py-2 text-sm font-semibold text-white"
                       >
-                        {t('itemInput.printLabel')}
+                        {t('sales.printCutPieceLabel')}
                       </button>
                       <a
                         className="inline-flex rounded-xl border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700"
