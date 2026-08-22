@@ -11,6 +11,7 @@ import {
   getInventoryStats,
 } from '../lib/inventory';
 import { cutRollToPiece } from '../lib/rollCut';
+import { cutPieceForSale } from '../lib/pieceCut';
 import {
   requireInventoryCreateAccess,
   requireInventoryUpdateAccess,
@@ -360,6 +361,77 @@ router.post('/roll-cut', async (req: Request, res: Response) => {
       msg.includes('positive') ||
       msg.includes('archived') ||
       msg.includes('Only rolls')
+    ) {
+      return res.status(msg.includes('modified by another') ? 409 : 400).json({ error: msg });
+    }
+    if (msg.includes('already exists')) {
+      return res.status(409).json({ error: msg });
+    }
+    return res.status(500).json({ error: msg });
+  }
+});
+
+// ============================================================
+// POST /api/inventory/piece-cut (split piece/remnant for partial sale)
+// ============================================================
+router.post('/piece-cut', async (req: Request, res: Response) => {
+  try {
+    const { pieceId, version, soldMeters, soldQrCodeDataUrl, remnantQrCodeDataUrl } = req.body;
+
+    if (!pieceId || typeof pieceId !== 'string') {
+      return res.status(400).json({ error: 'pieceId is required' });
+    }
+    if (version === undefined || version === null) {
+      return res.status(400).json({ error: 'version is required' });
+    }
+    if (soldMeters === undefined || soldMeters === null) {
+      return res.status(400).json({ error: 'soldMeters is required' });
+    }
+
+    const parsedVersion = parseInt(String(version), 10);
+    const parsedSoldMeters = parseFloat(String(soldMeters));
+    if (!Number.isFinite(parsedVersion) || parsedVersion < 0) {
+      return res.status(400).json({ error: 'version must be a non-negative integer' });
+    }
+    if (!Number.isFinite(parsedSoldMeters) || parsedSoldMeters <= 0) {
+      return res.status(400).json({ error: 'soldMeters must be a positive number' });
+    }
+
+    const result = await cutPieceForSale(
+      {
+        pieceId: pieceId.trim(),
+        version: parsedVersion,
+        soldMeters: parsedSoldMeters,
+        soldQrCodeDataUrl:
+          typeof soldQrCodeDataUrl === 'string' && soldQrCodeDataUrl.trim()
+            ? soldQrCodeDataUrl.trim()
+            : undefined,
+        remnantQrCodeDataUrl:
+          typeof remnantQrCodeDataUrl === 'string' && remnantQrCodeDataUrl.trim()
+            ? remnantQrCodeDataUrl.trim()
+            : undefined,
+      },
+      req.user?.userId,
+      req.user?.email
+    );
+
+    return res.status(201).json({
+      message: 'Piece cut completed',
+      ...result,
+    });
+  } catch (error: any) {
+    const msg = error.message || 'Failed to cut piece';
+    if (msg.includes('not found')) {
+      return res.status(404).json({ error: msg });
+    }
+    if (
+      msg.includes('modified by another') ||
+      msg.includes('exceeds') ||
+      msg.includes('positive') ||
+      msg.includes('archived') ||
+      msg.includes('Only pieces') ||
+      msg.includes('packages') ||
+      msg.includes('available')
     ) {
       return res.status(msg.includes('modified by another') ? 409 : 400).json({ error: msg });
     }

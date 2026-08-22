@@ -8,12 +8,14 @@ import { getCachedItemMinimumPrice } from '../lib/commissionSettingsApi';
 import { formatCurrency, parsePriceInput, toPriceInputNumber } from '../lib/currency';
 import { fetchPlainClothTypes, type PlainClothType } from '../lib/plainClothApi';
 import type { SalePaymentChannel } from '../lib/paymentMethod';
+import {
+  availableMetersForScanItem,
+  cutPieceForSale,
+} from '../lib/pieceCut';
 import { completeCuttingTasksAfterRollToPiece, maybeCreateCuttingTaskAfterPieceSale } from '../lib/cuttingTasks';
-import { sellCutPiece } from '../lib/cutAndSell';
 import { getColorLabel } from '../lib/colorLabels';
 import { resolveInventoryItem } from '../lib/inventoryLookup';
 import { BRANCH_ID_BY_CODE, resolveBranchId } from '../lib/inventoryCodes';
-import { isBelowRemnantThreshold } from '../lib/inventoryRules';
 import { printPieceInventoryLabel } from '../lib/pieceLabel';
 import {
   cutRollToPieceStock,
@@ -50,6 +52,8 @@ type InventorySaleLine = {
   packagesSold?: number;
   packageComponentsSold?: PackageComponentSold[];
   packageSummary?: string;
+  qrCodeValue?: string;
+  qrCodeDataUrl?: string;
 };
 
 type PlainClothSaleLine = {
@@ -76,23 +80,14 @@ type InventoryLookupItem = {
   isPiecePackage?: boolean;
   packageComponents?: PackageComponent[];
   packageComponentStock?: Record<string, number>;
+  version?: number;
 };
 
-import type { TFunction } from 'i18next';
-
 const branchOptions = ['A', 'B', 'C', 'E', 'F'];
-const soldAsUnitForItem = (item: InventoryLookupItem): 'METER' | 'PIECE' =>
-  item.type === 'PIECE' ? 'PIECE' : 'METER';
-
-const amountLabelForUnit = (
-  t: TFunction,
-  unit?: 'METER' | 'PIECE',
-  isPiecePackage?: boolean,
-  mode?: PackageSaleMode
-) => {
-  if (isPiecePackage && mode === 'FULL') return t('sales.packages');
-  if (isPiecePackage && mode === 'PARTIAL') return t('sales.selectedPieces');
-  return unit === 'PIECE' ? t('sales.quantityPieces') : t('common.meters');
+const soldAsUnitForItem = (item: InventoryLookupItem): 'METER' | 'PIECE' => {
+  if (item.type === 'PIECE' && !item.isPiecePackage) return 'PIECE';
+  if (item.type === 'REMANENT') return 'METER';
+  return item.type === 'PIECE' ? 'PIECE' : 'METER';
 };
 
 const buildInitialPackageSelection = (components: PackageComponent[]): PackageComponentSold[] =>
@@ -109,7 +104,7 @@ const lineUnitPrice = (linePriceShorthand: number, quantity: number) => {
 const plainClothPricePerMeter = (linePriceShorthand: number, meters: number) =>
   lineUnitPrice(linePriceShorthand, meters);
 
-type SalesInputSection = 'scan' | 'rollCut' | 'plainCloth';
+type SalesInputSection = 'pieceScan' | 'rollScan' | 'plainCloth';
 
 function SalesCollapsibleSection({
   title,
@@ -168,7 +163,12 @@ const SalesView: React.FC = () => {
   const [amountPaid, setAmountPaid] = useState('0');
   const [plainCloth, setPlainCloth] = useState({ clothName: '', meters: 1, linePrice: 0 });
   const [plainClothTypes, setPlainClothTypes] = useState<PlainClothType[]>([]);
-  const [scanState, setScanState] = useState({ inventoryItemId: '', sourceBranch: branch, amount: 1, linePrice: 15 });
+  const [scanState, setScanState] = useState({
+    inventoryItemId: '',
+    sourceBranch: branch,
+    soldMeters: 1,
+    linePrice: 15,
+  });
   const [detectedScanItem, setDetectedScanItem] = useState<InventoryLookupItem | null>(null);
   const [packageSaleMode, setPackageSaleMode] = useState<PackageSaleMode>('FULL');
   const [packageComponentsSold, setPackageComponentsSold] = useState<PackageComponentSold[]>([]);
@@ -289,19 +289,31 @@ const SalesView: React.FC = () => {
 
   const detectScanItemForCode = async (inventoryItemId: string, sourceBranch: string) => {
     const item = await resolveInventoryItem<InventoryLookupItem>(inventoryItemId, sourceBranch, BRANCH_ID_BY_CODE);
+    if (item && item.type === 'ROLL') {
+      setDetectedScanItem(null);
+      setScanMessage(t('sales.onlyPieceOrRemnant'));
+      return null;
+    }
+    if (item && item.type !== 'PIECE' && item.type !== 'REMANENT') {
+      setDetectedScanItem(null);
+      setScanMessage(t('sales.onlyPieceOrRemnant'));
+      return null;
+    }
     setDetectedScanItem(item);
     if (item) {
+      const availableMeters = availableMetersForScanItem(item);
       const unit = soldAsUnitForItem(item);
       const components = parsePackageComponents(item.packageComponents);
       const savedPrice = getCachedItemMinimumPrice(item.id);
       if (savedPrice) {
         setScanState((current) => {
-          const amount = Math.max(current.amount || 1, 1);
+          const meters = availableMeters > 0 ? availableMeters : Math.max(current.soldMeters || 1, 0.01);
           return {
             ...current,
+            soldMeters: meters,
             linePrice: Math.max(
               current.linePrice,
-              toPriceInputNumber(savedPrice.minimumPrice * amount)
+              toPriceInputNumber(savedPrice.minimumPrice * (unit === 'PIECE' ? 1 : meters))
             ),
           };
         });
@@ -314,6 +326,9 @@ const SalesView: React.FC = () => {
         );
       } else {
         setMinimumPriceMessage(null);
+        if (availableMeters > 0) {
+          setScanState((current) => ({ ...current, soldMeters: availableMeters }));
+        }
       }
 
       if (item.isPiecePackage && components.length > 0) {
@@ -389,28 +404,39 @@ const SalesView: React.FC = () => {
     try {
       const item = detectedScanItem?.id === inventoryItemId ? detectedScanItem : await detectScanItem();
       if (!item) return;
+      if (item.type === 'ROLL') {
+        return alert(t('sales.onlyPieceOrRemnant'));
+      }
       if (item.branchId && item.branchId !== resolveBranchId(branch)) {
         return alert(t('sales.inventoryBranchMismatch', { saleBranch: branch, itemBranch: scanState.sourceBranch }));
       }
-      const soldAsUnit = soldAsUnitForItem(item);
+
       const components = parsePackageComponents(item.packageComponents);
       const isPiecePackage = Boolean(item.isPiecePackage && components.length > 0);
-
-      let quantity = soldAsUnit === 'PIECE' ? Math.floor(scanState.amount) : scanState.amount;
       const linePrice = scanState.linePrice;
       let description = t('sales.descriptionInventory', { type: item.type, branch: scanState.sourceBranch });
       let packageSummary = '';
       let linePackageMode: PackageSaleMode | undefined;
       let packagesSold: number | undefined;
       let componentsSold: PackageComponentSold[] | undefined;
+      let cartItemId = item.id;
+      let soldAsUnit: 'METER' | 'PIECE' = soldAsUnitForItem(item);
+      let quantity = 1;
+      let qrCodeValue: string | undefined;
+      let qrCodeDataUrl: string | undefined;
+      let splitMessage: string | null = null;
 
       if (isPiecePackage) {
         if (packageSaleMode === 'FULL') {
-          packagesSold = Math.floor(scanState.amount);
+          packagesSold = Math.floor(scanState.soldMeters);
           if (packagesSold <= 0) return alert(t('sales.enterOnePackage'));
           quantity = packagesSold;
+          soldAsUnit = 'PIECE';
           linePackageMode = 'FULL';
-          packageSummary = t('sales.fullPackagesSummary', { count: packagesSold, summary: formatPackageSummary(components) });
+          packageSummary = t('sales.fullPackagesSummary', {
+            count: packagesSold,
+            summary: formatPackageSummary(components),
+          });
           description = t('sales.descriptionPackage', { branch: scanState.sourceBranch });
         } else {
           componentsSold = packageComponentsSold.filter((component) => component.quantity > 0);
@@ -418,19 +444,79 @@ const SalesView: React.FC = () => {
             return alert(t('sales.selectPackagePiece'));
           }
           quantity = 1;
+          soldAsUnit = 'PIECE';
           linePackageMode = 'PARTIAL';
           packageSummary = formatPackageComponentsSold(componentsSold);
           description = t('sales.descriptionPartial', { branch: scanState.sourceBranch });
         }
-      } else if (quantity <= 0) {
-        return alert(t('sales.enterQuantityOrMeters'));
+      } else {
+        const availableMeters = availableMetersForScanItem(item);
+        const soldMeters = Number(scanState.soldMeters);
+        if (!Number.isFinite(soldMeters) || soldMeters <= 0) {
+          return alert(t('sales.enterQuantityOrMeters'));
+        }
+        if (soldMeters > availableMeters + 0.001) {
+          return alert(t('sales.soldMetersExceedsAvailable', { available: availableMeters.toFixed(2) }));
+        }
+
+        if (item.version === undefined) {
+          const refreshed = await api.get(`/inventory/${encodeURIComponent(item.id)}`);
+          item.version = (refreshed.data as InventoryLookupItem).version;
+        }
+
+        const cutResult = await cutPieceForSale({
+          pieceId: item.id,
+          version: item.version ?? 0,
+          soldMeters,
+        });
+
+        cartItemId = cutResult.soldPieceItemId;
+        qrCodeValue = cutResult.soldQrCodeValue;
+        qrCodeDataUrl = cutResult.soldQrCodeDataUrl ?? undefined;
+        soldAsUnit = cutResult.soldType === 'REMANENT' ? 'METER' : 'PIECE';
+        quantity = cutResult.soldType === 'REMANENT' ? cutResult.soldMeters : 1;
+        description = t('sales.descriptionPieceCut', {
+          type: cutResult.soldType,
+          meters: cutResult.soldMeters.toFixed(2),
+          branch: scanState.sourceBranch,
+        });
+
+        if (cutResult.split && cutResult.remnantPieceItemId) {
+          splitMessage = t('sales.pieceSplitCreated', {
+            soldId: cutResult.soldPieceItemId,
+            remnantId: cutResult.remnantPieceItemId,
+            remnantMeters: (cutResult.remnantMeters ?? 0).toFixed(2),
+          });
+          printPieceInventoryLabel({
+            t,
+            itemId: cutResult.remnantPieceItemId,
+            qrDataUrl: cutResult.remnantQrCodeDataUrl ?? '',
+            familyCode: item.code ?? 0,
+            subCode: Number(item.subCode ?? item.costPrice ?? 0),
+            type: 'REMANENT',
+            pieceLength: cutResult.remnantMeters,
+            colorName: item.color?.name,
+            branchId: item.branchId,
+          });
+          printPieceInventoryLabel({
+            t,
+            itemId: cutResult.soldPieceItemId,
+            qrDataUrl: cutResult.soldQrCodeDataUrl ?? '',
+            familyCode: item.code ?? 0,
+            subCode: Number(item.subCode ?? item.costPrice ?? 0),
+            type: cutResult.soldType === 'REMANENT' ? 'REMANENT' : 'PIECE',
+            pieceLength: cutResult.soldMeters,
+            colorName: item.color?.name,
+            branchId: item.branchId,
+          });
+        }
       }
 
       setCart((current) => [
         ...current,
         {
           type: 'inventory',
-          inventoryItemId: item.id,
+          inventoryItemId: cartItemId,
           sourceBranch: scanState.sourceBranch,
           description,
           colorId: item.colorId,
@@ -445,13 +531,15 @@ const SalesView: React.FC = () => {
           packagesSold,
           packageComponentsSold: componentsSold,
           packageSummary,
+          qrCodeValue,
+          qrCodeDataUrl,
         },
       ]);
-      setScanState((current) => ({ ...current, inventoryItemId: '', amount: 1 }));
+      setScanState((current) => ({ ...current, inventoryItemId: '', soldMeters: 1 }));
       setDetectedScanItem(null);
       setPackageSaleMode('FULL');
       setPackageComponentsSold([]);
-      setScanMessage(null);
+      setScanMessage(splitMessage);
       setMinimumPriceMessage(null);
       setExpandedSection(null);
     } catch (error: any) {
@@ -483,13 +571,13 @@ const SalesView: React.FC = () => {
     try {
       const response = await api.get(`/inventory/${encodeURIComponent(rollId)}`);
       const item = response.data as RollInventoryItem;
-      if (item.type !== 'ROLL' && item.type !== 'REMANENT') {
-        return alert(t('itemConversion.onlyRollsRemnants'));
+      if (item.type !== 'ROLL') {
+        return alert(t('sales.onlyRollItems'));
       }
       setRollCutSource(item);
       setRollCutScan((current) => ({
         ...current,
-        price: itemSubCode(item),
+        price: current.price > 0 ? current.price : 0,
       }));
       setCutSaleSummary(null);
     } catch (error: any) {
@@ -504,27 +592,20 @@ const SalesView: React.FC = () => {
     }
   };
 
-  const cutRollSellAndPrint = async () => {
+  const cutRollAndAddToCart = async () => {
     if (!rollCutSource) {
       return alert(t('itemConversion.loadRollFirst'));
     }
+    if (rollCutSource.branchId !== resolveBranchId(branch)) {
+      return alert(t('sales.inventoryBranchMismatch', { saleBranch: branch, itemBranch: branch }));
+    }
     const meters = Number(rollCutScan.cutMeters);
-    const price = Number(rollCutScan.price);
+    const totalPrice = Number(rollCutScan.price);
     if (!Number.isFinite(meters) || meters <= 0) {
       return alert(t('itemConversion.enterValidMetersToCut'));
     }
-    if (isBelowRemnantThreshold(meters)) {
-      return alert(t('sales.cutOnlyPieces'));
-    }
-    if (!Number.isFinite(price) || price <= 0) {
+    if (!Number.isFinite(totalPrice) || totalPrice <= 0) {
       return alert(t('sales.enterValidPrice'));
-    }
-    if (!customerName.trim() || !customerPhone.trim()) {
-      return alert(t('sales.provideCustomer'));
-    }
-    const currentUser = getCurrentUser();
-    if (!currentUser) {
-      return alert(t('sales.mustBeLoggedIn'));
     }
     if (meters > Number(rollCutSource.meters ?? 0)) {
       return alert(t('itemConversion.cutExceedsRoll'));
@@ -536,27 +617,15 @@ const SalesView: React.FC = () => {
 
     try {
       const result = await cutRollToPieceStock(rollCutSource, meters, { uniquePiece: true });
-      await sellCutPiece({
-        pieceItemId: result.pieceItemId,
-        colorId: rollCutSource.colorId,
-        branchId: rollCutSource.branchId,
-        employeeId: currentUser.id,
-        customerName: customerName.trim(),
-        customerPhone: customerPhone.trim(),
-        soldPrice: parsePriceInput(price),
-        rollSourceId: rollCutSource.id,
-        qrCodeValue: result.pieceItemId,
-        qrCodeDataUrl: result.qrCodeDataUrl,
-      });
 
-      const labelPrinted = printPieceInventoryLabel({
+      printPieceInventoryLabel({
         t,
         itemId: result.pieceItemId,
         qrDataUrl: result.qrCodeDataUrl,
         familyCode: rollCutSource.code,
         subCode: itemSubCode(rollCutSource),
-        type: 'PIECE',
-        pieceLength: result.pieceLength,
+        type: result.createAsRemnant ? 'REMANENT' : 'PIECE',
+        pieceLength: result.pieceLength ?? meters,
         colorName: rollCutSource.color?.name,
         branchId: rollCutSource.branchId,
       });
@@ -569,6 +638,29 @@ const SalesView: React.FC = () => {
         newPieceId: result.pieceItemId,
       });
 
+      setCart((current) => [
+        ...current,
+        {
+          type: 'inventory',
+          inventoryItemId: result.pieceItemId,
+          sourceBranch: branch,
+          description: t('sales.descriptionRollCut', {
+            meters: meters.toFixed(2),
+            branch,
+            rollId: rollCutSource.id,
+          }),
+          colorId: rollCutSource.colorId,
+          soldAsUnit: result.createAsRemnant ? 'METER' : 'PIECE',
+          quantity: result.createAsRemnant ? meters : 1,
+          linePrice: totalPrice,
+          sourceItemId: rollCutSource.id,
+          code: rollCutSource.code,
+          colorName: rollCutSource.color?.name,
+          qrCodeValue: result.pieceItemId,
+          qrCodeDataUrl: result.qrCodeDataUrl,
+        },
+      ]);
+
       const refreshed = result.roll
         ? ({ ...rollCutSource, ...result.roll } as RollInventoryItem)
         : ((await api.get(`/inventory/${encodeURIComponent(rollCutSource.id)}`)).data as RollInventoryItem);
@@ -577,10 +669,14 @@ const SalesView: React.FC = () => {
         pieceItemId: result.pieceItemId,
         qrCodeDataUrl: result.qrCodeDataUrl,
         rollSourceId: rollCutSource.id,
-        labelPrinted,
+        labelPrinted: true,
       });
-      setSuccessMessage(
-        labelPrinted ? t('sales.cutSellPrintComplete') : t('sales.cutSellComplete')
+      setExpandedSection(null);
+      setScanMessage(
+        t('sales.rollCutAddedToCart', {
+          pieceId: result.pieceItemId,
+          meters: meters.toFixed(2),
+        })
       );
     } catch (error: any) {
       const status = error?.response?.status;
@@ -662,6 +758,8 @@ const SalesView: React.FC = () => {
               payload.packageComponentsSold = line.packageComponentsSold ?? [];
             }
           }
+          if (line.qrCodeValue) payload.qrCodeValue = line.qrCodeValue;
+          if (line.qrCodeDataUrl) payload.qrCodeDataUrl = line.qrCodeDataUrl;
           resolvedItems.push(payload);
         } else {
           const soldPricePerMeter = plainClothPricePerMeter(line.linePrice, line.meters);
@@ -799,12 +897,12 @@ const SalesView: React.FC = () => {
       <div className="mt-8 grid gap-6 lg:grid-cols-[1.4fr_1fr]">
         <div className="space-y-6">
           <SalesCollapsibleSection
-            title={t('sales.inventoryScanTitle')}
-            expanded={expandedSection === 'scan'}
-            onToggle={() => toggleSection('scan')}
+            title={t('sales.pieceScanTitle')}
+            expanded={expandedSection === 'pieceScan'}
+            onToggle={() => toggleSection('pieceScan')}
           >
             <p className="text-sm text-gray-500 mb-4">
-              {t('sales.inventoryScanDescription')}
+              {t('sales.pieceScanDescription')}
             </p>
             <div className="grid gap-3 sm:grid-cols-4">
               <div>
@@ -853,12 +951,11 @@ const SalesView: React.FC = () => {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">
-                  {amountLabelForUnit(
-                    t,
-                    detectedScanItem ? soldAsUnitForItem(detectedScanItem) : undefined,
-                    detectedScanItem?.isPiecePackage,
-                    packageSaleMode
-                  )}
+                  {detectedScanItem?.isPiecePackage && packageSaleMode === 'FULL'
+                    ? t('sales.packages')
+                    : detectedScanItem?.isPiecePackage && packageSaleMode === 'PARTIAL'
+                    ? t('sales.selectedPieces')
+                    : t('sales.metersToSell')}
                 </label>
                 {detectedScanItem?.isPiecePackage && packageSaleMode === 'PARTIAL' ? (
                   <div className="mt-1 rounded-xl border border-gray-300 bg-gray-50 px-3 py-2 text-sm text-gray-700">
@@ -867,19 +964,34 @@ const SalesView: React.FC = () => {
                 ) : (
                   <input
                     type="number"
-                    min={detectedScanItem && soldAsUnitForItem(detectedScanItem) === 'PIECE' ? '1' : '0.01'}
-                    step={detectedScanItem && soldAsUnitForItem(detectedScanItem) === 'PIECE' ? '1' : '0.01'}
-                    value={scanState.amount}
-                    onChange={(e) => setScanState((s) => ({ ...s, amount: Number(e.target.value) }))}
+                    min={
+                      detectedScanItem?.isPiecePackage
+                        ? '1'
+                        : detectedScanItem
+                        ? '0.01'
+                        : '0.01'
+                    }
+                    step={detectedScanItem?.isPiecePackage ? '1' : '0.01'}
+                    value={scanState.soldMeters}
+                    onChange={(e) =>
+                      setScanState((s) => ({ ...s, soldMeters: Number(e.target.value) }))
+                    }
                     className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
                   />
                 )}
+                {detectedScanItem &&
+                  !detectedScanItem.isPiecePackage &&
+                  availableMetersForScanItem(detectedScanItem) > 0 && (
+                    <p className="mt-1 text-xs text-gray-500">
+                      {t('sales.availableMeters', {
+                        meters: availableMetersForScanItem(detectedScanItem).toFixed(2),
+                      })}
+                    </p>
+                  )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">
-                  {detectedScanItem?.isPiecePackage && packageSaleMode === 'PARTIAL'
-                    ? t('sales.salePriceTotal')
-                    : t('sales.scanLinePrice')}
+                  {t('sales.salePriceTotal')}
                 </label>
                 <input
                   type="number"
@@ -974,17 +1086,17 @@ const SalesView: React.FC = () => {
               className="btn-primary mt-4"
               onClick={addInventoryLine}
             >
-              {t('sales.addScannedItem')}
+              {t('sales.addPieceScannedItem')}
             </button>
           </SalesCollapsibleSection>
 
           <SalesCollapsibleSection
-            title={t('sales.cutFromRollTitle')}
-            expanded={expandedSection === 'rollCut'}
-            onToggle={() => toggleSection('rollCut')}
+            title={t('sales.rollScanTitle')}
+            expanded={expandedSection === 'rollScan'}
+            onToggle={() => toggleSection('rollScan')}
             accent
           >
-            <p className="mb-4 text-sm text-gray-600">{t('sales.cutFromRollDescription')}</p>
+            <p className="mb-4 text-sm text-gray-600">{t('sales.rollScanDescription')}</p>
             <div className="grid gap-3 sm:grid-cols-4">
               <div className="sm:col-span-2">
                 <label className="block text-sm font-medium text-gray-700">{t('sales.rollId')}</label>
@@ -1017,7 +1129,7 @@ const SalesView: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700">{t('sales.metersToCut')}</label>
                 <input
                   type="number"
-                  min="2"
+                  min="0.01"
                   step="0.01"
                   value={rollCutScan.cutMeters}
                   onChange={(e) =>
@@ -1027,7 +1139,7 @@ const SalesView: React.FC = () => {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700">{t('sales.unitPrice')}</label>
+                <label className="block text-sm font-medium text-gray-700">{t('sales.salePriceTotal')}</label>
                 <input
                   type="number"
                   min="0.01"
@@ -1043,10 +1155,10 @@ const SalesView: React.FC = () => {
             <button
               type="button"
               className="btn-primary mt-4"
-              onClick={cutRollSellAndPrint}
+              onClick={cutRollAndAddToCart}
               disabled={isCuttingRoll}
             >
-              {isCuttingRoll ? t('sales.cuttingRoll') : t('sales.cutSellAndPrint')}
+              {isCuttingRoll ? t('sales.cuttingRoll') : t('sales.cutRollAndAddToCart')}
             </button>
 
             {cutSaleSummary && (

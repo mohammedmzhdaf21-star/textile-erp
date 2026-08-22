@@ -1,4 +1,5 @@
 import { Prisma } from '@prisma/client';
+import QRCode from 'qrcode';
 import { prisma } from './prisma';
 import {
   buildInventoryItemId,
@@ -180,7 +181,13 @@ export async function cutRollToPiece(
     }
 
     const qrCodeValue = pieceItemId;
-    const qrCodeDataUrl = input.qrCodeDataUrl ?? null;
+    const qrCodeDataUrl =
+      input.qrCodeDataUrl ??
+      (await QRCode.toDataURL(pieceItemId, {
+        errorCorrectionLevel: 'M',
+        margin: 1,
+        width: 220,
+      }));
 
     if (addedToExisting && existingPiece) {
       const pieceUpdate = await tx.inventoryItem.updateMany({
