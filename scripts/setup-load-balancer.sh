@@ -115,12 +115,8 @@ created = api("POST", f"/accounts/{account}/load_balancers/monitors", {
     "type": "https",
     "method": "GET",
     "path": "/health",
-    "port": 443,
     "expected_codes": "200",
     "description": desc,
-    "interval": 60,
-    "timeout": 5,
-    "retries": 2,
     "follow_redirects": True,
     "header": {"Host": [host]},
 })
@@ -164,7 +160,7 @@ payload = {
     "enabled": True,
     "monitor": monitor_id,
     "minimum_origins": 1,
-    "check_regions": ["WNAM", "ENAM", "WEUR", "EEUR"],
+    "check_regions": ["WNAM"],
     "origins": [
         {
             "name": "textile-erp-primary",
