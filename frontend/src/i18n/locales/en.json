@@ -90,6 +90,8 @@
     "requestFailedStatus": " (status {{status}})",
     "notFound": "Not found{{status}}: {{message}}",
     "notFoundStatus": " ({{status}})",
+    "serverUnavailable": "Server temporarily unavailable{{status}}. Please try again. {{message}}",
+    "serverUnavailableHint": "The server could not be reached. Wait a moment and scan again.",
     "sale": "sale",
     "sales": "sales",
     "cashImpact": "Cash impact",

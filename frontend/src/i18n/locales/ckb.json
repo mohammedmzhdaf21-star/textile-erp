@@ -90,6 +90,8 @@
     "requestFailedStatus": " (دۆخ {{status}})",
     "notFound": "نەدۆزرایەوە{{status}}: {{message}}",
     "notFoundStatus": " ({{status}})",
+    "serverUnavailable": "سێرڤەر بۆ ماوەیەک بەردەست نییە{{status}}. تکایە دووبارە هەوڵ بدەرەوە. {{message}}",
+    "serverUnavailableHint": "نەتوانرا پەیوەندی بە سێرڤەرەوە بکرێت. کەمێک چاوەڕوان بکە و دووبارە سکان بکە.",
     "sale": "فرۆشتن",
     "sales": "فرۆشتن",
     "cashImpact": "کاریگەری نەقد",
