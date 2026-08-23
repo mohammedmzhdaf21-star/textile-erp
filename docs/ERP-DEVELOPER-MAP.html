@@ -1,0 +1,865 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>Textile ERP — Complete Developer Map</title>
+<style>
+  @page { size: A4; margin: 18mm 15mm; }
+  body { font-family: 'Segoe UI', Helvetica, Arial, sans-serif; font-size: 10pt; line-height: 1.45; color: #1a1a1a; max-width: 100%; }
+  h1 { font-size: 22pt; border-bottom: 3px solid #863bff; padding-bottom: 8px; margin-top: 0; page-break-after: avoid; }
+  h2 { font-size: 14pt; color: #863bff; margin-top: 24px; border-bottom: 1px solid #ddd; padding-bottom: 4px; page-break-after: avoid; }
+  h3 { font-size: 11pt; margin-top: 16px; page-break-after: avoid; }
+  h4 { font-size: 10pt; margin-top: 12px; color: #444; }
+  table { width: 100%; border-collapse: collapse; margin: 8px 0 16px; font-size: 9pt; page-break-inside: avoid; }
+  th, td { border: 1px solid #ccc; padding: 5px 7px; text-align: left; vertical-align: top; }
+  th { background: #f3eeff; font-weight: 600; }
+  tr:nth-child(even) { background: #fafafa; }
+  code, .mono { font-family: 'Consolas', 'Courier New', monospace; font-size: 8.5pt; background: #f4f4f4; padding: 1px 4px; border-radius: 3px; }
+  pre { background: #f8f8f8; border: 1px solid #ddd; padding: 10px; font-size: 8pt; overflow-x: auto; white-space: pre-wrap; page-break-inside: avoid; }
+  .toc { background: #faf8ff; border: 1px solid #ddd; padding: 12px 16px; margin: 16px 0; }
+  .toc ol { margin: 0; padding-left: 20px; }
+  .toc li { margin: 3px 0; }
+  .badge { display: inline-block; padding: 1px 6px; border-radius: 4px; font-size: 8pt; font-weight: 600; }
+  .badge-admin { background: #fee; color: #900; }
+  .badge-mgr { background: #fef3cd; color: #856404; }
+  .badge-all { background: #d4edda; color: #155724; }
+  .badge-local { background: #e2e3e5; color: #383d41; }
+  .note { background: #fff8e1; border-left: 4px solid #ffc107; padding: 8px 12px; margin: 10px 0; font-size: 9pt; }
+  .section-box { border: 1px solid #ddd; border-radius: 6px; padding: 10px 14px; margin: 10px 0; page-break-inside: avoid; }
+  .cover { text-align: center; padding: 60px 0 40px; page-break-after: always; }
+  .cover h1 { border: none; font-size: 28pt; }
+  .cover p { color: #666; font-size: 11pt; }
+  .tree { font-family: monospace; font-size: 8.5pt; line-height: 1.6; }
+  ul.compact { margin: 4px 0; padding-left: 18px; }
+  ul.compact li { margin: 2px 0; }
+  .page-break { page-break-before: always; }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <h1>Textile ERP</h1>
+  <p><strong>Complete Developer Map</strong></p>
+  <p>Frontend navigation, UI controls, API endpoints, database models, and cross-section data flows</p>
+  <p>Repository: textile-erp &nbsp;|&nbsp; Production: https://erp.kutalimzhda.com</p>
+  <p>Generated: August 22, 2026</p>
+</div>
+
+<h1>Table of Contents</h1>
+<div class="toc">
+<ol>
+  <li>Application Overview &amp; Architecture</li>
+  <li>Technology Stack</li>
+  <li>Authentication, Roles &amp; Route Guards</li>
+  <li>Sidebar Navigation (Complete Tree)</li>
+  <li>Global Shell Components</li>
+  <li>Page-by-Page Reference (All Screens)</li>
+  <li>Drill-Down &amp; Cross-Navigation Map</li>
+  <li>Backend API Reference (All Endpoints)</li>
+  <li>Database Schema &amp; Entity Relationships</li>
+  <li>Section-to-Section Data Flow</li>
+  <li>Client-Only vs Server-Backed Features</li>
+  <li>Shared Libraries &amp; Key Files</li>
+</ol>
+</div>
+
+<h1>1. Application Overview &amp; Architecture</h1>
+<p>Textile ERP is a full-stack application for a textile business: inventory (rolls, pieces, remanents), point-of-sale, commissions, branch tasks, employee management, and audit history. The React SPA talks to an Express REST API backed by PostgreSQL via Prisma.</p>
+
+<pre>
+┌─────────────────────────────────────────────────────────────────────────┐
+│  Browser (React + Vite SPA)          frontend/src/                      │
+│  ├── Sidebar navigation              components/Sidebar.tsx             │
+│  ├── Protected routes                App.tsx + ProtectedLayout          │
+│  ├── Pages (22 screens)              pages/*.tsx                        │
+│  └── API client (axios)              lib/api.ts  →  baseURL: /api       │
+└───────────────────────────────┬─────────────────────────────────────────┘
+                                │ HTTPS (Cloudflare Tunnel)
+                                ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│  Express Server                      src/server.ts                        │
+│  ├── /health, /api/version           (no auth)                          │
+│  ├── /api/auth/*                     auth.routes.ts                     │
+│  ├── /api/inventory/*                inventory.routes.ts                │
+│  ├── /api/sales/*                    sales.routes.ts                    │
+│  ├── /api/employees/*                employees.routes.ts                │
+│  ├── /api/commissions/*              commissions.routes.ts              │
+│  ├── /api/tasks/*                    tasks.routes.ts                    │
+│  ├── /api/audit-logs/*               auditLog.routes.ts                 │
+│  ├── /api/notifications/*            notifications.routes.ts            │
+│  ├── /api/sign-in-requests/*         signInRequests.routes.ts           │
+│  └── /api/plain-cloth/*              plainCloth.routes.ts               │
+└───────────────────────────────┬─────────────────────────────────────────┘
+                                │ Prisma ORM
+                                ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│  PostgreSQL                          prisma/schema.prisma               │
+│  Branches, Inventory, Sales, Employees, Commissions, Tasks, Audit…    │
+└─────────────────────────────────────────────────────────────────────────┘
+</pre>
+
+<h1>2. Technology Stack</h1>
+<table>
+<tr><th>Layer</th><th>Technology</th><th>Location</th></tr>
+<tr><td>Frontend</td><td>React 19, TypeScript, Vite, React Router, i18next (EN + Kurdish Sorani), Tailwind CSS</td><td><code>frontend/</code></td></tr>
+<tr><td>Backend</td><td>Node.js, Express 5, TypeScript (tsx)</td><td><code>src/</code></td></tr>
+<tr><td>ORM / DB</td><td>Prisma 6, PostgreSQL</td><td><code>prisma/</code></td></tr>
+<tr><td>Auth</td><td>JWT access + refresh tokens, bcrypt passwords</td><td><code>src/lib/auth.ts</code></td></tr>
+<tr><td>Process manager</td><td>PM2 (app), cloudflared system service (tunnel)</td><td><code>ecosystem.config.cjs</code></td></tr>
+<tr><td>QR scanning</td><td>@zxing/library, camera modal</td><td><code>components/QrScannerModal.tsx</code></td></tr>
+</table>
+
+<h1>3. Authentication, Roles &amp; Route Guards</h1>
+
+<h3>Roles</h3>
+<table>
+<tr><th>Role</th><th>Access Level</th></tr>
+<tr><td><code>ADMIN</code></td><td>Full access; create/edit/delete employees; approve registrations; all sidebar sections</td></tr>
+<tr><td><code>MANAGER</code></td><td>Same route access as ADMIN; cannot create/edit/delete employees (ADMIN-only mutations)</td></tr>
+<tr><td><code>EMPLOYEE</code></td><td>Section-scoped via <code>allowedSections</code> (server) or localStorage rules; always sees Task Employee</td></tr>
+<tr><td><code>TRUSTEE</code></td><td>Same section scoping as EMPLOYEE</td></tr>
+</table>
+
+<h3>Route Guard Chain (<code>App.tsx → ProtectedLayout</code>)</h3>
+<ol>
+  <li>Not authenticated → redirect to <code>/login</code></li>
+  <li><code>canAccessAdminRoute</code> fails → redirect to <code>/dashboard</code></li>
+  <li><code>canAccessRoute</code> fails → redirect to <code>/task-employee</code></li>
+</ol>
+
+<h3>Admin-Only Routes (ADMIN or MANAGER to view; some mutations ADMIN-only)</h3>
+<table>
+<tr><th>Route</th><th>Sidebar Label</th></tr>
+<tr><td><code>/employee-accounts</code></td><td>Employee Accounts</td></tr>
+<tr><td><code>/item-pricing</code></td><td>Item Pricing</td></tr>
+<tr><td><code>/plain-cloth</code></td><td>Plain Cloth Pricing</td></tr>
+<tr><td><code>/sales-commission</code></td><td>Sales Commission</td></tr>
+</table>
+
+<h3>Section Keys (<code>dashboardSettings.ts</code>) — used for employee access checkboxes</h3>
+<p><code>dashboard</code>, <code>itemPricing</code>, <code>salesCommission</code>, <code>commissionPayouts</code>, <code>inventory</code>, <code>itemConversion</code>, <code>sales</code>, <code>dailySales</code>, <code>historySales</code>, <code>owedMoney</code>, <code>tasks</code>, <code>taskEmployee</code>, <code>dataAnalysis</code>, <code>trusteeCommission</code>, <code>exchange</code>, <code>itemInput</code>, <code>employeeAccounts</code>, <code>activityHistory</code></p>
+<div class="note"><strong>Note:</strong> <code>/plain-cloth</code> is admin-route only but NOT in section keys — cannot be granted via employee checkboxes.</div>
+
+<h1>4. Sidebar Navigation (Complete Tree)</h1>
+<p>File: <code>frontend/src/components/Sidebar.tsx</code>. Dropdown groups expand/collapse with ▾ toggle. Footer contains <strong>Language Switcher</strong> (English / Kurdish Sorani).</p>
+
+<pre class="tree">
+SIDEBAR
+├── Dashboard                          → /dashboard
+├── ▾ Pricing (dropdown)
+│   ├── Item Pricing                   → /item-pricing          [ADMIN/MANAGER only]
+│   └── Plain Cloth Pricing            → /plain-cloth           [ADMIN/MANAGER only]
+├── ▾ Commission (dropdown)
+│   ├── Sales Commission               → /sales-commission      [ADMIN/MANAGER only]
+│   ├── Commission Payouts             → /commission-payouts
+│   └── Trustee Commission             → /trustee-commission
+├── Inventory                          → /inventory
+├── Sales                              → /sales                 [accent styling]
+├── ▾ Accounting (dropdown)
+│   ├── Daily Sales                    → /sales/daily
+│   ├── History Sales                  → /sales/history
+│   ├── Owed Money                     → /sales/owed
+│   ├── Exchange                       → /exchange
+│   └── Activity History               → /activity-history
+├── ▾ Tasks (dropdown)                 [red badge if open tasks]
+│   ├── Task Input                     → /tasks
+│   └── Task Employee                  → /task-employee         [always visible]
+├── Data Analysis                      → /analytics
+├── ▾ Item Input (dropdown)
+│   ├── New Item                       → /item-input
+│   └── Item Conversion                → /inventory/convert
+├── Employee Accounts                  → /employee-accounts     [ADMIN/MANAGER only]
+└── Language Switcher                  (footer, no route)
+</pre>
+
+<p><strong>Open task badge:</strong> Polls <code>GET /api/tasks/open-count</code> every 60s. Shows count on Tasks dropdown and Task Employee item. Uses <code>mine=true</code> for non-admin/manager users.</p>
+
+<h1>5. Global Shell Components</h1>
+<table>
+<tr><th>Component</th><th>File</th><th>Function</th><th>API</th></tr>
+<tr><td>AppShell</td><td><code>components/AppShell.tsx</code></td><td>Layout wrapper: sidebar + main content; sidebar toggle on mobile</td><td>On mount: syncs commission settings via <code>GET/PUT /api/commissions/settings*</code></td></tr>
+<tr><td>Sidebar</td><td><code>components/Sidebar.tsx</code></td><td>Navigation tree, role filtering, task badge</td><td><code>GET /api/tasks/open-count</code></td></tr>
+<tr><td>LanguageSwitcher</td><td><code>components/LanguageSwitcher.tsx</code></td><td>Toggle EN / ckb (Kurdish)</td><td>None</td></tr>
+<tr><td>QrScanInput</td><td><code>components/QrScanInput.tsx</code></td><td>Text + camera QR input; opens QrScannerModal</td><td>Delegated to parent page</td></tr>
+<tr><td>QrScannerModal</td><td><code>components/QrScannerModal.tsx</code></td><td>Camera-only QR scanning</td><td>None</td></tr>
+<tr><td>SignInApprovalsPanel</td><td><code>components/SignInApprovalsPanel.tsx</code></td><td>Pending device sign-in + employee registration approvals</td><td><code>GET /sign-in-requests/pending</code>, <code>GET /notifications/unread-count</code>, approve/reject POSTs</td></tr>
+</table>
+
+<div class="page-break"></div>
+<h1>6. Page-by-Page Reference</h1>
+
+<!-- LOGIN -->
+<div class="section-box">
+<h3>6.1 Login — <code>/login</code></h3>
+<p><strong>File:</strong> <code>pages/Login.tsx</code> &nbsp;|&nbsp; <strong>Layout:</strong> Public (no sidebar) &nbsp;|&nbsp; <span class="badge badge-all">All users</span></p>
+<h4>UI Controls</h4>
+<ul class="compact">
+  <li>Email input, Password input</li>
+  <li>Sign In button</li>
+  <li>Link to Register page</li>
+  <li>Demo credentials display</li>
+  <li>Language Switcher</li>
+  <li>Device sign-in pending banner (polls when device awaiting approval)</li>
+</ul>
+<h4>Backend</h4>
+<table>
+<tr><th>Action</th><th>Method</th><th>Endpoint</th><th>Models</th></tr>
+<tr><td>Login</td><td>POST</td><td><code>/api/auth/login</code></td><td>Employee, Session, DeviceSignInRequest, AuditLog</td></tr>
+</table>
+</div>
+
+<!-- REGISTER -->
+<div class="section-box">
+<h3>6.2 Register — <code>/register</code></h3>
+<p><strong>File:</strong> <code>pages/Register.tsx</code> &nbsp;|&nbsp; Public</p>
+<h4>UI Controls</h4>
+<ul class="compact">
+  <li>Name, Email, Phone inputs</li>
+  <li>Branch <strong>dropdown</strong> (loaded from API)</li>
+  <li>Password, Confirm password</li>
+  <li>Notes textarea</li>
+  <li>Submit button, Language Switcher</li>
+</ul>
+<h4>Backend</h4>
+<table>
+<tr><th>Action</th><th>Method</th><th>Endpoint</th></tr>
+<tr><td>Load branches</td><td>GET</td><td><code>/api/auth/branches</code></td></tr>
+<tr><td>Register</td><td>POST</td><td><code>/api/auth/register</code></td></tr>
+</table>
+</div>
+
+<!-- DASHBOARD -->
+<div class="section-box">
+<h3>6.3 Dashboard — <code>/dashboard</code></h3>
+<p><strong>File:</strong> <code>pages/Dashboard.tsx</code> &nbsp;|&nbsp; Section key: <code>dashboard</code></p>
+<h4>UI Controls</h4>
+<ul class="compact">
+  <li>Welcome header with user name</li>
+  <li>Sign Out button</li>
+  <li>SignInApprovalsPanel (device + registration approvals — ADMIN/MANAGER)</li>
+  <li>3 stat cards: role, status, last login</li>
+  <li>Overview card</li>
+</ul>
+<h4>Backend</h4>
+<table>
+<tr><th>Action</th><th>Method</th><th>Endpoint</th></tr>
+<tr><td>Sign out</td><td>POST</td><td><code>/api/auth/logout</code></td></tr>
+<tr><td>Pending sign-ins</td><td>GET</td><td><code>/api/sign-in-requests/pending</code></td></tr>
+<tr><td>Approve/reject device</td><td>POST</td><td><code>/api/sign-in-requests/:id/approve|reject</code></td></tr>
+</table>
+<p><strong>Links to:</strong> Employee Accounts (via approvals), all sidebar sections</p>
+</div>
+
+<!-- ITEM PRICING -->
+<div class="section-box">
+<h3>6.4 Item Pricing — <code>/item-pricing</code></h3>
+<p><strong>File:</strong> <code>pages/ItemPricing.tsx</code> &nbsp;|&nbsp; <span class="badge badge-admin">ADMIN/MANAGER</span></p>
+<h4>UI Controls</h4>
+<ul class="compact">
+  <li>QR scan input (lookup item by ID)</li>
+  <li>Unit <strong>dropdown</strong>: METER / PIECE</li>
+  <li>Minimum price input</li>
+  <li>Save button</li>
+  <li>Scrollable saved-prices list (localStorage cache + server sync)</li>
+</ul>
+<h4>Backend</h4>
+<table>
+<tr><th>Action</th><th>Method</th><th>Endpoint</th></tr>
+<tr><td>Lookup item</td><td>GET</td><td><code>/api/inventory/:id</code></td></tr>
+<tr><td>Save minimum price</td><td>PUT</td><td><code>/api/commissions/settings/prices</code></td></tr>
+</table>
+<p><strong>Links to:</strong> Inventory (item IDs), Sales Commission (prices affect commission calc)</p>
+</div>
+
+<!-- PLAIN CLOTH -->
+<div class="section-box">
+<h3>6.5 Plain Cloth Pricing — <code>/plain-cloth</code></h3>
+<p><strong>File:</strong> <code>pages/PlainClothPricing.tsx</code> &nbsp;|&nbsp; <span class="badge badge-admin">ADMIN/MANAGER</span></p>
+<h4>UI Controls</h4>
+<ul class="compact">
+  <li>CRUD form: name, price per meter</li>
+  <li>Edit / Delete per row</li>
+  <li>Offline banner + Reconnect button</li>
+  <li>Link back to Sales page</li>
+</ul>
+<h4>Backend</h4>
+<table>
+<tr><th>Action</th><th>Method</th><th>Endpoint</th></tr>
+<tr><td>List types</td><td>GET</td><td><code>/api/commissions/plain-cloth</code> or <code>/api/plain-cloth</code></td></tr>
+<tr><td>Create</td><td>POST</td><td><code>/api/commissions/plain-cloth</code> or <code>/api/plain-cloth</code></td></tr>
+<tr><td>Update</td><td>PUT</td><td><code>/api/commissions/settings/plain-cloth/:id</code> or <code>/api/plain-cloth/:id</code></td></tr>
+<tr><td>Delete</td><td>DELETE</td><td>same paths</td></tr>
+</table>
+<p><strong>Links to:</strong> Sales page (Plain Cloth accordion section uses these types)</p>
+</div>
+
+<!-- SALES COMMISSION -->
+<div class="section-box">
+<h3>6.6 Sales Commission — <code>/sales-commission</code></h3>
+<p><strong>File:</strong> <code>pages/SalesCommission.tsx</code> &nbsp;|&nbsp; <span class="badge badge-admin">ADMIN/MANAGER</span></p>
+<h4>UI Controls</h4>
+<ul class="compact">
+  <li>Base commission amount input</li>
+  <li>Rate % input</li>
+  <li>Calculate Commissions button</li>
+  <li>Results table (employee, sale, amount)</li>
+</ul>
+<h4>Backend</h4>
+<table>
+<tr><th>Action</th><th>Method</th><th>Endpoint</th></tr>
+<tr><td>Save rate</td><td>PUT</td><td><code>/api/commissions/settings/rate</code></td></tr>
+<tr><td>Load sales for calc</td><td>GET</td><td><code>/api/sales?pageSize=200</code></td></tr>
+</table>
+<p><strong>Links to:</strong> Commission Payouts, Sales, Item Pricing</p>
+</div>
+
+<!-- COMMISSION PAYOUTS -->
+<div class="section-box">
+<h3>6.7 Commission Payouts — <code>/commission-payouts</code></h3>
+<p><strong>File:</strong> <code>pages/CommissionPayouts.tsx</code> &nbsp;|&nbsp; Section: <code>commissionPayouts</code></p>
+<h4>UI Controls</h4>
+<ul class="compact">
+  <li>Grand total display</li>
+  <li>Refresh button</li>
+  <li>Expandable employee groups → line-level commission details</li>
+  <li>Mark Paid button <span class="badge badge-mgr">ADMIN/MANAGER only</span></li>
+</ul>
+<h4>Backend</h4>
+<table>
+<tr><th>Action</th><th>Method</th><th>Endpoint</th><th>Models</th></tr>
+<tr><td>List pending</td><td>GET</td><td><code>/api/commissions/pending</code></td><td>EmployeeCommissionEntry, Sale, SaleItem</td></tr>
+<tr><td>Mark paid</td><td>POST</td><td><code>/api/commissions/pay/:employeeId</code></td><td>EmployeeCommissionEntry, PaidCommissionHistory, Notification</td></tr>
+</table>
+</div>
+
+<!-- TRUSTEE COMMISSION -->
+<div class="section-box">
+<h3>6.8 Trustee Commission — <code>/trustee-commission</code></h3>
+<p><strong>File:</strong> <code>pages/TrusteeCommission.tsx</code> &nbsp;|&nbsp; Section: <code>trusteeCommission</code></p>
+<h4>UI Controls</h4>
+<ul class="compact">
+  <li>Date range inputs (from / to)</li>
+  <li>Load Commission button</li>
+  <li>Rule editor: name, contact, branch toggles (A–F), percentage</li>
+  <li>Saved rules list</li>
+  <li><strong>3-level drill-down:</strong> Trustee → Branch → Day → individual sales</li>
+</ul>
+<h4>Backend / Storage</h4>
+<table>
+<tr><th>Action</th><th>Source</th></tr>
+<tr><td>Load sales data</td><td><code>GET /api/sales</code> (per branch, date range)</td></tr>
+<tr><td>Trustee rules</td><td><span class="badge badge-local">localStorage</span> <code>textile-erp-trustee-rules</code></td></tr>
+</table>
+<div class="note">Schema has Trustee, TrusteePermission models but no backend API yet — rules are client-side only.</div>
+</div>
+
+<div class="page-break"></div>
+
+<!-- INVENTORY -->
+<div class="section-box">
+<h3>6.9 Inventory — <code>/inventory</code></h3>
+<p><strong>File:</strong> <code>pages/Inventory.tsx</code> &nbsp;|&nbsp; Section: <code>inventory</code></p>
+<h4>UI Controls</h4>
+<ul class="compact">
+  <li><strong>QR Search section:</strong> QrScanInput + camera modal → family code lookup</li>
+  <li><strong>Type tabs:</strong> ROLL | PIECE | REMANENT</li>
+  <li><strong>Branch filter buttons:</strong> A, B, C, E, F, S (Storage) — toggle active branch</li>
+  <li><strong>Stock drill-down:</strong> click total → branch breakdown panel</li>
+  <li>Piece-package stock subsection</li>
+  <li>Items table: checkboxes, reprint QR per row</li>
+  <li>Edit/Remove toolbar <span class="badge badge-mgr">ADMIN/MANAGER</span></li>
+  <li><strong>Edit modal (overlay):</strong> family code, sub-code price, color select, meters, piece length, quantity</li>
+</ul>
+<h4>Backend</h4>
+<table>
+<tr><th>Action</th><th>Method</th><th>Endpoint</th></tr>
+<tr><td>List items</td><td>GET</td><td><code>/api/inventory?branchId=&amp;pageSize=200</code></td></tr>
+<tr><td>QR lookup</td><td>GET</td><td><code>/api/inventory/:id</code></td></tr>
+<tr><td>Load colors</td><td>GET</td><td><code>/api/inventory/colors</code></td></tr>
+<tr><td>Edit item</td><td>PATCH</td><td><code>/api/inventory/:id</code> (requires version for optimistic lock)</td></tr>
+<tr><td>Remove (archive)</td><td>POST</td><td><code>/api/inventory/:id/archive</code></td></tr>
+</table>
+<p><strong>Links to:</strong> Item Input (creates items), Item Conversion, Sales (scans same QR IDs), Item Pricing</p>
+</div>
+
+<!-- ITEM CONVERSION -->
+<div class="section-box">
+<h3>6.10 Item Conversion — <code>/inventory/convert</code></h3>
+<p><strong>File:</strong> <code>pages/ItemConversion.tsx</code> &nbsp;|&nbsp; Section: <code>itemConversion</code></p>
+<h4>UI Controls</h4>
+<ul class="compact">
+  <li><strong>Section 1 — Branch Transfer:</strong> QR scan, destination branch select, amount input, transfer button</li>
+  <li><strong>Section 2 — Roll to Piece:</strong> QR scan roll, cut meters input, cut button</li>
+  <li>Success summary with QR image for new piece</li>
+</ul>
+<h4>Backend</h4>
+<table>
+<tr><th>Action</th><th>Method</th><th>Endpoint</th></tr>
+<tr><td>Lookup source</td><td>GET</td><td><code>/api/inventory/:id</code></td></tr>
+<tr><td>Deduct source stock</td><td>PATCH</td><td><code>/api/inventory/:id</code></td></tr>
+<tr><td>Create new item</td><td>POST</td><td><code>/api/inventory</code></td></tr>
+<tr><td>Complete cutting tasks</td><td>POST</td><td><code>/api/tasks/cutting/complete</code></td></tr>
+</table>
+<p><strong>Links to:</strong> Inventory (stock changes), Tasks (auto-completes cutting tasks after roll-to-piece)</p>
+</div>
+
+<!-- SALES -->
+<div class="section-box">
+<h3>6.11 Sales — <code>/sales</code></h3>
+<p><strong>File:</strong> <code>pages/Sales.tsx</code> &nbsp;|&nbsp; Section: <code>sales</code></p>
+<h4>UI Controls</h4>
+<ul class="compact">
+  <li><strong>Branch selector buttons:</strong> A, B, C, E, F</li>
+  <li><strong>Accordion 1 — Inventory Scan:</strong> QR input, source branch dropdown, amount, price; piece-package mode FULL/PARTIAL with per-component qty</li>
+  <li><strong>Accordion 2 — Roll Cut &amp; Sell:</strong> QR roll scan, cut meters, sell resulting piece</li>
+  <li><strong>Accordion 3 — Plain Cloth:</strong> plain cloth type dropdown, meters, price</li>
+  <li>Customer form (name, phone, notes)</li>
+  <li>Payment method <strong>dropdown:</strong> CASH | FIB | OWED</li>
+  <li>Partial payment fields (when OWED or partial)</li>
+  <li>Sale lines cart with line totals</li>
+  <li>Complete Sale button</li>
+</ul>
+<h4>Backend</h4>
+<table>
+<tr><th>Action</th><th>Method</th><th>Endpoint</th><th>Side Effects</th></tr>
+<tr><td>Lookup inventory</td><td>GET</td><td><code>/api/inventory/:id</code>, <code>/api/inventory</code></td><td>—</td></tr>
+<tr><td>Cut roll to piece</td><td>PATCH+POST</td><td><code>/api/inventory/:id</code>, <code>/api/inventory</code></td><td>Creates piece, deducts roll</td></tr>
+<tr><td>Complete sale</td><td>POST</td><td><code>/api/sales</code></td><td>Deducts stock, creates Sale+SaleItems, EmployeeCommissionEntry, may create BranchTaskEntry (cutting)</td></tr>
+<tr><td>Plain cloth types</td><td>GET</td><td><code>/api/commissions/plain-cloth</code></td><td>—</td></tr>
+<tr><td>Cutting task on piece sold</td><td>POST</td><td><code>/api/tasks</code></td><td>When piece sold from roll</td></tr>
+<tr><td>Complete cutting tasks</td><td>POST</td><td><code>/api/tasks/cutting/complete</code></td><td>After roll cut</td></tr>
+</table>
+<p><strong>Links to:</strong> Inventory, Plain Cloth Pricing, Commission Payouts, Daily/History Sales, Tasks</p>
+</div>
+
+<!-- EXCHANGE -->
+<div class="section-box">
+<h3>6.12 Exchange — <code>/exchange</code></h3>
+<p><strong>File:</strong> <code>pages/Exchange.tsx</code> &nbsp;|&nbsp; Section: <code>exchange</code></p>
+<h4>UI Controls</h4>
+<ul class="compact">
+  <li>Branch selector buttons</li>
+  <li>New Exchange Sale section (replacement items via QR)</li>
+  <li>Returned Inventory section (QR scan returns)</li>
+  <li>Returned Plain Cloth <strong>dropdown</strong></li>
+  <li>Exchange Summary totals</li>
+  <li>Customer Details form</li>
+  <li>Payment: FULL / PARTIAL</li>
+  <li>Process Exchange button</li>
+</ul>
+<h4>Backend</h4>
+<table>
+<tr><th>Action</th><th>Method</th><th>Endpoint</th></tr>
+<tr><td>Process exchange</td><td>POST</td><td><code>/api/sales/exchange</code></td></tr>
+<tr><td>Resolve inventory items</td><td>GET</td><td><code>/api/inventory/:id</code>, <code>/api/inventory</code></td></tr>
+<tr><td>Plain cloth types</td><td>GET</td><td><code>/api/commissions/plain-cloth</code></td></tr>
+</table>
+</div>
+
+<!-- ITEM INPUT -->
+<div class="section-box">
+<h3>6.13 New Item (Item Input) — <code>/item-input</code></h3>
+<p><strong>File:</strong> <code>pages/ItemInput.tsx</code> &nbsp;|&nbsp; Section: <code>itemInput</code></p>
+<h4>UI Controls</h4>
+<ul class="compact">
+  <li>Destination branch buttons (A, B, C, E, F, S)</li>
+  <li>Type selector: ROLL / PIECE / REMANENT</li>
+  <li>Color <strong>dropdown</strong> + add-new-color form <span class="badge badge-mgr">ADMIN/MANAGER</span></li>
+  <li>Family code, sub-code inputs</li>
+  <li>Meters, quantity, piece length inputs</li>
+  <li>Piece-package component builder (multi-component packages)</li>
+  <li>Picture upload, description textarea</li>
+  <li>Live QR preview</li>
+  <li>Create button → post-create Print / Download QR actions</li>
+</ul>
+<h4>Backend</h4>
+<table>
+<tr><th>Action</th><th>Method</th><th>Endpoint</th></tr>
+<tr><td>List colors</td><td>GET</td><td><code>/api/inventory/colors</code></td></tr>
+<tr><td>Create color</td><td>POST</td><td><code>/api/inventory/colors</code></td></tr>
+<tr><td>Family lookup</td><td>GET</td><td><code>/api/inventory</code></td></tr>
+<tr><td>Create item</td><td>POST</td><td><code>/api/inventory</code></td></tr>
+</table>
+<p><strong>Links to:</strong> Inventory (new items appear in list), Sales (QR scannable immediately)</p>
+</div>
+
+<div class="page-break"></div>
+
+<!-- SALE DETAIL -->
+<div class="section-box">
+<h3>6.14 Sale Detail — <code>/sales/:id</code> (drill-down, not in sidebar)</h3>
+<p><strong>File:</strong> <code>pages/SaleDetail.tsx</code></p>
+<h4>Reached from</h4>
+<p>Daily Sales, History Sales, Owed Money, Activity History (related record link)</p>
+<h4>UI Controls</h4>
+<ul class="compact">
+  <li>Back button</li>
+  <li>Sale metadata grid (ID, date, employee, branch, customer)</li>
+  <li>Price / discount / payment method cards</li>
+  <li>Partial payment breakdown</li>
+  <li>Notes section</li>
+  <li>Line items table with QR download per line</li>
+</ul>
+<h4>Backend</h4>
+<table><tr><td>GET</td><td><code>/api/sales/:id</code></td><td>Sale, SaleItem, Refund, InventoryItem, Color</td></tr></table>
+</div>
+
+<!-- DAILY SALES -->
+<div class="section-box">
+<h3>6.15 Daily Sales — <code>/sales/daily</code></h3>
+<p><strong>File:</strong> <code>pages/DailySales.tsx</code> &nbsp;|&nbsp; Section: <code>dailySales</code></p>
+<h4>UI Controls</h4>
+<ul class="compact">
+  <li>Branch filter buttons</li>
+  <li>Sales grouped by employee</li>
+  <li>Clickable sale rows → <strong>drill to</strong> <code>/sales/:id</code></li>
+</ul>
+<h4>Backend</h4>
+<p><code>GET /api/sales?branchId=&amp;fromDate=&amp;toDate=</code> (today). Owed payments merged from <span class="badge badge-local">localStorage</span>.</p>
+</div>
+
+<!-- HISTORY SALES -->
+<div class="section-box">
+<h3>6.16 History Sales — <code>/sales/history</code></h3>
+<p><strong>File:</strong> <code>pages/HistorySales.tsx</code> &nbsp;|&nbsp; Section: <code>historySales</code></p>
+<h4>UI Controls</h4>
+<ul class="compact">
+  <li>Branch filter buttons</li>
+  <li><strong>Date tabs:</strong> last 10 days (toggle)</li>
+  <li>Search input + Apply button</li>
+  <li>Employee-grouped sales → drill to <code>/sales/:id</code></li>
+</ul>
+<h4>Backend</h4>
+<p><code>GET /api/sales</code> with date buckets; search uses <code>search</code> + <code>pageSize=100</code></p>
+</div>
+
+<!-- OWED MONEY -->
+<div class="section-box">
+<h3>6.17 Owed Money — <code>/sales/owed</code></h3>
+<p><strong>File:</strong> <code>pages/OwedMoney.tsx</code> &nbsp;|&nbsp; Section: <code>owedMoney</code></p>
+<h4>UI Controls</h4>
+<ul class="compact">
+  <li>Branch filter buttons</li>
+  <li>Outstanding / settled sale rows</li>
+  <li>Record Payment button → <strong>payment modal (overlay)</strong></li>
+  <li>Navigate to sale detail</li>
+</ul>
+<h4>Backend</h4>
+<p><code>GET /api/sales?branchId=&amp;includeVoided=false&amp;pageSize=200</code></p>
+<div class="note"><strong>Important:</strong> Payment recordings stored in <span class="badge badge-local">localStorage</span> <code>textile-erp-owed-payments</code> only — NOT persisted to backend.</div>
+</div>
+
+<!-- TASKS -->
+<div class="section-box">
+<h3>6.18 Task Input — <code>/tasks</code></h3>
+<p><strong>File:</strong> <code>pages/Tasks.tsx</code> &nbsp;|&nbsp; Section: <code>tasks</code></p>
+<h4>UI Controls</h4>
+<ul class="compact">
+  <li>Branch filter buttons</li>
+  <li>Assign recurring form: task template <strong>dropdown</strong>, schedule <strong>dropdown</strong>, email, notes</li>
+  <li>Manual cutting task (prompt dialog)</li>
+  <li>Stats cards (open / done counts)</li>
+  <li>Assignment list</li>
+  <li>Open tasks list: Done / Reopen / Delete / Create Next buttons</li>
+  <li>Done tasks list</li>
+</ul>
+<h4>Backend (<code>lib/tasksApi.ts</code>)</h4>
+<table>
+<tr><th>Action</th><th>Method</th><th>Endpoint</th></tr>
+<tr><td>List tasks</td><td>GET</td><td><code>/api/tasks?branch=</code></td></tr>
+<tr><td>List assignments</td><td>GET</td><td><code>/api/tasks/assignments?branch=</code></td></tr>
+<tr><td>Upsert assignment</td><td>PUT</td><td><code>/api/tasks/assignments</code></td></tr>
+<tr><td>Create task</td><td>POST</td><td><code>/api/tasks</code></td></tr>
+<tr><td>Complete</td><td>PATCH</td><td><code>/api/tasks/:id/complete</code></td></tr>
+<tr><td>Reopen</td><td>PATCH</td><td><code>/api/tasks/:id/reopen</code></td></tr>
+<tr><td>Delete</td><td>DELETE</td><td><code>/api/tasks/:id</code></td></tr>
+</table>
+<p><strong>Links to:</strong> Sales &amp; Item Conversion (cutting tasks auto-created/completed), Task Employee</p>
+</div>
+
+<!-- TASK EMPLOYEE -->
+<div class="section-box">
+<h3>6.19 Task Employee — <code>/task-employee</code></h3>
+<p><strong>File:</strong> <code>pages/TaskEmployee.tsx</code> &nbsp;|&nbsp; Always visible (fallback route)</p>
+<h4>UI Controls</h4>
+<ul class="compact">
+  <li>Branch filter buttons</li>
+  <li>Open / done stats</li>
+  <li>Checklist with Mark Done per task</li>
+</ul>
+<h4>Backend</h4>
+<p><code>GET /api/tasks?branch=&amp;mine=true</code>, <code>PATCH /api/tasks/:id/complete</code></p>
+</div>
+
+<!-- DATA ANALYSIS -->
+<div class="section-box">
+<h3>6.20 Data Analysis — <code>/analytics</code></h3>
+<p><strong>File:</strong> <code>pages/DataAnalysis.tsx</code> &nbsp;|&nbsp; Section: <code>dataAnalysis</code></p>
+<h4>UI Controls</h4>
+<ul class="compact">
+  <li>Branch <strong>dropdown</strong></li>
+  <li>From / To date inputs</li>
+  <li>Load Analysis button</li>
+  <li>Summary cards (revenue, total sales, average sale)</li>
+  <li>Bar charts: sales by day, sales by employee</li>
+</ul>
+<h4>Backend</h4>
+<p><code>GET /api/sales?branchId=&amp;fromDate=&amp;toDate=&amp;includeVoided=false&amp;pageSize=200</code></p>
+</div>
+
+<!-- ACTIVITY HISTORY -->
+<div class="section-box">
+<h3>6.21 Activity History — <code>/activity-history</code></h3>
+<p><strong>File:</strong> <code>pages/ActivityHistory.tsx</code> &nbsp;|&nbsp; Section: <code>activityHistory</code></p>
+<h4>UI Controls</h4>
+<ul class="compact">
+  <li>From / To date inputs</li>
+  <li>Action <strong>dropdown</strong> (CREATE, UPDATE, DELETE, VOID, LOGIN…)</li>
+  <li>Entity type <strong>dropdown</strong></li>
+  <li>Search input + Apply Filters</li>
+  <li>Date-grouped clickable entries → <strong>drill to</strong> <code>/activity-history/:id</code></li>
+  <li>Load More pagination</li>
+</ul>
+<h4>Backend (<code>lib/auditLogApi.ts</code>)</h4>
+<p><code>GET /api/audit-logs</code> (paginated), <code>GET /api/audit-logs/entity-types</code></p>
+</div>
+
+<!-- ACTIVITY DETAIL -->
+<div class="section-box">
+<h3>6.22 Activity History Detail — <code>/activity-history/:id</code></h3>
+<p><strong>File:</strong> <code>pages/ActivityHistoryDetail.tsx</code></p>
+<h4>UI Controls</h4>
+<ul class="compact">
+  <li>Back button</li>
+  <li>Performed-by section</li>
+  <li>Action info, changes JSON diff</li>
+  <li>Related record snapshot + optional link to Sale/Inventory</li>
+</ul>
+<h4>Backend</h4>
+<p><code>GET /api/audit-logs/:id</code></p>
+</div>
+
+<!-- EMPLOYEE ACCOUNTS -->
+<div class="section-box">
+<h3>6.23 Employee Accounts — <code>/employee-accounts</code></h3>
+<p><strong>File:</strong> <code>pages/EmployeeAccounts.tsx</code> &nbsp;|&nbsp; <span class="badge badge-admin">ADMIN/MANAGER view</span>, <span class="badge badge-admin">ADMIN mutate</span></p>
+<h4>UI Controls</h4>
+<ul class="compact">
+  <li>SignInApprovalsPanel</li>
+  <li>Create/Edit form <span class="badge badge-admin">ADMIN only</span>: name, email, phone, password, role select, active checkbox, assigned work, branch checkboxes, sidebar-access checkboxes (all dashboardSections)</li>
+  <li>Employee table with Edit / Delete <span class="badge badge-admin">ADMIN only</span></li>
+</ul>
+<h4>Backend</h4>
+<table>
+<tr><th>Action</th><th>Method</th><th>Endpoint</th><th>Auth</th></tr>
+<tr><td>List employees</td><td>GET</td><td><code>/api/employees</code></td><td>ADMIN/MANAGER</td></tr>
+<tr><td>List branches</td><td>GET</td><td><code>/api/employees/branches/list</code></td><td>ADMIN/MANAGER</td></tr>
+<tr><td>Create</td><td>POST</td><td><code>/api/employees</code></td><td>ADMIN</td></tr>
+<tr><td>Update</td><td>PATCH</td><td><code>/api/employees/:id</code></td><td>ADMIN</td></tr>
+<tr><td>Delete</td><td>DELETE</td><td><code>/api/employees/:id</code></td><td>ADMIN</td></tr>
+</table>
+<p><strong>Links to:</strong> All sections (controls <code>allowedSections</code> per employee), Dashboard (sign-in approvals)</p>
+</div>
+
+<div class="page-break"></div>
+<h1>7. Drill-Down &amp; Cross-Navigation Map</h1>
+<table>
+<tr><th>From</th><th>User Action</th><th>To</th></tr>
+<tr><td>Daily Sales</td><td>Click sale row</td><td><code>/sales/:id</code> (Sale Detail)</td></tr>
+<tr><td>History Sales</td><td>Click sale row</td><td><code>/sales/:id</code></td></tr>
+<tr><td>Owed Money</td><td>Click sale row</td><td><code>/sales/:id</code></td></tr>
+<tr><td>Activity History</td><td>Click log entry</td><td><code>/activity-history/:id</code></td></tr>
+<tr><td>Activity History Detail</td><td>Related record link</td><td><code>/sales/:id</code> or inventory context</td></tr>
+<tr><td>Inventory</td><td>Click stock total</td><td>Branch breakdown panel (in-page drill-down)</td></tr>
+<tr><td>Trustee Commission</td><td>Click trustee → branch → day</td><td>3-level in-page drill to individual sales</td></tr>
+<tr><td>Commission Payouts</td><td>Expand employee group</td><td>Line-level commission details (in-page)</td></tr>
+<tr><td>Plain Cloth Pricing</td><td>"Back to Sales" link</td><td><code>/sales</code></td></tr>
+<tr><td>Login</td><td>Register link</td><td><code>/register</code></td></tr>
+<tr><td>Any protected route</td><td>Access denied</td><td><code>/task-employee</code> or <code>/dashboard</code></td></tr>
+</table>
+
+<h1>8. Backend API Reference (All 71 Endpoints)</h1>
+
+<h3>8.1 Server-Level</h3>
+<table>
+<tr><th>Method</th><th>Path</th><th>Auth</th><th>Purpose</th></tr>
+<tr><td>GET</td><td><code>/health</code></td><td>None</td><td>DB connectivity check</td></tr>
+<tr><td>GET</td><td><code>/api/version</code></td><td>None</td><td>Deploy metadata</td></tr>
+<tr><td>GET</td><td><code>/</code></td><td>None</td><td>SPA index (production)</td></tr>
+</table>
+
+<h3>8.2 Auth — <code>/api/auth</code> (<code>auth.routes.ts</code>)</h3>
+<table>
+<tr><th>Method</th><th>Path</th><th>Auth</th><th>Models</th></tr>
+<tr><td>GET</td><td><code>/branches</code></td><td>None</td><td>Branch</td></tr>
+<tr><td>POST</td><td><code>/register</code></td><td>None</td><td>Employee, BranchEmployee, AuditLog</td></tr>
+<tr><td>POST</td><td><code>/login</code></td><td>None</td><td>Employee, Session, DeviceSignInRequest</td></tr>
+<tr><td>POST</td><td><code>/refresh</code></td><td>None</td><td>Session, Employee</td></tr>
+<tr><td>POST</td><td><code>/logout</code></td><td>None</td><td>Session</td></tr>
+<tr><td>GET</td><td><code>/me</code></td><td>JWT</td><td>Employee, BranchEmployee, Branch</td></tr>
+</table>
+
+<h3>8.3 Inventory — <code>/api/inventory</code> (all routes require JWT)</h3>
+<table>
+<tr><th>Method</th><th>Path</th><th>Extra Auth</th><th>Purpose</th></tr>
+<tr><td>GET</td><td><code>/</code></td><td>Any</td><td>Paginated list (filters: branchId, colorId, type, code, itemId)</td></tr>
+<tr><td>GET</td><td><code>/stats/summary</code></td><td>Any</td><td>Inventory stats by branch</td></tr>
+<tr><td>GET</td><td><code>/branches</code></td><td>Any</td><td>Active branches</td></tr>
+<tr><td>GET</td><td><code>/colors</code></td><td>Any</td><td>Active colors</td></tr>
+<tr><td>POST</td><td><code>/colors</code></td><td>ADMIN/MANAGER</td><td>Create color</td></tr>
+<tr><td>GET</td><td><code>/:id</code></td><td>Any</td><td>Single item</td></tr>
+<tr><td>POST</td><td><code>/</code></td><td>ADMIN/MANAGER</td><td>Create item</td></tr>
+<tr><td>PATCH</td><td><code>/:id</code></td><td>ADMIN/MANAGER</td><td>Update (optimistic lock via version)</td></tr>
+<tr><td>POST</td><td><code>/:id/archive</code></td><td>ADMIN/MANAGER</td><td>Soft-archive</td></tr>
+<tr><td>POST</td><td><code>/:id/restore</code></td><td>ADMIN/MANAGER</td><td>Restore archived</td></tr>
+<tr><td>DELETE</td><td><code>/:id</code></td><td>ADMIN</td><td>Permanent delete</td></tr>
+</table>
+
+<h3>8.4 Sales — <code>/api/sales</code></h3>
+<table>
+<tr><th>Method</th><th>Path</th><th>Extra Auth</th><th>Side Effects</th></tr>
+<tr><td>POST</td><td><code>/</code></td><td>Any</td><td>Create sale, deduct stock, commission entries, notifications</td></tr>
+<tr><td>POST</td><td><code>/exchange</code></td><td>Any</td><td>Exchange: returns + replacements, stock adjustments</td></tr>
+<tr><td>GET</td><td><code>/</code></td><td>Any</td><td>List with filters (branchId, dates, search, pagination)</td></tr>
+<tr><td>GET</td><td><code>/stats/summary</code></td><td>ADMIN/MANAGER</td><td>Sales aggregates</td></tr>
+<tr><td>GET</td><td><code>/:id</code></td><td>Any</td><td>Sale detail with items</td></tr>
+<tr><td>POST</td><td><code>/:id/void</code></td><td>ADMIN/MANAGER</td><td>Void sale, restock, remove pending commissions</td></tr>
+<tr><td>POST</td><td><code>/:id/refund</code></td><td>ADMIN/MANAGER</td><td>Record refund</td></tr>
+</table>
+
+<h3>8.5 Employees — <code>/api/employees</code> (router: ADMIN/MANAGER)</h3>
+<table>
+<tr><th>Method</th><th>Path</th><th>Extra Auth</th></tr>
+<tr><td>GET</td><td><code>/</code></td><td>ADMIN/MANAGER</td></tr>
+<tr><td>GET</td><td><code>/sections</code></td><td>ADMIN/MANAGER</td></tr>
+<tr><td>GET</td><td><code>/branches/list</code></td><td>ADMIN/MANAGER</td></tr>
+<tr><td>GET</td><td><code>/pending</code></td><td>ADMIN/MANAGER</td></tr>
+<tr><td>POST</td><td><code>/:id/approve</code></td><td>ADMIN</td></tr>
+<tr><td>POST</td><td><code>/:id/reject</code></td><td>ADMIN</td></tr>
+<tr><td>GET</td><td><code>/:id</code></td><td>ADMIN/MANAGER</td></tr>
+<tr><td>POST</td><td><code>/</code></td><td>ADMIN</td></tr>
+<tr><td>PATCH</td><td><code>/:id</code></td><td>ADMIN</td></tr>
+<tr><td>DELETE</td><td><code>/:id</code></td><td>ADMIN</td></tr>
+</table>
+
+<h3>8.6 Commissions — <code>/api/commissions</code></h3>
+<table>
+<tr><th>Method</th><th>Path</th><th>Extra Auth</th></tr>
+<tr><td>GET/POST/PUT/DELETE</td><td><code>/plain-cloth/*</code></td><td>Varies</td></tr>
+<tr><td>GET</td><td><code>/settings</code></td><td>Any</td></tr>
+<tr><td>PUT</td><td><code>/settings/rate</code></td><td>ADMIN/MANAGER</td></tr>
+<tr><td>PUT</td><td><code>/settings/prices</code></td><td>ADMIN/MANAGER</td></tr>
+<tr><td>GET</td><td><code>/pending</code></td><td>Any (own only for non-managers)</td></tr>
+<tr><td>POST</td><td><code>/pay/:employeeId</code></td><td>ADMIN/MANAGER</td></tr>
+<tr><td>POST</td><td><code>/backfill</code></td><td>ADMIN</td></tr>
+</table>
+
+<h3>8.7 Tasks — <code>/api/tasks</code></h3>
+<table>
+<tr><th>Method</th><th>Path</th><th>Extra Auth</th><th>Model</th></tr>
+<tr><td>GET</td><td><code>/open-count</code></td><td>Any</td><td>BranchTaskEntry</td></tr>
+<tr><td>GET/PUT</td><td><code>/assignments</code></td><td>ADMIN/MANAGER</td><td>BranchTaskAssignment</td></tr>
+<tr><td>GET</td><td><code>/cutting/open</code></td><td>Any</td><td>BranchTaskEntry</td></tr>
+<tr><td>POST</td><td><code>/cutting/complete</code></td><td>All roles</td><td>BranchTaskEntry</td></tr>
+<tr><td>GET/POST</td><td><code>/</code></td><td>Any</td><td>BranchTaskEntry</td></tr>
+<tr><td>PATCH</td><td><code>/:id/complete|reopen</code></td><td>Any / ADMIN/MANAGER</td><td>BranchTaskEntry</td></tr>
+<tr><td>DELETE</td><td><code>/:id</code></td><td>ADMIN/MANAGER</td><td>BranchTaskEntry</td></tr>
+</table>
+
+<h3>8.8 Other Modules</h3>
+<table>
+<tr><th>Prefix</th><th>Endpoints</th><th>Key Models</th></tr>
+<tr><td><code>/api/notifications</code></td><td>GET /, GET /unread-count, PATCH /read-all, PATCH /:id/read</td><td>Notification</td></tr>
+<tr><td><code>/api/sign-in-requests</code></td><td>GET /pending, POST /:id/approve, POST /:id/reject</td><td>DeviceSignInRequest</td></tr>
+<tr><td><code>/api/audit-logs</code></td><td>GET /, GET /entity-types, GET /:id</td><td>AuditLog</td></tr>
+<tr><td><code>/api/plain-cloth</code></td><td>GET/POST/PUT/DELETE (with audit logs on mutations)</td><td>PlainClothPricing</td></tr>
+</table>
+
+<div class="page-break"></div>
+<h1>9. Database Schema &amp; Entity Relationships</h1>
+
+<h3>Core Business Entities</h3>
+<table>
+<tr><th>Model</th><th>Table</th><th>Key Fields</th><th>Related To</th></tr>
+<tr><td>Branch</td><td>branches</td><td>id (A,B,C…), name</td><td>Inventory, Sales, Tasks, Employees</td></tr>
+<tr><td>InventoryItem</td><td>inventory_items</td><td>id (QR), code, subCode, type, meters, quantity</td><td>Branch, Color, SaleItem</td></tr>
+<tr><td>Color</td><td>colors</td><td>name, hexCode</td><td>InventoryItem, SaleItem</td></tr>
+<tr><td>Sale</td><td>sales</td><td>branchId, employeeId, customerName, paymentMethod, total</td><td>SaleItem, Refund, EmployeeCommissionEntry</td></tr>
+<tr><td>SaleItem</td><td>sale_items</td><td>inventoryItemId, soldUnit, quantity, unitPrice</td><td>Sale, InventoryItem, Color</td></tr>
+<tr><td>Employee</td><td>employees</td><td>email, role, allowedSections, approvalStatus</td><td>Session, BranchEmployee, Sales</td></tr>
+<tr><td>EmployeeCommissionEntry</td><td>employee_commission_entries</td><td>status PENDING/PAID, amount</td><td>Sale, SaleItem, Employee</td></tr>
+<tr><td>BranchTaskEntry</td><td>branch_task_entries</td><td>templateKey, assigneeId, doneAt</td><td>Branch, Employee</td></tr>
+<tr><td>PlainClothPricing</td><td>plain_cloth_pricing</td><td>name, pricePerMeter</td><td>Used in sales (non-inventory lines)</td></tr>
+<tr><td>AuditLog</td><td>audit_logs</td><td>action, entityType, entityId, changes</td><td>Employee, Branch</td></tr>
+</table>
+
+<h3>Inventory Item ID Format (QR)</h3>
+<p>Composite ID encoding branch + family code + sub-code + color + type + piece length. Parsed by <code>lib/inventoryCodes.ts</code>. Scanned on Sales, Inventory, Exchange, Item Conversion, Item Pricing, Item Input.</p>
+
+<h3>Branches</h3>
+<p>Codes: <strong>A, B, C, E, F</strong> (shop floors) and <strong>S</strong> (Storage). Defined in <code>lib/inventoryCodes.ts</code> as <code>BRANCH_DESTINATIONS</code>.</p>
+
+<h1>10. Section-to-Section Data Flow</h1>
+<pre>
+Item Input ──POST /inventory──► Inventory DB ──GET /inventory──► Inventory View
+                                    │
+                                    ├──QR scan──► Sales (deduct stock via POST /sales)
+                                    │                  │
+                                    │                  ├──► EmployeeCommissionEntry
+                                    │                  ├──► Daily/History Sales (GET /sales)
+                                    │                  └──► BranchTaskEntry (cutting tasks)
+                                    │
+                                    ├──PATCH /inventory──► Item Conversion (transfer/cut)
+                                    │
+                                    └──GET /inventory/:id──► Exchange (POST /sales/exchange)
+
+Plain Cloth Pricing ──GET plain-cloth──► Sales (Plain Cloth accordion)
+Item Pricing ──PUT settings/prices──► Commission calculation on sales
+Sales Commission ──PUT settings/rate──► Commission Payouts (GET /commissions/pending)
+
+Sales ──AuditLog──► Activity History
+Inventory mutations ──AuditLog──► Activity History
+Employee CRUD ──AuditLog──► Activity History
+
+Employee Accounts ──allowedSections──► Sidebar visibility per employee
+Tasks (assign) ──BranchTaskEntry──► Task Employee (mine=true view)
+</pre>
+
+<h1>11. Client-Only vs Server-Backed Features</h1>
+<table>
+<tr><th>Feature</th><th>Storage</th><th>Pages Affected</th></tr>
+<tr><td>Owed payment recordings</td><td>localStorage <code>textile-erp-owed-payments</code></td><td>Owed Money, Daily Sales</td></tr>
+<tr><td>Trustee commission rules</td><td>localStorage <code>textile-erp-trustee-rules</code></td><td>Trustee Commission</td></tr>
+<tr><td>Item minimum prices cache</td><td>localStorage + server sync</td><td>Item Pricing</td></tr>
+<tr><td>Commission settings cache</td><td>localStorage + server sync</td><td>Sales Commission, AppShell</td></tr>
+<tr><td>Employee access rules (fallback)</td><td>localStorage <code>textile-erp-employee-access-rules</code></td><td>Route guards (if server sections empty)</td></tr>
+<tr><td>JWT tokens + user profile</td><td>localStorage</td><td>Auth, all API calls</td></tr>
+</table>
+
+<h1>12. Shared Libraries &amp; Key Files</h1>
+<table>
+<tr><th>File</th><th>Purpose</th></tr>
+<tr><td><code>frontend/src/lib/api.ts</code></td><td>Axios client, JWT interceptor, retry on 530/502/503</td></tr>
+<tr><td><code>frontend/src/lib/auth.ts</code></td><td>Login/logout, getCurrentUser, role helpers</td></tr>
+<tr><td><code>frontend/src/lib/dashboardSettings.ts</code></td><td>Section keys, route access, localStorage settings</td></tr>
+<tr><td><code>frontend/src/lib/inventoryCodes.ts</code></td><td>QR parsing, branch codes, stock aggregation</td></tr>
+<tr><td><code>frontend/src/lib/salesFlow.ts</code></td><td>Roll cut, piece sell, cutting task hooks</td></tr>
+<tr><td><code>frontend/src/lib/tasksApi.ts</code></td><td>All task API wrappers</td></tr>
+<tr><td><code>frontend/src/lib/auditLogApi.ts</code></td><td>Activity history API wrappers</td></tr>
+<tr><td><code>frontend/src/lib/plainClothApi.ts</code></td><td>Plain cloth CRUD with fallback paths</td></tr>
+<tr><td><code>src/server.ts</code></td><td>Express entry, route mounting, SPA serve</td></tr>
+<tr><td><code>src/middleware/authenticate.ts</code></td><td>JWT verify, requireRole</td></tr>
+<tr><td><code>src/lib/inventory.ts</code></td><td>Inventory business logic</td></tr>
+<tr><td><code>src/lib/sales.ts</code></td><td>Sales + exchange logic</td></tr>
+<tr><td><code>src/lib/commissions.ts</code></td><td>Commission calculation + payout</td></tr>
+<tr><td><code>src/lib/branchTasks.ts</code></td><td>Branch task CRUD</td></tr>
+<tr><td><code>prisma/schema.prisma</code></td><td>Full database schema (22 models)</td></tr>
+</table>
+
+<p style="margin-top:40px; text-align:center; color:#888; font-size:9pt;">
+  Textile ERP Developer Map — End of Document<br/>
+  For updates, regenerate from repository main branch.
+</p>
+
+</body>
+</html>
