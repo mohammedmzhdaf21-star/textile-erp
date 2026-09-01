@@ -41,24 +41,30 @@ else
   fi
 fi
 
-# Remove old PM2 tunnel apps if present (conflicts with system service).
-for legacy in textile-tunnel textile-tunnel-guard textile-tunnel-keepalive textile-tunnel-recovery textile-watchdog; do
-  if pm2_cmd describe "$legacy" >/dev/null 2>&1; then
-    log "ensure-24-7: removing legacy $legacy (use install-cloudflared-service.sh)"
-    pm2_cmd delete "$legacy" >>"$LOG_FILE" 2>&1 || true
-  fi
-done
+# Remove duplicate PM2 tunnel connector when the system service owns the tunnel.
+if tunnel_system_service_available; then
+  for legacy in textile-tunnel textile-tunnel-keepalive textile-tunnel-recovery textile-watchdog; do
+    if pm2_cmd describe "$legacy" >/dev/null 2>&1; then
+      log "ensure-24-7: removing legacy $legacy (system cloudflared service active)"
+      pm2_cmd delete "$legacy" >>"$LOG_FILE" 2>&1 || true
+    fi
+  done
+fi
 
 pm2_cmd save >>"$LOG_FILE" 2>&1 || true
 
-# Ensure official cloudflared service is running.
-if [[ -x /etc/init.d/cloudflared ]]; then
+# Ensure cloudflared connector is running (system service or PM2 fallback).
+if tunnel_system_service_available; then
   if ! pgrep -f "cloudflared.*tunnel run" >/dev/null 2>&1; then
     log "ensure-24-7: starting cloudflared system service"
-    sudo /etc/init.d/cloudflared start >>"$LOG_FILE" 2>&1 || true
+    bash "$ROOT/scripts/restart-cloudflared-service.sh" "$LOG_FILE" >>"$LOG_FILE" 2>&1 || true
   fi
-elif command -v systemctl >/dev/null 2>&1; then
-  sudo systemctl start cloudflared >>"$LOG_FILE" 2>&1 || true
+elif ! pgrep -f "cloudflared.*tunnel run" >/dev/null 2>&1; then
+  if tunnel_pm2_start_connector "$ROOT" "$LOG_FILE"; then
+    log "ensure-24-7: started PM2 textile-tunnel connector"
+  elif [[ -z "${CLOUDFLARE_TUNNEL_TOKEN:-}" ]]; then
+    log "ensure-24-7: WARN no CLOUDFLARE_TUNNEL_TOKEN — public URL will fail (1033)"
+  fi
 fi
 
 for _ in $(seq 1 30); do
