@@ -36,6 +36,8 @@ fi
 log "GUARD: public URL failed while app is healthy — restarting tunnel"
 if bash "$ROOT/scripts/restart-cloudflared-service.sh" >>"$LOG_FILE" 2>&1; then
   :
+elif tunnel_pm2_start_connector "$ROOT" "$LOG_FILE"; then
+  log "GUARD: started PM2 textile-tunnel connector"
 elif tunnel_pm2_cmd describe textile-tunnel >/dev/null 2>&1; then
   tunnel_pm2_restart textile-tunnel "$LOG_FILE"
 fi

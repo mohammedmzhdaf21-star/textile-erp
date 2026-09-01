@@ -90,6 +90,40 @@ tunnel_pm2_start_missing() {
   tunnel_pm2_cmd start "$root/ecosystem.config.cjs" --update-env >>"$log_file" 2>&1 || true
 }
 
+tunnel_system_service_available() {
+  [[ -x /etc/init.d/cloudflared ]] && return 0
+  if command -v systemctl >/dev/null 2>&1; then
+    systemctl list-unit-files --type=service 2>/dev/null | grep -q '^cloudflared\.service' && return 0
+  fi
+  return 1
+}
+
+tunnel_pm2_start_connector() {
+  local root="$1"
+  local log_file="${2:-/dev/null}"
+
+  tunnel_health_load_env "$root"
+
+  if [[ -z "${CLOUDFLARE_TUNNEL_TOKEN:-}" ]]; then
+    return 1
+  fi
+
+  if ! command -v cloudflared >/dev/null 2>&1; then
+    return 1
+  fi
+
+  if tunnel_pm2_cmd describe textile-tunnel >/dev/null 2>&1; then
+    tunnel_pm2_restart textile-tunnel "$log_file"
+    return 0
+  fi
+
+  tunnel_pm2_cmd start "$root/scripts/run-named-tunnel.sh" \
+    --name textile-tunnel \
+    --interpreter bash \
+    --cwd "$root" \
+    --update-env >>"$log_file" 2>&1
+}
+
 tunnel_recover() {
   local root="${1:-$(tunnel_health_root)}"
   local log_file="${2:-$root/deploy/watchdog.log}"
