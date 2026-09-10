@@ -165,7 +165,32 @@
     "itemInput": "Item Input",
     "newItem": "New Item",
     "employeeAccounts": "Employee Accounts",
-    "activityHistory": "Activity History"
+    "activityHistory": "Activity History",
+    "attendance": "Attendance",
+    "attendanceQr": "Branch QR (Tablet)",
+    "attendanceCheckIn": "Scan Check-In"
+  },
+  "attendance": {
+    "title": "Branch Attendance QR",
+    "subtitle": "Display this QR on the branch tablet. Each branch gets a new code every day at 6:00 AM.",
+    "branch": "Branch",
+    "tabletHint": "Employees scan this code with their phone each morning.",
+    "validUntil": "Valid until {{time}}",
+    "renewNotice": "A new QR is generated automatically every day at {{hour}}:00 AM.",
+    "qrAlt": "Daily branch attendance QR code",
+    "qrMissing": "QR code unavailable",
+    "todayCheckIns": "Today's check-ins",
+    "dayLabel": "Attendance day: {{day}}",
+    "noCheckIns": "No check-ins yet for this branch today.",
+    "loadFailed": "Could not load attendance QR.",
+    "checkInTitle": "Attendance Check-In",
+    "checkInSubtitle": "Scan the branch tablet QR code once each day when you arrive.",
+    "checkInSteps": "Open the camera, scan the QR on your branch tablet, and wait for confirmation.",
+    "scanPlaceholder": "Scan branch attendance QR",
+    "invalidQr": "This is not a valid attendance QR code.",
+    "checkInSuccess": "Checked in at {{branch}} at {{time}}.",
+    "alreadyCheckedIn": "You already checked in at {{branch}} today ({{time}}).",
+    "checkInFailed": "Check-in failed."
   },
   "activityHistory": {
     "title": "Activity History",

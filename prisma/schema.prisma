@@ -102,6 +102,8 @@ model Branch {
   customers          Customer[]
   auditLogs          AuditLog[]
   trusteePayments    PaidTrusteeCommissionHistory[]
+  dailyAttendanceQrs BranchDailyAttendanceQr[]
+  attendanceRecords  AttendanceRecord[]
 
   @@index([isActive])
   @@map("branches")
@@ -442,6 +444,7 @@ model Employee {
   settingsUpdated  Setting[]
   deviceSignIns         DeviceSignInRequest[] @relation("EmployeeDeviceSignIns")
   deviceSignInsApproved DeviceSignInRequest[] @relation("DeviceSignInApprovedBy")
+  attendanceRecords     AttendanceRecord[]
 
   @@index([email])
   @@index([isActive])
@@ -664,4 +667,36 @@ model Setting {
 
   @@index([updatedById])
   @@map("settings")
+}
+
+model BranchDailyAttendanceQr {
+  id            String   @id @default(uuid())
+  branchId      String   @db.VarChar(5)
+  branch        Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  attendanceDay String   @db.VarChar(10)
+  token         String   @unique @db.VarChar(64)
+  qrCodeValue   String   @db.VarChar(200)
+  qrCodeDataUrl String?  @db.Text
+  validFrom     DateTime
+  validUntil    DateTime
+  createdAt     DateTime @default(now())
+
+  @@unique([branchId, attendanceDay])
+  @@index([branchId, validUntil])
+  @@map("branch_daily_attendance_qrs")
+}
+
+model AttendanceRecord {
+  id            String   @id @default(uuid())
+  employeeId    String
+  employee      Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  branchId      String   @db.VarChar(5)
+  branch        Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  attendanceDay String   @db.VarChar(10)
+  checkedInAt   DateTime @default(now())
+
+  @@unique([employeeId, branchId, attendanceDay])
+  @@index([branchId, attendanceDay])
+  @@index([employeeId, checkedInAt])
+  @@map("attendance_records")
 }

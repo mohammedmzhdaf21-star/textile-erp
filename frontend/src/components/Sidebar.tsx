@@ -60,6 +60,14 @@ const navigation: Array<NavItem | NavGroup> = [
       { to: '/task-employee', labelKey: 'nav.taskEmployee', end: true },
     ],
   },
+  {
+    id: 'attendance',
+    labelKey: 'nav.attendance',
+    items: [
+      { to: '/attendance', labelKey: 'nav.attendanceQr', end: true, adminOnly: true },
+      { to: '/attendance/check-in', labelKey: 'nav.attendanceCheckIn', end: true },
+    ],
+  },
   { to: '/analytics', labelKey: 'nav.dataAnalysis', end: true },
   {
     id: 'item-input',
