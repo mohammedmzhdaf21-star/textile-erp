@@ -194,7 +194,10 @@
     "todayCount": "{{count}} turns taken today",
     "greetedSuccess": "{{name}} passed the turn. Now up: {{nowUp}}.",
     "loadFailed": "Could not load customer queue.",
-    "advanceFailed": "Could not advance the queue."
+    "advanceFailed": "Could not advance the queue.",
+    "maghribLabel": "Maghrib (Sulaymaniyah)",
+    "maghribTime": "Today at {{time}} — the line-up order at Maghrib decides who goes first tomorrow (from 6:00 AM).",
+    "nextDayStartsWith": "Tomorrow starts with {{name}} (saved at Maghrib)."
   },
   "attendance": {
     "title": "Branch Attendance QR",

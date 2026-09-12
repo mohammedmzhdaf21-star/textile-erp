@@ -705,10 +705,14 @@ model AttendanceRecord {
 }
 
 model BranchGreetingQueue {
-  branchId     String   @id @db.VarChar(5)
-  branch       Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
-  currentIndex Int      @default(0)
-  updatedAt    DateTime @updatedAt
+  branchId                  String   @id @db.VarChar(5)
+  branch                    Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  currentIndex              Int      @default(0)
+  maghribSnapshotIndex      Int?
+  maghribSnapshotEmployeeId String?
+  maghribSnapshotDay        String?  @db.VarChar(10)
+  queueDayAppliedKey        String?  @db.VarChar(10)
+  updatedAt                 DateTime @updatedAt
 
   @@map("branch_greeting_queues")
 }

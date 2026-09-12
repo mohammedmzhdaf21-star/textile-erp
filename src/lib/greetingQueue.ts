@@ -1,6 +1,13 @@
 import { prisma } from './prisma';
 import { roleHasFullAccess } from './employeeSections';
 import { writeAuditLog } from './auditLog';
+import { getAttendanceDayKey, getAttendanceWindow, ATTENDANCE_TIMEZONE } from './attendance';
+import {
+  resolveSnapshotStartIndex,
+  shouldApplyMaghribRollover,
+  shouldCaptureMaghribSnapshot,
+} from './greetingQueueMaghrib';
+import { formatMaghribLocalTime, getCalendarDayKey, hasMaghribPassed } from './sulaymaniyahMaghrib';
 
 export type QueueEmployee = {
   id: string;
@@ -18,6 +25,9 @@ export type GreetingQueueState = {
   next: QueueEmployee | null;
   isMyTurn: boolean;
   totalToday: number;
+  maghribTimeLabel: string;
+  maghribPassedToday: boolean;
+  nextDayStartsWith: QueueEmployee | null;
 };
 
 async function assertBranch(branchId: string) {
@@ -63,32 +73,190 @@ export function pickCurrentAndNext(queue: QueueEmployee[], currentIndex: number)
   return { current, next, normalizedIndex };
 }
 
-async function getOrCreateQueueRow(branchId: string) {
-  return prisma.branchGreetingQueue.upsert({
+function buildMaghribMeta(now: Date, queue: QueueEmployee[], row: {
+  maghribSnapshotIndex: number | null;
+  maghribSnapshotEmployeeId: string | null;
+  maghribSnapshotDay: string | null;
+}) {
+  const calendarDayKey = getCalendarDayKey(now, ATTENDANCE_TIMEZONE);
+  const maghribTimeLabel = formatMaghribLocalTime(calendarDayKey, ATTENDANCE_TIMEZONE);
+  const maghribPassedToday = hasMaghribPassed(now, ATTENDANCE_TIMEZONE);
+
+  let nextDayStartsWith: QueueEmployee | null = null;
+  if (row.maghribSnapshotDay === calendarDayKey && maghribPassedToday) {
+    const startIndex = resolveSnapshotStartIndex(
+      queue,
+      row.maghribSnapshotIndex,
+      row.maghribSnapshotEmployeeId
+    );
+    nextDayStartsWith = queue[startIndex] ?? null;
+  }
+
+  return { maghribTimeLabel, maghribPassedToday, nextDayStartsWith };
+}
+
+async function applyMaghribRolloverIfNeeded(
+  branchId: string,
+  row: {
+    branchId: string;
+    currentIndex: number;
+    maghribSnapshotIndex: number | null;
+    maghribSnapshotEmployeeId: string | null;
+    maghribSnapshotDay: string | null;
+    queueDayAppliedKey: string | null;
+  },
+  queue: QueueEmployee[],
+  now: Date = new Date()
+) {
+  if (
+    !shouldApplyMaghribRollover({
+      now,
+      maghribSnapshotDay: row.maghribSnapshotDay,
+      queueDayAppliedKey: row.queueDayAppliedKey,
+    })
+  ) {
+    return row;
+  }
+
+  const nextIndex = resolveSnapshotStartIndex(
+    queue,
+    row.maghribSnapshotIndex,
+    row.maghribSnapshotEmployeeId
+  );
+  const attendanceDayKey = getAttendanceDayKey(now, ATTENDANCE_TIMEZONE);
+
+  const updated = await prisma.branchGreetingQueue.update({
+    where: { branchId },
+    data: {
+      currentIndex: nextIndex,
+      queueDayAppliedKey: attendanceDayKey,
+    },
+  });
+
+  await writeAuditLog({
+    action: 'UPDATE',
+    entityType: 'GREETING_QUEUE',
+    entityId: branchId,
+    branchId,
+    changes: {
+      maghribRollover: true,
+      appliedForDay: attendanceDayKey,
+      maghribSnapshotDay: row.maghribSnapshotDay,
+      startIndex: nextIndex,
+      startEmployeeId: row.maghribSnapshotEmployeeId,
+    },
+  });
+
+  return updated;
+}
+
+async function syncQueueRow(branchId: string, now: Date = new Date()) {
+  const row = await prisma.branchGreetingQueue.upsert({
     where: { branchId },
     create: { branchId, currentIndex: 0 },
     update: {},
   });
+  const queue = await listBranchQueueEmployees(branchId);
+  return applyMaghribRolloverIfNeeded(branchId, row, queue, now);
+}
+
+async function getOrCreateQueueRow(branchId: string, now: Date = new Date()) {
+  return syncQueueRow(branchId, now);
+}
+
+export async function captureMaghribQueueSnapshots(now: Date = new Date()) {
+  const branches = await prisma.branch.findMany({
+    where: { isActive: true, deletedAt: null },
+    select: { id: true },
+  });
+
+  for (const branch of branches) {
+    const row = await prisma.branchGreetingQueue.findUnique({
+      where: { branchId: branch.id },
+    });
+    if (!row) continue;
+
+    if (
+      !shouldCaptureMaghribSnapshot({
+        now,
+        maghribSnapshotDay: row.maghribSnapshotDay,
+      })
+    ) {
+      continue;
+    }
+
+    const queue = await listBranchQueueEmployees(branch.id);
+    if (queue.length === 0) continue;
+
+    const { normalizedIndex, current } = pickCurrentAndNext(queue, row.currentIndex);
+    const calendarDayKey = getCalendarDayKey(now, ATTENDANCE_TIMEZONE);
+
+    await prisma.branchGreetingQueue.update({
+      where: { branchId: branch.id },
+      data: {
+        maghribSnapshotIndex: normalizedIndex,
+        maghribSnapshotEmployeeId: current?.id ?? null,
+        maghribSnapshotDay: calendarDayKey,
+      },
+    });
+
+    await writeAuditLog({
+      action: 'UPDATE',
+      entityType: 'GREETING_QUEUE',
+      entityId: branch.id,
+      branchId: branch.id,
+      changes: {
+        maghribSnapshot: true,
+        snapshotDay: calendarDayKey,
+        snapshotIndex: normalizedIndex,
+        snapshotEmployeeId: current?.id ?? null,
+        snapshotEmployeeName: current?.name ?? null,
+      },
+    });
+  }
+}
+
+export async function processGreetingQueueSchedule(now: Date = new Date()) {
+  await captureMaghribQueueSnapshots(now);
+
+  const rows = await prisma.branchGreetingQueue.findMany({
+    select: {
+      branchId: true,
+      currentIndex: true,
+      maghribSnapshotIndex: true,
+      maghribSnapshotEmployeeId: true,
+      maghribSnapshotDay: true,
+      queueDayAppliedKey: true,
+    },
+  });
+
+  for (const row of rows) {
+    const queue = await listBranchQueueEmployees(row.branchId);
+    await applyMaghribRolloverIfNeeded(row.branchId, row, queue, now);
+  }
 }
 
 export async function getGreetingQueueState(input: {
   branchId: string;
   viewerId: string;
 }): Promise<GreetingQueueState> {
+  const now = new Date();
   const branch = await assertBranch(input.branchId);
   const queue = await listBranchQueueEmployees(input.branchId);
-  const row = await getOrCreateQueueRow(input.branchId);
+  const row = await getOrCreateQueueRow(input.branchId, now);
   const { current, next, normalizedIndex } = pickCurrentAndNext(queue, row.currentIndex);
 
-  const startOfDay = new Date();
-  startOfDay.setHours(0, 0, 0, 0);
+  const attendanceDayKey = getAttendanceDayKey(now, ATTENDANCE_TIMEZONE);
+  const { validFrom } = getAttendanceWindow(attendanceDayKey, ATTENDANCE_TIMEZONE);
 
   const totalToday = await prisma.greetingQueueEvent.count({
     where: {
       branchId: input.branchId,
-      greetedAt: { gte: startOfDay },
+      greetedAt: { gte: validFrom },
     },
   });
+
+  const maghribMeta = buildMaghribMeta(now, queue, row);
 
   return {
     branchId: branch.id,
@@ -99,6 +267,7 @@ export async function getGreetingQueueState(input: {
     next,
     isMyTurn: current?.id === input.viewerId,
     totalToday,
+    ...maghribMeta,
   };
 }
 
@@ -108,6 +277,7 @@ export async function advanceGreetingQueue(input: {
   employeeId: string;
   employeeRole: string;
 }) {
+  const now = new Date();
   const branch = await assertBranch(input.branchId);
   const queue = await listBranchQueueEmployees(input.branchId);
 
@@ -115,7 +285,7 @@ export async function advanceGreetingQueue(input: {
     throw new Error('No sales employees are assigned to this branch');
   }
 
-  const row = await getOrCreateQueueRow(input.branchId);
+  const row = await getOrCreateQueueRow(input.branchId, now);
   const { current, normalizedIndex } = pickCurrentAndNext(queue, row.currentIndex);
 
   if (!current) {

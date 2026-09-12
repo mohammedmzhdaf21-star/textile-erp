@@ -16,6 +16,9 @@ export type GreetingQueueState = {
   next: QueueEmployee | null;
   isMyTurn: boolean;
   totalToday: number;
+  maghribTimeLabel: string;
+  maghribPassedToday: boolean;
+  nextDayStartsWith: QueueEmployee | null;
 };
 
 export type GreetingQueueEvent = {

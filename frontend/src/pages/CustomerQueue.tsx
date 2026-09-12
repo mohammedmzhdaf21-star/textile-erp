@@ -114,7 +114,18 @@ const CustomerQueue: React.FC = () => {
         </ol>
       </div>
 
-      <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+      <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm space-y-3">
+        <div>
+          <p className="text-sm font-medium text-gray-700">{t('customerQueue.maghribLabel')}</p>
+          <p className="mt-1 text-sm text-gray-600">
+            {t('customerQueue.maghribTime', { time: state?.maghribTimeLabel ?? '—' })}
+          </p>
+          {state?.maghribPassedToday && state.nextDayStartsWith && (
+            <p className="mt-2 text-sm font-medium text-gray-800">
+              {t('customerQueue.nextDayStartsWith', { name: state.nextDayStartsWith.name })}
+            </p>
+          )}
+        </div>
         <label className="block text-sm font-medium text-gray-700">{t('customerQueue.branch')}</label>
         <select
           className="mt-2 w-full max-w-xs rounded-lg border border-gray-300 px-3 py-2"

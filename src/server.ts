@@ -35,6 +35,7 @@ import { migrateLegacyCommissionBase, migrateLegacySettingsPrices } from './lib/
 import { backfillCommissionEntries, recalculatePendingCommissionEntries } from './lib/commissions';
 import { recoverPlainClothNamesFromSales, ensureDefaultPlainClothTypes } from './lib/plainClothPricing';
 import prisma from './lib/prisma';
+import { processGreetingQueueSchedule } from './lib/greetingQueue';
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '3000', 10);
@@ -266,6 +267,15 @@ const server = app.listen(PORT, async () => {
   console.log(`Environment:     ${process.env.NODE_ENV || 'development'}`);
   console.log('============================================================');
   console.log('');
+
+  void processGreetingQueueSchedule().catch((error) => {
+    console.warn('Greeting queue schedule check failed on startup:', error);
+  });
+  setInterval(() => {
+    void processGreetingQueueSchedule().catch((error) => {
+      console.warn('Greeting queue schedule check failed:', error);
+    });
+  }, 60_000);
 });
 
 server.on('error', (err: NodeJS.ErrnoException) => {

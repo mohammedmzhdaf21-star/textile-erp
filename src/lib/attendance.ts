@@ -33,6 +33,15 @@ function getZonedParts(date: Date, timeZone: string): ZonedParts {
   };
 }
 
+/** Calendar day key in the attendance timezone (midnight boundary). */
+export function getCalendarDayKey(
+  date: Date = new Date(),
+  timeZone: string = ATTENDANCE_TIMEZONE
+): string {
+  const parts = getZonedParts(date, timeZone);
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
+
 /** Calendar day key for the current attendance period (resets daily at 6:00 AM). */
 export function getAttendanceDayKey(
   date: Date = new Date(),
