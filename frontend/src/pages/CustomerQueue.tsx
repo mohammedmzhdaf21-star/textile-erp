@@ -111,7 +111,7 @@ const CustomerQueue: React.FC = () => {
         <p className="mt-1 max-w-3xl text-sm text-gray-600">{t('customerQueue.subtitle')}</p>
         <ol className="mt-4 max-w-3xl list-decimal space-y-1 pl-5 text-sm text-gray-700">
           <li>{t('customerQueue.stepWait')}</li>
-          <li>{t('customerQueue.stepGreetSell')}</li>
+          <li>{t('customerQueue.stepGreetHelp')}</li>
           <li>{t('customerQueue.stepAdvance')}</li>
         </ol>
       </div>
@@ -205,6 +205,8 @@ const CustomerQueue: React.FC = () => {
               {advancing ? t('common.loading') : t('customerQueue.advanceButton')}
             </button>
 
+            <p className="text-center text-sm text-gray-500">{t('customerQueue.saleOptionalNote')}</p>
+
             {!state.isMyTurn && state.current && !isAdmin && (
               <p className="text-center text-sm text-gray-500">
                 {t('customerQueue.waitForTurn', { name: state.current.name })}
@@ -262,9 +264,9 @@ const CustomerQueue: React.FC = () => {
             </div>
 
             <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-              <h3 className="text-xl font-semibold text-black">{t('customerQueue.recentCustomers')}</h3>
+              <h3 className="text-xl font-semibold text-black">{t('customerQueue.recentTurns')}</h3>
               {events.length === 0 ? (
-                <p className="mt-4 text-sm text-gray-500">{t('customerQueue.noCustomersYet')}</p>
+                <p className="mt-4 text-sm text-gray-500">{t('customerQueue.noTurnsYet')}</p>
               ) : (
                 <ul className="mt-4 divide-y divide-gray-100">
                   {events.map((event) => (
