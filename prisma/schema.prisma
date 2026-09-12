@@ -104,6 +104,8 @@ model Branch {
   trusteePayments    PaidTrusteeCommissionHistory[]
   dailyAttendanceQrs BranchDailyAttendanceQr[]
   attendanceRecords  AttendanceRecord[]
+  greetingQueue      BranchGreetingQueue?
+  greetingEvents     GreetingQueueEvent[]
 
   @@index([isActive])
   @@map("branches")
@@ -445,6 +447,7 @@ model Employee {
   deviceSignIns         DeviceSignInRequest[] @relation("EmployeeDeviceSignIns")
   deviceSignInsApproved DeviceSignInRequest[] @relation("DeviceSignInApprovedBy")
   attendanceRecords     AttendanceRecord[]
+  greetingEvents        GreetingQueueEvent[]
 
   @@index([email])
   @@index([isActive])
@@ -699,4 +702,26 @@ model AttendanceRecord {
   @@index([branchId, attendanceDay])
   @@index([employeeId, checkedInAt])
   @@map("attendance_records")
+}
+
+model BranchGreetingQueue {
+  branchId     String   @id @db.VarChar(5)
+  branch       Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  currentIndex Int      @default(0)
+  updatedAt    DateTime @updatedAt
+
+  @@map("branch_greeting_queues")
+}
+
+model GreetingQueueEvent {
+  id         String   @id @default(uuid())
+  branchId   String   @db.VarChar(5)
+  branch     Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  greetedAt  DateTime @default(now())
+
+  @@index([branchId, greetedAt])
+  @@index([employeeId, greetedAt])
+  @@map("greeting_queue_events")
 }

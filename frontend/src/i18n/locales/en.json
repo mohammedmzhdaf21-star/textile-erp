@@ -168,7 +168,30 @@
     "activityHistory": "Activity History",
     "attendance": "Attendance",
     "attendanceQr": "Branch QR (Tablet)",
-    "attendanceCheckIn": "Scan Check-In"
+    "attendanceCheckIn": "Scan Check-In",
+    "customerQueue": "Customer Queue"
+  },
+  "customerQueue": {
+    "title": "Customer Greeting Queue",
+    "subtitle": "Sales staff take turns greeting customers in line. Press the button after each greeting so the next salesperson is up.",
+    "branch": "Branch",
+    "currentTurn": "Current turn",
+    "nextUp": "Next up",
+    "yourTurn": "It is your turn — greet the next customer.",
+    "advanceButton": "Customer greeted — next",
+    "waitForTurn": "Wait for {{name}} to greet the customer and press the button.",
+    "adminCanAdvance": "As a manager, you can advance the queue if needed.",
+    "rotationOrder": "Rotation order",
+    "rotationHint": "Active sales staff at {{branch}}, alphabetically by name.",
+    "recentGreetings": "Recent greetings",
+    "noGreetingsYet": "No customers greeted yet today.",
+    "noSalesStaff": "No sales staff assigned to this branch.",
+    "noOne": "—",
+    "now": "Now",
+    "todayCount": "{{count}} customers greeted today",
+    "greetedSuccess": "{{name}} greeted the customer. Next: {{next}}.",
+    "loadFailed": "Could not load customer queue.",
+    "advanceFailed": "Could not advance the queue."
   },
   "attendance": {
     "title": "Branch Attendance QR",
