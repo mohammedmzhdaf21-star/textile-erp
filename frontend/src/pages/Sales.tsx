@@ -15,7 +15,7 @@ import {
 import { completeCuttingTasksAfterRollToPiece, maybeCreateCuttingTaskAfterPieceSale } from '../lib/cuttingTasks';
 import { getColorLabel } from '../lib/colorLabels';
 import { resolveInventoryItem } from '../lib/inventoryLookup';
-import { BRANCH_ID_BY_CODE, resolveBranchId } from '../lib/inventoryCodes';
+import { BRANCH_CODE_BY_ID, BRANCH_ID_BY_CODE, resolveBranchId } from '../lib/inventoryCodes';
 import { printPieceInventoryLabel } from '../lib/pieceLabel';
 import {
   cutRollToPieceStock,
@@ -84,6 +84,24 @@ type InventoryLookupItem = {
 };
 
 const branchOptions = ['A', 'B', 'C', 'E', 'F'];
+
+const resolveInitialSalesBranch = (): string => {
+  const fromUrl = new URLSearchParams(window.location.search).get('branch')?.trim().toUpperCase();
+  if (fromUrl && branchOptions.includes(fromUrl)) {
+    return fromUrl;
+  }
+
+  const user = getCurrentUser();
+  const firstBranchId = user?.branchIds?.[0];
+  if (firstBranchId) {
+    const code = BRANCH_CODE_BY_ID[firstBranchId];
+    if (code && branchOptions.includes(code)) {
+      return code;
+    }
+  }
+
+  return 'A';
+};
 const soldAsUnitForItem = (item: InventoryLookupItem): 'METER' | 'PIECE' => {
   if (item.type === 'PIECE' && !item.isPiecePackage) return 'PIECE';
   if (item.type === 'REMANENT') return 'METER';
@@ -176,7 +194,7 @@ function SalesCollapsibleSection({
 
 const SalesView: React.FC = () => {
   const { t } = useTranslation();
-  const [branch, setBranch] = useState<string>('A');
+  const [branch, setBranch] = useState<string>(resolveInitialSalesBranch);
   const [cart, setCart] = useState<SaleLine[]>([]);
   const [customerName, setCustomerName] = useState('Walk-in');
   const [customerPhone, setCustomerPhone] = useState('0000000000');

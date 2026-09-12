@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { getCurrentUser, type User } from '../lib/auth';
 import {
@@ -89,7 +90,7 @@ const CustomerQueue: React.FC = () => {
       setMessage(
         t('customerQueue.greetedSuccess', {
           name: result.greeted.name,
-          next: result.state.next?.name ?? t('customerQueue.noOne'),
+          nowUp: result.state.current?.name ?? t('customerQueue.noOne'),
         })
       );
       const recentEvents = await fetchGreetingQueueEvents(branchId);
@@ -108,6 +109,11 @@ const CustomerQueue: React.FC = () => {
       <div>
         <h1 className="text-3xl font-bold text-black">{t('customerQueue.title')}</h1>
         <p className="mt-1 max-w-3xl text-sm text-gray-600">{t('customerQueue.subtitle')}</p>
+        <ol className="mt-4 max-w-3xl list-decimal space-y-1 pl-5 text-sm text-gray-700">
+          <li>{t('customerQueue.stepWait')}</li>
+          <li>{t('customerQueue.stepGreetSell')}</li>
+          <li>{t('customerQueue.stepAdvance')}</li>
+        </ol>
       </div>
 
       <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
@@ -176,6 +182,15 @@ const CustomerQueue: React.FC = () => {
                 </p>
               )}
             </div>
+
+            {state.isMyTurn && (
+              <Link
+                to={`/sales?branch=${selectedBranch}`}
+                className="flex w-full items-center justify-center rounded-xl border-2 border-black bg-white px-6 py-4 text-lg font-bold text-black transition-colors hover:bg-gray-50"
+              >
+                {t('customerQueue.openSales')}
+              </Link>
+            )}
 
             <button
               type="button"
@@ -247,9 +262,9 @@ const CustomerQueue: React.FC = () => {
             </div>
 
             <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-              <h3 className="text-xl font-semibold text-black">{t('customerQueue.recentGreetings')}</h3>
+              <h3 className="text-xl font-semibold text-black">{t('customerQueue.recentCustomers')}</h3>
               {events.length === 0 ? (
-                <p className="mt-4 text-sm text-gray-500">{t('customerQueue.noGreetingsYet')}</p>
+                <p className="mt-4 text-sm text-gray-500">{t('customerQueue.noCustomersYet')}</p>
               ) : (
                 <ul className="mt-4 divide-y divide-gray-100">
                   {events.map((event) => (
