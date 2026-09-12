@@ -1,13 +1,18 @@
 import { prisma } from './prisma';
 import { roleHasFullAccess } from './employeeSections';
 import { writeAuditLog } from './auditLog';
-import { getAttendanceDayKey, getAttendanceWindow, ATTENDANCE_TIMEZONE } from './attendance';
+import {
+  getAttendanceDayKey,
+  getAttendanceWindow,
+  getCalendarDayKey,
+  ATTENDANCE_TIMEZONE,
+} from './attendance';
 import {
   resolveSnapshotStartIndex,
   shouldApplyMaghribRollover,
   shouldCaptureMaghribSnapshot,
 } from './greetingQueueMaghrib';
-import { formatMaghribLocalTime, getCalendarDayKey, hasMaghribPassed } from './sulaymaniyahMaghrib';
+import { formatMaghribLocalTime, hasMaghribPassed } from './sulaymaniyahMaghrib';
 
 export type QueueEmployee = {
   id: string;
