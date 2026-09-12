@@ -51,6 +51,7 @@
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",
+    "adhan": "^4.4.6",
     "bcryptjs": "^3.0.3",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
