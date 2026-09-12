@@ -102,6 +102,7 @@ export async function getGreetingQueueState(input: {
   };
 }
 
+/** Move to the next salesperson in the branch line-up. No sale is required or checked. */
 export async function advanceGreetingQueue(input: {
   branchId: string;
   employeeId: string;

@@ -1,5 +1,4 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { getCurrentUser, type User } from '../lib/auth';
 import {
@@ -111,7 +110,6 @@ const CustomerQueue: React.FC = () => {
         <p className="mt-1 max-w-3xl text-sm text-gray-600">{t('customerQueue.subtitle')}</p>
         <ol className="mt-4 max-w-3xl list-decimal space-y-1 pl-5 text-sm text-gray-700">
           <li>{t('customerQueue.stepWait')}</li>
-          <li>{t('customerQueue.stepGreetHelp')}</li>
           <li>{t('customerQueue.stepAdvance')}</li>
         </ol>
       </div>
@@ -182,15 +180,6 @@ const CustomerQueue: React.FC = () => {
                 </p>
               )}
             </div>
-
-            {state.isMyTurn && (
-              <Link
-                to={`/sales?branch=${selectedBranch}`}
-                className="flex w-full items-center justify-center rounded-xl border-2 border-black bg-white px-6 py-4 text-lg font-bold text-black transition-colors hover:bg-gray-50"
-              >
-                {t('customerQueue.openSales')}
-              </Link>
-            )}
 
             <button
               type="button"
