@@ -24,6 +24,9 @@ import SalesCommission from './pages/SalesCommission';
 import CommissionPayouts from './pages/CommissionPayouts';
 import ActivityHistory from './pages/ActivityHistory';
 import ActivityHistoryDetail from './pages/ActivityHistoryDetail';
+import Attendance from './pages/Attendance';
+import AttendanceCheckIn from './pages/AttendanceCheckIn';
+import CustomerQueue from './pages/CustomerQueue';
 import { getCurrentUser, isAuthenticated } from './lib/auth';
 import { canAccessAdminRoute, canAccessRoute } from './lib/dashboardSettings';
 
@@ -177,6 +180,30 @@ function App() {
           element={
             <ProtectedLayout>
               <TaskEmployee />
+            </ProtectedLayout>
+          }
+        />
+        <Route
+          path="/attendance/check-in"
+          element={
+            <ProtectedLayout>
+              <AttendanceCheckIn />
+            </ProtectedLayout>
+          }
+        />
+        <Route
+          path="/attendance"
+          element={
+            <ProtectedLayout>
+              <Attendance />
+            </ProtectedLayout>
+          }
+        />
+        <Route
+          path="/customer-queue"
+          element={
+            <ProtectedLayout>
+              <CustomerQueue />
             </ProtectedLayout>
           }
         />

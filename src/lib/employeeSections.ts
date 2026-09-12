@@ -17,6 +17,9 @@ export const EMPLOYEE_SECTION_KEYS = [
   'itemInput',
   'employeeAccounts',
   'activityHistory',
+  'attendance',
+  'attendanceCheckIn',
+  'customerQueue',
 ] as const;
 
 export type EmployeeSectionKey = (typeof EMPLOYEE_SECTION_KEYS)[number];
@@ -26,6 +29,8 @@ export const DEFAULT_EMPLOYEE_SECTIONS: EmployeeSectionKey[] = [
   'dailySales',
   'historySales',
   'taskEmployee',
+  'attendanceCheckIn',
+  'customerQueue',
 ];
 
 export const parseAllowedSections = (value: unknown): EmployeeSectionKey[] | null => {

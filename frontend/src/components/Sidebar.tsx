@@ -41,6 +41,7 @@ const navigation: Array<NavItem | NavGroup> = [
   },
   { to: '/inventory', labelKey: 'nav.inventory', end: true },
   { to: '/sales', labelKey: 'nav.sales', end: true },
+  { to: '/customer-queue', labelKey: 'nav.customerQueue', end: true },
   {
     id: 'accounting',
     labelKey: 'nav.accounting',
@@ -58,6 +59,14 @@ const navigation: Array<NavItem | NavGroup> = [
     items: [
       { to: '/tasks', labelKey: 'nav.taskInput', end: true },
       { to: '/task-employee', labelKey: 'nav.taskEmployee', end: true },
+    ],
+  },
+  {
+    id: 'attendance',
+    labelKey: 'nav.attendance',
+    items: [
+      { to: '/attendance', labelKey: 'nav.attendanceQr', end: true, adminOnly: true },
+      { to: '/attendance/check-in', labelKey: 'nav.attendanceCheckIn', end: true },
     ],
   },
   { to: '/analytics', labelKey: 'nav.dataAnalysis', end: true },

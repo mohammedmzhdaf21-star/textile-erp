@@ -18,7 +18,10 @@ export type DashboardSectionKey =
   | 'exchange'
   | 'itemInput'
   | 'employeeAccounts'
-  | 'activityHistory';
+  | 'activityHistory'
+  | 'attendance'
+  | 'attendanceCheckIn'
+  | 'customerQueue';
 
 export type ItemMinimumPrice = {
   itemId: string;
@@ -63,6 +66,9 @@ export const dashboardSections: Array<{ key: DashboardSectionKey; labelKey: stri
   { key: 'itemInput', labelKey: 'nav.newItem', route: '/item-input' },
   { key: 'employeeAccounts', labelKey: 'nav.employeeAccounts', route: '/employee-accounts' },
   { key: 'activityHistory', labelKey: 'nav.activityHistory', route: '/activity-history' },
+  { key: 'attendance', labelKey: 'nav.attendanceQr', route: '/attendance' },
+  { key: 'attendanceCheckIn', labelKey: 'nav.attendanceCheckIn', route: '/attendance/check-in' },
+  { key: 'customerQueue', labelKey: 'nav.customerQueue', route: '/customer-queue' },
 ];
 
 const readJson = <T,>(key: string, fallback: T): T => {

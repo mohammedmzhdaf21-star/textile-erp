@@ -29,6 +29,8 @@ import plainClothRoutes from './routes/plainCloth.routes';
 import auditLogRoutes from './routes/auditLog.routes';
 import tasksRoutes from './routes/tasks.routes';
 import trusteesRoutes from './routes/trustees.routes';
+import attendanceRoutes from './routes/attendance.routes';
+import greetingQueueRoutes from './routes/greetingQueue.routes';
 import { migrateLegacyCommissionBase, migrateLegacySettingsPrices } from './lib/currency';
 import { backfillCommissionEntries, recalculatePendingCommissionEntries } from './lib/commissions';
 import { recoverPlainClothNamesFromSales, ensureDefaultPlainClothTypes } from './lib/plainClothPricing';
@@ -154,6 +156,8 @@ app.use('/api/plain-cloth', plainClothRoutes);
 app.use('/api/audit-logs', auditLogRoutes);
 app.use('/api/tasks', tasksRoutes);
 app.use('/api/trustees', trusteesRoutes);
+app.use('/api/attendance', attendanceRoutes);
+app.use('/api/greeting-queue', greetingQueueRoutes);
 
 // ============================================================
 // FRONTEND SPA (serve built app for /login, /register, etc.)
