@@ -36,6 +36,7 @@ import { backfillCommissionEntries, recalculatePendingCommissionEntries } from '
 import { recoverPlainClothNamesFromSales, ensureDefaultPlainClothTypes } from './lib/plainClothPricing';
 import prisma from './lib/prisma';
 import { processGreetingQueueSchedule } from './lib/greetingQueue';
+import { backfillEmployeeAllowedSections } from './lib/backfillEmployeeSections';
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '3000', 10);
@@ -81,6 +82,8 @@ app.get('/health', async (_req: Request, res: Response) => {
         plainClothApi: true,
         deviceSignIn: true,
         employeeRegistration: true,
+        customerQueue: true,
+        attendanceDailyQr: true,
       },
     });
   } catch (error) {
@@ -214,6 +217,7 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
 // ============================================================
 const server = app.listen(PORT, async () => {
   const migrationSteps: Array<[string, () => Promise<unknown>]> = [
+    ['employee section backfill', backfillEmployeeAllowedSections],
     ['legacy settings prices', migrateLegacySettingsPrices],
     ['legacy commission base', migrateLegacyCommissionBase],
     ['commission backfill', backfillCommissionEntries],
@@ -224,6 +228,9 @@ const server = app.listen(PORT, async () => {
   for (const [name, step] of migrationSteps) {
     try {
       const result = await step();
+      if (name === 'employee section backfill' && result && typeof result === 'object' && 'updated' in result && Number((result as { updated: number }).updated) > 0) {
+        console.log(`Backfilled customerQueue (and defaults) for ${(result as { updated: number }).updated} employee account(s).`);
+      }
       if (name === 'legacy settings prices' && result && typeof result === 'object' && 'updated' in result && Number((result as { updated: number }).updated) > 0) {
         console.log(`Migrated ${(result as { updated: number }).updated} legacy minimum price setting(s) to full IQD.`);
       }

@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
+import { DEFAULT_EMPLOYEE_SECTIONS } from '../src/lib/employeeSections';
 
 const prisma = new PrismaClient();
 
@@ -82,7 +83,7 @@ async function main() {
   const employee = await prisma.employee.upsert({
     where: { email: 'employee@textile.com' },
     update: {
-      allowedSections: ['sales', 'dailySales', 'historySales', 'taskEmployee'],
+      allowedSections: DEFAULT_EMPLOYEE_SECTIONS,
     },
     create: {
       name: 'Sarah Employee',
@@ -90,7 +91,7 @@ async function main() {
       phone: '+1000000003',
       role: 'EMPLOYEE',
       passwordHash: employeePassword,
-      allowedSections: ['sales', 'dailySales', 'historySales', 'taskEmployee'],
+      allowedSections: DEFAULT_EMPLOYEE_SECTIONS,
     },
   });
   console.log('✅ 3 employees created (admin, manager, employee)\n');
