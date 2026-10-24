@@ -1,3 +1,4 @@
+import { EmployeeApprovalStatus } from '@prisma/client';
 import { prisma } from './prisma';
 
 export type EmployeeAccessCheck = {
@@ -7,6 +8,7 @@ export type EmployeeAccessCheck = {
     email: string;
     role: string;
     isActive: boolean;
+    approvalStatus: EmployeeApprovalStatus;
   };
 };
 
@@ -15,6 +17,16 @@ export type EmployeeAccessDenied = {
   error: string;
   status: 401 | 403;
 };
+
+export function approvalStatusError(status: EmployeeApprovalStatus): string | null {
+  if (status === 'PENDING') {
+    return 'Account is pending administrator approval';
+  }
+  if (status === 'REJECTED') {
+    return 'Registration was rejected by an administrator';
+  }
+  return null;
+}
 
 export async function checkEmployeeAccess(
   employeeId: string
@@ -26,6 +38,7 @@ export async function checkEmployeeAccess(
       email: true,
       role: true,
       isActive: true,
+      approvalStatus: true,
     },
   });
 
@@ -37,14 +50,25 @@ export async function checkEmployeeAccess(
     return { ok: false, error: 'Account is inactive', status: 403 };
   }
 
+  const approvalError = approvalStatusError(employee.approvalStatus);
+  if (approvalError) {
+    return { ok: false, error: approvalError, status: 403 };
+  }
+
   return { ok: true, employee };
 }
 
 export function assertEmployeeRecordCanSignIn(employee: {
   isActive: boolean;
   deletedAt: Date | null;
+  approvalStatus: EmployeeApprovalStatus;
 }) {
   if (!employee.isActive || employee.deletedAt) {
     throw new Error('Account is inactive');
+  }
+
+  const approvalError = approvalStatusError(employee.approvalStatus);
+  if (approvalError) {
+    throw new Error(approvalError);
   }
 }

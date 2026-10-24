@@ -11,6 +11,7 @@ import { getEmployeeAuthProfile } from './employees';
 import { DEFAULT_EMPLOYEE_SECTIONS } from './employeeSections';
 import { assertEmployeeRecordCanSignIn, checkEmployeeAccess } from './employeeAccess';
 import { ensureDeviceSignInApproved } from './deviceSignIn';
+import { notifyAdminsOfRegistration } from './notifications';
 
 const MAX_FAILED_ATTEMPTS = 5;
 const LOCKOUT_DURATION_MINUTES = 15;
@@ -61,13 +62,19 @@ export async function registerEmployee(input: {
       passwordHash,
       role: 'EMPLOYEE',
       isActive: true,
-      approvalStatus: 'APPROVED',
+      approvalStatus: 'PENDING',
       allowedSections: DEFAULT_EMPLOYEE_SECTIONS,
       registrationNote: input.registrationNote?.trim() || null,
       branches: input.branchId
         ? { create: [{ branchId: input.branchId }] }
         : undefined,
     },
+  });
+
+  await notifyAdminsOfRegistration({
+    id: employee.id,
+    name: employee.name,
+    email: employee.email,
   });
 
   await prisma.auditLog.create({
@@ -78,7 +85,7 @@ export async function registerEmployee(input: {
       performedByEmail: email,
       changes: {
         source: 'self_registration',
-        approvalStatus: 'APPROVED',
+        approvalStatus: 'PENDING',
       },
     },
   });
