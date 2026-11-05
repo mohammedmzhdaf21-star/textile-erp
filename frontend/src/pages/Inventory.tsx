@@ -418,7 +418,7 @@ const InventoryView: React.FC = () => {
       const row = familyStock.find((entry) => entry.branchId === stockBreakdownTarget);
       const amount = row ? formatStockAmountLabel(t, row, selectedType) : '0';
       return t('inventory.branchAmount', {
-        branch: t(branch?.labelKey ?? 'branches.labelLabel'),
+        branch: t(branch?.labelKey ?? 'common.branch'),
         amount,
       });
     }
@@ -477,7 +477,7 @@ const InventoryView: React.FC = () => {
 
       <section className="mb-6 rounded-3xl border border-gray-200 bg-white p-5 shadow-sm">
         <h3 className="text-lg font-semibold text-black">{t('inventory.qrSearchTitle')}</h3>
-        <p className="mt-1 text-sm text-gray-500">{t('inventory.qrSearchTitleDescription')}</p>
+        <p className="mt-1 text-sm text-gray-500">{t('inventory.qrSearchDescription')}</p>
         <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-start">
           <QrScanInput
             value={scanQuery}
@@ -720,7 +720,7 @@ const InventoryView: React.FC = () => {
           ))}
         </div>
         <p className="mt-2 text-sm text-gray-500">
-          {t('common.tableFilter', {
+          {t('inventory.tableFilter', {
             filter: branch ? t('branches.label', { code: branch }) : t('common.allBranches'),
           })}
         </p>
@@ -776,13 +776,13 @@ const InventoryView: React.FC = () => {
                 <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('common.select')}</th>
               )}
               <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('common.id')}</th>
-              <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('branches.labelLabel')}</th>
+              <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('common.branch')}</th>
               <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('common.family')}</th>
-              <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('common.subCode')}</th>
+              <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('inventory.subCodePriceLabel')}</th>
               <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('common.type')}</th>
               <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('common.color')}</th>
               <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('common.amount')}</th>
-              <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('common.packagePieces')}</th>
+              <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('inventory.packagePieces')}</th>
               <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('inventory.qrLabel')}</th>
             </tr>
           </thead>

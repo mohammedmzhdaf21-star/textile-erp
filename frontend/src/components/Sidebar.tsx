@@ -42,6 +42,7 @@ const navigation: Array<NavItem | NavGroup> = [
   { to: '/inventory', labelKey: 'nav.inventory', end: true },
   { to: '/sales', labelKey: 'nav.sales', end: true },
   { to: '/customer-queue', labelKey: 'nav.customerQueue', end: true },
+  { to: '/tailors', labelKey: 'nav.tailors', end: true },
   {
     id: 'accounting',
     labelKey: 'nav.accounting',

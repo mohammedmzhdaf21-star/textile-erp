@@ -1,0 +1,2 @@
+ALTER TABLE "tailor_measurements" ADD COLUMN "costIqd" DECIMAL(12,2) NOT NULL DEFAULT 0;
+ALTER TABLE "tailor_measurements" ADD COLUMN "paidIqd" DECIMAL(12,2) NOT NULL DEFAULT 0;

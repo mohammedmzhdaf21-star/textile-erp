@@ -1,0 +1,347 @@
+import React, { useCallback, useEffect, useState } from 'react';
+import type { FormEvent } from 'react';
+import axios from 'axios';
+import { useTranslation } from 'react-i18next';
+import { formatCurrency, parsePriceInput, toPriceInput } from '../lib/currency';
+import {
+  createTailorMeasurement,
+  deleteTailorMeasurement,
+  fetchTailorMeasurements,
+  updateTailorMeasurement,
+  type TailorMeasurement,
+  type TailorMeasurementDraft,
+} from '../lib/tailorApi';
+
+const emptyDraft = (): TailorMeasurementDraft => ({
+  customerName: '',
+  phone: '',
+  shoulderCm: '',
+  armCm: '',
+  waistCm: '',
+  chestCm: '',
+  heightCm: '',
+  buttCm: '',
+  cost: '',
+  paid: '',
+});
+
+const sizeFields = [
+  ['shoulderCm', 'tailors.shoulder'],
+  ['armCm', 'tailors.arm'],
+  ['waistCm', 'tailors.waist'],
+  ['chestCm', 'tailors.chest'],
+  ['heightCm', 'tailors.height'],
+  ['buttCm', 'tailors.butt'],
+] as const;
+
+function errorMessage(error: unknown, fallback: string) {
+  if (axios.isAxiosError(error)) {
+    const code = error.response?.data?.code;
+    if (typeof code === 'string' && code.length > 0) return code;
+  }
+  return fallback;
+}
+
+const Tailors: React.FC = () => {
+  const { t } = useTranslation();
+  const [draft, setDraft] = useState<TailorMeasurementDraft>(emptyDraft);
+  const [editing, setEditing] = useState<TailorMeasurement | null>(null);
+  const [items, setItems] = useState<TailorMeasurement[]>([]);
+  const [nextCode, setNextCode] = useState<number | null>(null);
+  const [query, setQuery] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(
+    async (search: string) => {
+      setLoading(true);
+      try {
+        const data = await fetchTailorMeasurements(search);
+        setItems(data.items);
+        setNextCode(data.nextCode);
+        setError(null);
+      } catch {
+        setError(t('tailors.loadFailed'));
+      } finally {
+        setLoading(false);
+      }
+    },
+    [t]
+  );
+
+  useEffect(() => {
+    void load('');
+  }, [load]);
+
+  function setField(field: keyof TailorMeasurementDraft, value: string) {
+    setDraft((current) => ({ ...current, [field]: value }));
+  }
+
+  function startEdit(item: TailorMeasurement) {
+    setEditing(item);
+    setDraft({
+      customerName: item.customerName,
+      phone: item.phone,
+      shoulderCm: String(item.shoulderCm),
+      armCm: String(item.armCm),
+      waistCm: String(item.waistCm),
+      chestCm: String(item.chestCm),
+      heightCm: String(item.heightCm),
+      buttCm: String(item.buttCm),
+      cost: toPriceInput(item.costIqd),
+      paid: toPriceInput(item.paidIqd),
+    });
+    setMessage(null);
+    setError(null);
+  }
+
+  function cancelEdit() {
+    setEditing(null);
+    setDraft(emptyDraft());
+  }
+
+  async function handleSubmit(event: FormEvent) {
+    event.preventDefault();
+    setSaving(true);
+    setMessage(null);
+    setError(null);
+    try {
+      const saved = editing
+        ? await updateTailorMeasurement(editing.id, draft)
+        : await createTailorMeasurement(draft);
+      setMessage(
+        editing
+          ? t('tailors.updated', { code: saved.code })
+          : t('tailors.saved', { code: saved.code })
+      );
+      cancelEdit();
+      await load(query);
+    } catch (saveError: unknown) {
+      const code = errorMessage(saveError, '');
+      const key = `tailors.errors.${code}`;
+      const translated = t(key);
+      setError(translated === key ? t('tailors.saveFailed') : translated);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDelete(item: TailorMeasurement) {
+    if (!window.confirm(t('tailors.removeConfirm', { code: item.code }))) return;
+    setError(null);
+    setMessage(null);
+    try {
+      await deleteTailorMeasurement(item.id);
+      if (editing?.id === item.id) cancelEdit();
+      setMessage(t('tailors.removed', { code: item.code }));
+      await load(query);
+    } catch {
+      setError(t('tailors.saveFailed'));
+    }
+  }
+
+  return (
+    <div className="mx-auto max-w-6xl space-y-6 p-4">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-3xl font-bold text-black">{t('tailors.title')}</h1>
+          <p className="mt-1 max-w-3xl text-sm text-gray-600">{t('tailors.subtitle')}</p>
+        </div>
+        {!editing && nextCode !== null && (
+          <div className="rounded-2xl bg-black px-4 py-3 text-white">
+            <p className="text-xs uppercase tracking-wide text-white/70">{t('tailors.nextCode')}</p>
+            <p className="text-2xl font-bold">{nextCode}</p>
+          </div>
+        )}
+      </div>
+
+      <form onSubmit={handleSubmit} className="rounded-3xl border border-gray-200 bg-white p-5 shadow-sm">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <h2 className="text-lg font-semibold text-black">
+            {editing ? t('tailors.editing', { code: editing.code }) : t('tailors.newCustomer')}
+          </h2>
+          {editing && (
+            <button type="button" className="text-sm font-semibold text-gray-600" onClick={cancelEdit}>
+              {t('common.cancel')}
+            </button>
+          )}
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <label className="block text-sm font-medium text-gray-700">
+            {t('tailors.customerName')}
+            <input
+              className="input-field mt-1"
+              value={draft.customerName}
+              onChange={(event) => setField('customerName', event.target.value)}
+              required
+              maxLength={200}
+            />
+          </label>
+          <label className="block text-sm font-medium text-gray-700">
+            {t('tailors.phone')}
+            <input
+              className="input-field mt-1"
+              value={draft.phone}
+              onChange={(event) => setField('phone', event.target.value)}
+              inputMode="tel"
+              required
+            />
+          </label>
+        </div>
+
+        <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {sizeFields.map(([field, labelKey]) => (
+            <label key={field} className="block text-sm font-medium text-gray-700">
+              {t(labelKey)} ({t('tailors.cm')})
+              <input
+                className="input-field mt-1"
+                type="number"
+                min="0.1"
+                max="400"
+                step="0.1"
+                value={draft[field]}
+                onChange={(event) => setField(field, event.target.value)}
+                required
+              />
+            </label>
+          ))}
+        </div>
+
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          <label className="block text-sm font-medium text-gray-700">
+            {t('tailors.cost')}
+            <input
+              className="input-field mt-1"
+              type="number"
+              min="0.01"
+              step="0.01"
+              value={draft.cost}
+              onChange={(event) => setField('cost', event.target.value)}
+              required
+            />
+            <span className="mt-1 block text-xs text-gray-500">
+              {draft.cost ? formatCurrency(parsePriceInput(draft.cost)) : t('currency.thousandsHint')}
+            </span>
+          </label>
+          <label className="block text-sm font-medium text-gray-700">
+            {t('tailors.paid')}
+            <input
+              className="input-field mt-1"
+              type="number"
+              min="0"
+              step="0.01"
+              value={draft.paid}
+              onChange={(event) => setField('paid', event.target.value)}
+              required
+            />
+            <span className="mt-1 block text-xs text-gray-500">
+              {draft.paid ? formatCurrency(parsePriceInput(draft.paid)) : t('tailors.paidHint')}
+            </span>
+          </label>
+        </div>
+
+        {message && (
+          <p className="mt-4 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
+            {message}
+          </p>
+        )}
+        {error && (
+          <p className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {error}
+          </p>
+        )}
+
+        <button type="submit" className="btn-primary mt-5" disabled={saving}>
+          {saving ? t('common.saving') : editing ? t('common.saveChanges') : t('tailors.save')}
+        </button>
+      </form>
+
+      <section className="rounded-3xl border border-gray-200 bg-white p-5 shadow-sm">
+        <form
+          className="mb-4 flex flex-col gap-3 sm:flex-row"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void load(query);
+          }}
+        >
+          <input
+            className="input-field"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder={t('tailors.searchPlaceholder')}
+          />
+          <button type="submit" className="rounded-xl border border-gray-300 px-4 py-2 text-sm font-semibold">
+            {t('common.search')}
+          </button>
+        </form>
+
+        {loading ? (
+          <p className="text-sm text-gray-500">{t('common.loading')}</p>
+        ) : items.length === 0 ? (
+          <p className="text-sm text-gray-500">{query.trim() ? t('tailors.noResults') : t('tailors.empty')}</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[1100px] text-left text-sm">
+              <thead>
+                <tr className="border-b border-gray-200 text-xs uppercase tracking-wide text-gray-500">
+                  <th className="px-2 py-2">{t('tailors.code')}</th>
+                  <th className="px-2 py-2">{t('tailors.customerName')}</th>
+                  <th className="px-2 py-2">{t('tailors.phone')}</th>
+                  <th className="px-2 py-2">{t('tailors.shoulder')}</th>
+                  <th className="px-2 py-2">{t('tailors.arm')}</th>
+                  <th className="px-2 py-2">{t('tailors.waist')}</th>
+                  <th className="px-2 py-2">{t('tailors.chest')}</th>
+                  <th className="px-2 py-2">{t('tailors.height')}</th>
+                  <th className="px-2 py-2">{t('tailors.butt')}</th>
+                  <th className="px-2 py-2">{t('tailors.cost')}</th>
+                  <th className="px-2 py-2">{t('tailors.paid')}</th>
+                  <th className="px-2 py-2">{t('tailors.remaining')}</th>
+                  <th className="px-2 py-2" />
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((item) => (
+                  <tr key={item.id} className="border-b border-gray-100">
+                    <td className="px-2 py-3 font-bold text-black">{item.code}</td>
+                    <td className="px-2 py-3">{item.customerName}</td>
+                    <td className="px-2 py-3">{item.phone}</td>
+                    <td className="px-2 py-3">{item.shoulderCm}</td>
+                    <td className="px-2 py-3">{item.armCm}</td>
+                    <td className="px-2 py-3">{item.waistCm}</td>
+                    <td className="px-2 py-3">{item.chestCm}</td>
+                    <td className="px-2 py-3">{item.heightCm}</td>
+                    <td className="px-2 py-3">{item.buttCm}</td>
+                    <td className="px-2 py-3">{formatCurrency(item.costIqd)}</td>
+                    <td className="px-2 py-3">{formatCurrency(item.paidIqd)}</td>
+                    <td className="px-2 py-3">{formatCurrency(item.remainingIqd)}</td>
+                    <td className="px-2 py-3 text-right">
+                      <button
+                        type="button"
+                        className="mr-3 font-semibold text-black"
+                        onClick={() => startEdit(item)}
+                      >
+                        {t('common.edit')}
+                      </button>
+                      <button
+                        type="button"
+                        className="font-semibold text-red-600"
+                        onClick={() => void handleDelete(item)}
+                      >
+                        {t('common.delete')}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+    </div>
+  );
+};
+
+export default Tailors;

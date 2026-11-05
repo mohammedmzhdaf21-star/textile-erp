@@ -21,7 +21,8 @@ export type DashboardSectionKey =
   | 'activityHistory'
   | 'attendance'
   | 'attendanceCheckIn'
-  | 'customerQueue';
+  | 'customerQueue'
+  | 'tailors';
 
 export type ItemMinimumPrice = {
   itemId: string;
@@ -69,6 +70,7 @@ export const dashboardSections: Array<{ key: DashboardSectionKey; labelKey: stri
   { key: 'attendance', labelKey: 'nav.attendanceQr', route: '/attendance' },
   { key: 'attendanceCheckIn', labelKey: 'nav.attendanceCheckIn', route: '/attendance/check-in' },
   { key: 'customerQueue', labelKey: 'nav.customerQueue', route: '/customer-queue' },
+  { key: 'tailors', labelKey: 'nav.tailors', route: '/tailors' },
 ];
 
 const readJson = <T,>(key: string, fallback: T): T => {

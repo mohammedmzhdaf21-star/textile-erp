@@ -27,6 +27,7 @@ import ActivityHistoryDetail from './pages/ActivityHistoryDetail';
 import Attendance from './pages/Attendance';
 import AttendanceCheckIn from './pages/AttendanceCheckIn';
 import CustomerQueue from './pages/CustomerQueue';
+import Tailors from './pages/Tailors';
 import { getCurrentUser, isAuthenticated } from './lib/auth';
 import { canAccessAdminRoute, canAccessRoute } from './lib/dashboardSettings';
 
@@ -204,6 +205,14 @@ function App() {
           element={
             <ProtectedLayout>
               <CustomerQueue />
+            </ProtectedLayout>
+          }
+        />
+        <Route
+          path="/tailors"
+          element={
+            <ProtectedLayout>
+              <Tailors />
             </ProtectedLayout>
           }
         />

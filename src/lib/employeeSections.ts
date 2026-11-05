@@ -20,6 +20,7 @@ export const EMPLOYEE_SECTION_KEYS = [
   'attendance',
   'attendanceCheckIn',
   'customerQueue',
+  'tailors',
 ] as const;
 
 export type EmployeeSectionKey = (typeof EMPLOYEE_SECTION_KEYS)[number];
@@ -31,6 +32,7 @@ export const DEFAULT_EMPLOYEE_SECTIONS: EmployeeSectionKey[] = [
   'taskEmployee',
   'attendanceCheckIn',
   'customerQueue',
+  'tailors',
 ];
 
 export const parseAllowedSections = (value: unknown): EmployeeSectionKey[] | null => {

@@ -31,6 +31,7 @@ import tasksRoutes from './routes/tasks.routes';
 import trusteesRoutes from './routes/trustees.routes';
 import attendanceRoutes from './routes/attendance.routes';
 import greetingQueueRoutes from './routes/greetingQueue.routes';
+import tailorMeasurementRoutes from './routes/tailorMeasurements.routes';
 import { migrateLegacyCommissionBase, migrateLegacySettingsPrices } from './lib/currency';
 import { backfillCommissionEntries, recalculatePendingCommissionEntries } from './lib/commissions';
 import { recoverPlainClothNamesFromSales, ensureDefaultPlainClothTypes } from './lib/plainClothPricing';
@@ -84,6 +85,7 @@ app.get('/health', async (_req: Request, res: Response) => {
         employeeRegistration: true,
         customerQueue: true,
         attendanceDailyQr: true,
+        tailors: true,
       },
     });
   } catch (error) {
@@ -162,6 +164,7 @@ app.use('/api/tasks', tasksRoutes);
 app.use('/api/trustees', trusteesRoutes);
 app.use('/api/attendance', attendanceRoutes);
 app.use('/api/greeting-queue', greetingQueueRoutes);
+app.use('/api/tailor-measurements', tailorMeasurementRoutes);
 
 // ============================================================
 // FRONTEND SPA (serve built app for /login, /register, etc.)
