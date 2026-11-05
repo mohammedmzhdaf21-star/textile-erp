@@ -144,7 +144,7 @@ export default function SalesCommission() {
           {t("dashboard.commissionBaseAmount")}
         </label>
         <p className="mt-1 text-xs text-gray-500">
-          {t("dashboard.commissionBaseAmountHint")} {t("common.thousandsHint")}
+          {t("dashboard.commissionBaseAmountHint")} {t("currency.thousandsHint")}
         </p>
         <input
           type="number"
