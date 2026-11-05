@@ -1,4 +1,5 @@
 import api from './api';
+import { parsePriceInput } from './currency';
 
 export type TailorMeasurement = {
   id: string;
@@ -11,6 +12,9 @@ export type TailorMeasurement = {
   chestCm: number;
   heightCm: number;
   buttCm: number;
+  costIqd: number;
+  paidIqd: number;
+  remainingIqd: number;
   createdAt: string;
   updatedAt: string;
   createdByName: string | null;
@@ -25,6 +29,8 @@ export type TailorMeasurementDraft = {
   chestCm: string;
   heightCm: string;
   buttCm: string;
+  cost: string;
+  paid: string;
 };
 
 export async function fetchTailorMeasurements(query: string) {
@@ -63,5 +69,7 @@ function toPayload(draft: TailorMeasurementDraft) {
     chestCm: Number(draft.chestCm),
     heightCm: Number(draft.heightCm),
     buttCm: Number(draft.buttCm),
+    costIqd: parsePriceInput(draft.cost),
+    paidIqd: parsePriceInput(draft.paid || 0),
   };
 }

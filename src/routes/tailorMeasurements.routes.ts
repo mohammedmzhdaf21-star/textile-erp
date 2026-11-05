@@ -23,6 +23,8 @@ type MeasurementRow = {
   chestCm: Prisma.Decimal | number;
   heightCm: Prisma.Decimal | number;
   buttCm: Prisma.Decimal | number;
+  costIqd: Prisma.Decimal | number;
+  paidIqd: Prisma.Decimal | number;
   createdAt: Date;
   updatedAt: Date;
   createdBy: { id: string; name: string } | null;
@@ -40,6 +42,9 @@ function serialize(row: MeasurementRow) {
     chestCm: Number(row.chestCm),
     heightCm: Number(row.heightCm),
     buttCm: Number(row.buttCm),
+    costIqd: Number(row.costIqd),
+    paidIqd: Number(row.paidIqd),
+    remainingIqd: Math.round((Number(row.costIqd) - Number(row.paidIqd)) * 100) / 100,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
     createdByName: row.createdBy?.name ?? null,
@@ -124,6 +129,8 @@ router.post('/', async (req: Request, res: Response) => {
         chestCm: input.chestCm,
         heightCm: input.heightCm,
         buttCm: input.buttCm,
+        costIqd: input.costIqd,
+        paidIqd: input.paidIqd,
         createdById: req.user!.userId,
       },
       include: includeCreatedBy,
@@ -164,6 +171,8 @@ router.patch('/:id', async (req: Request, res: Response) => {
         chestCm: input.chestCm,
         heightCm: input.heightCm,
         buttCm: input.buttCm,
+        costIqd: input.costIqd,
+        paidIqd: input.paidIqd,
       },
       include: includeCreatedBy,
     });

@@ -146,6 +146,8 @@ model TailorMeasurement {
   chestCm      Decimal  @db.Decimal(6, 1)
   heightCm     Decimal  @db.Decimal(6, 1)
   buttCm       Decimal  @db.Decimal(6, 1)
+  costIqd      Decimal  @default(0) @db.Decimal(12, 2)
+  paidIqd      Decimal  @default(0) @db.Decimal(12, 2)
   createdById  String?
   createdBy    Employee? @relation(fields: [createdById], references: [id], onDelete: SetNull)
   createdAt    DateTime @default(now())

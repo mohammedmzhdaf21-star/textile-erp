@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import axios from 'axios';
 import { useTranslation } from 'react-i18next';
+import { formatCurrency, parsePriceInput, toPriceInput } from '../lib/currency';
 import {
   createTailorMeasurement,
   deleteTailorMeasurement,
@@ -20,6 +21,8 @@ const emptyDraft = (): TailorMeasurementDraft => ({
   chestCm: '',
   heightCm: '',
   buttCm: '',
+  cost: '',
+  paid: '',
 });
 
 const sizeFields = [
@@ -87,6 +90,8 @@ const Tailors: React.FC = () => {
       chestCm: String(item.chestCm),
       heightCm: String(item.heightCm),
       buttCm: String(item.buttCm),
+      cost: toPriceInput(item.costIqd),
+      paid: toPriceInput(item.paidIqd),
     });
     setMessage(null);
     setError(null);
@@ -205,6 +210,39 @@ const Tailors: React.FC = () => {
           ))}
         </div>
 
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          <label className="block text-sm font-medium text-gray-700">
+            {t('tailors.cost')}
+            <input
+              className="input-field mt-1"
+              type="number"
+              min="0.01"
+              step="0.01"
+              value={draft.cost}
+              onChange={(event) => setField('cost', event.target.value)}
+              required
+            />
+            <span className="mt-1 block text-xs text-gray-500">
+              {draft.cost ? formatCurrency(parsePriceInput(draft.cost)) : t('currency.thousandsHint')}
+            </span>
+          </label>
+          <label className="block text-sm font-medium text-gray-700">
+            {t('tailors.paid')}
+            <input
+              className="input-field mt-1"
+              type="number"
+              min="0"
+              step="0.01"
+              value={draft.paid}
+              onChange={(event) => setField('paid', event.target.value)}
+              required
+            />
+            <span className="mt-1 block text-xs text-gray-500">
+              {draft.paid ? formatCurrency(parsePriceInput(draft.paid)) : t('tailors.paidHint')}
+            </span>
+          </label>
+        </div>
+
         {message && (
           <p className="mt-4 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
             {message}
@@ -246,7 +284,7 @@ const Tailors: React.FC = () => {
           <p className="text-sm text-gray-500">{query.trim() ? t('tailors.noResults') : t('tailors.empty')}</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[880px] text-left text-sm">
+            <table className="w-full min-w-[1100px] text-left text-sm">
               <thead>
                 <tr className="border-b border-gray-200 text-xs uppercase tracking-wide text-gray-500">
                   <th className="px-2 py-2">{t('tailors.code')}</th>
@@ -258,6 +296,9 @@ const Tailors: React.FC = () => {
                   <th className="px-2 py-2">{t('tailors.chest')}</th>
                   <th className="px-2 py-2">{t('tailors.height')}</th>
                   <th className="px-2 py-2">{t('tailors.butt')}</th>
+                  <th className="px-2 py-2">{t('tailors.cost')}</th>
+                  <th className="px-2 py-2">{t('tailors.paid')}</th>
+                  <th className="px-2 py-2">{t('tailors.remaining')}</th>
                   <th className="px-2 py-2" />
                 </tr>
               </thead>
@@ -273,6 +314,9 @@ const Tailors: React.FC = () => {
                     <td className="px-2 py-3">{item.chestCm}</td>
                     <td className="px-2 py-3">{item.heightCm}</td>
                     <td className="px-2 py-3">{item.buttCm}</td>
+                    <td className="px-2 py-3">{formatCurrency(item.costIqd)}</td>
+                    <td className="px-2 py-3">{formatCurrency(item.paidIqd)}</td>
+                    <td className="px-2 py-3">{formatCurrency(item.remainingIqd)}</td>
                     <td className="px-2 py-3 text-right">
                       <button
                         type="button"

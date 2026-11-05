@@ -14,6 +14,8 @@ const valid = {
   chestCm: 96,
   heightCm: 165,
   buttCm: 98.2,
+  costIqd: 25000,
+  paidIqd: 10000,
 };
 
 describe('parseTailorMeasurementInput', () => {
@@ -24,6 +26,24 @@ describe('parseTailorMeasurementInput', () => {
     assert.equal(parsed.shoulderCm, 42);
     assert.equal(parsed.armCm, 60.5);
     assert.equal(parsed.buttCm, 98.2);
+    assert.equal(parsed.costIqd, 25000);
+    assert.equal(parsed.paidIqd, 10000);
+  });
+
+  it('accepts a customer who has not paid yet', () => {
+    const parsed = parseTailorMeasurementInput({ ...valid, paidIqd: 0 });
+    assert.equal(parsed.paidIqd, 0);
+  });
+
+  it('rejects a missing cost or a payment above the cost', () => {
+    assert.throws(
+      () => parseTailorMeasurementInput({ ...valid, costIqd: 0 }),
+      (error: unknown) => error instanceof TailorMeasurementError && error.code === 'MONEY_INVALID'
+    );
+    assert.throws(
+      () => parseTailorMeasurementInput({ ...valid, paidIqd: 30000 }),
+      (error: unknown) => error instanceof TailorMeasurementError && error.code === 'PAID_EXCEEDS_COST'
+    );
   });
 
   it('trims the name and collapses phone spaces', () => {

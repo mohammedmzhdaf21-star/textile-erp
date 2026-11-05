@@ -187,6 +187,10 @@
     "height": "Height",
     "butt": "Butt",
     "cm": "cm",
+    "cost": "How much it is",
+    "paid": "How much the customer paid",
+    "paidHint": "Enter 0 if nothing has been paid yet.",
+    "remaining": "Still owed",
     "save": "Save sizes",
     "saved": "Saved as code {{code}}.",
     "updated": "Updated code {{code}}.",
@@ -202,7 +206,9 @@
     "errors": {
       "NAME_REQUIRED": "Enter the customer name.",
       "PHONE_INVALID": "Enter a valid phone number.",
-      "MEASUREMENT_INVALID": "Enter every size in centimeters, greater than zero."
+      "MEASUREMENT_INVALID": "Enter every size in centimeters, greater than zero.",
+      "MONEY_INVALID": "Enter how much the work is. The amount paid cannot be negative.",
+      "PAID_EXCEEDS_COST": "The customer cannot have paid more than the cost."
     }
   },
   "customerQueue": {

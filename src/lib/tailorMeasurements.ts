@@ -12,12 +12,16 @@ export type TailorMeasurementField = (typeof TAILOR_MEASUREMENT_FIELDS)[number];
 export type TailorMeasurementInput = {
   customerName: string;
   phone: string;
+  costIqd: number;
+  paidIqd: number;
 } & Record<TailorMeasurementField, number>;
 
 export type TailorMeasurementErrorCode =
   | 'NAME_REQUIRED'
   | 'PHONE_INVALID'
-  | 'MEASUREMENT_INVALID';
+  | 'MEASUREMENT_INVALID'
+  | 'MONEY_INVALID'
+  | 'PAID_EXCEEDS_COST';
 
 export class TailorMeasurementError extends Error {
   code: TailorMeasurementErrorCode;
@@ -29,6 +33,11 @@ export class TailorMeasurementError extends Error {
 }
 
 const MAX_CM = 400;
+const MAX_IQD = 1_000_000_000;
+
+function roundMoney(value: number) {
+  return Math.round(value * 100) / 100;
+}
 
 function roundCm(value: number) {
   return Math.round(value * 10) / 10;
@@ -60,9 +69,20 @@ export function parseTailorMeasurementInput(body: unknown): TailorMeasurementInp
     measurements[field] = roundCm(value);
   }
 
+  const costIqd = roundMoney(Number(raw.costIqd));
+  const paidIqd = roundMoney(Number(raw.paidIqd));
+  if (!Number.isFinite(costIqd) || !Number.isFinite(paidIqd) || costIqd <= 0 || costIqd > MAX_IQD || paidIqd < 0) {
+    throw new TailorMeasurementError('MONEY_INVALID');
+  }
+  if (paidIqd > costIqd) {
+    throw new TailorMeasurementError('PAID_EXCEEDS_COST');
+  }
+
   return {
     customerName,
     phone,
+    costIqd,
+    paidIqd,
     ...measurements,
   };
 }
