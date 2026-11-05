@@ -191,6 +191,11 @@
     "paid": "How much the customer paid",
     "paidHint": "Enter 0 if nothing has been paid yet.",
     "remaining": "Still owed",
+    "givenOn": "Date given to the tailor",
+    "returnOn": "Day to give back to the customer",
+    "receipt": "Receipt",
+    "receiptTitle": "Tailor receipt",
+    "printReceipt": "Print receipt",
     "save": "Save sizes",
     "saved": "Saved as code {{code}}.",
     "updated": "Updated code {{code}}.",
@@ -208,7 +213,9 @@
       "PHONE_INVALID": "Enter a valid phone number.",
       "MEASUREMENT_INVALID": "Enter every size in centimeters, greater than zero.",
       "MONEY_INVALID": "Enter how much the work is. The amount paid cannot be negative.",
-      "PAID_EXCEEDS_COST": "The customer cannot have paid more than the cost."
+      "PAID_EXCEEDS_COST": "The customer cannot have paid more than the cost.",
+      "DATE_INVALID": "Choose the date it was given to the tailor and the day it should be given back.",
+      "RETURN_BEFORE_GIVEN": "The return day cannot be before the day it was given to the tailor."
     }
   },
   "customerQueue": {

@@ -11,6 +11,12 @@ import {
   type TailorMeasurement,
   type TailorMeasurementDraft,
 } from '../lib/tailorApi';
+import {
+  buildTailorReceiptHtml,
+  formatReceiptDate,
+  printTailorReceipt,
+  todayInBaghdad,
+} from '../lib/tailorReceipt';
 
 const emptyDraft = (): TailorMeasurementDraft => ({
   customerName: '',
@@ -23,6 +29,8 @@ const emptyDraft = (): TailorMeasurementDraft => ({
   buttCm: '',
   cost: '',
   paid: '',
+  givenOn: todayInBaghdad(),
+  returnOn: '',
 });
 
 const sizeFields = [
@@ -43,7 +51,7 @@ function errorMessage(error: unknown, fallback: string) {
 }
 
 const Tailors: React.FC = () => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [draft, setDraft] = useState<TailorMeasurementDraft>(emptyDraft);
   const [editing, setEditing] = useState<TailorMeasurement | null>(null);
   const [items, setItems] = useState<TailorMeasurement[]>([]);
@@ -53,6 +61,7 @@ const Tailors: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [receipt, setReceipt] = useState<TailorMeasurement | null>(null);
 
   const load = useCallback(
     async (search: string) => {
@@ -92,6 +101,8 @@ const Tailors: React.FC = () => {
       buttCm: String(item.buttCm),
       cost: toPriceInput(item.costIqd),
       paid: toPriceInput(item.paidIqd),
+      givenOn: item.givenOn,
+      returnOn: item.returnOn,
     });
     setMessage(null);
     setError(null);
@@ -107,15 +118,22 @@ const Tailors: React.FC = () => {
     setSaving(true);
     setMessage(null);
     setError(null);
+    if (draft.returnOn && draft.givenOn && draft.returnOn < draft.givenOn) {
+      setSaving(false);
+      setError(t('tailors.errors.RETURN_BEFORE_GIVEN'));
+      return;
+    }
+    const creating = !editing;
     try {
       const saved = editing
         ? await updateTailorMeasurement(editing.id, draft)
         : await createTailorMeasurement(draft);
       setMessage(
-        editing
-          ? t('tailors.updated', { code: saved.code })
-          : t('tailors.saved', { code: saved.code })
+        creating
+          ? t('tailors.saved', { code: saved.code })
+          : t('tailors.updated', { code: saved.code })
       );
+      if (creating) setReceipt(saved);
       cancelEdit();
       await load(query);
     } catch (saveError: unknown) {
@@ -135,10 +153,29 @@ const Tailors: React.FC = () => {
     try {
       await deleteTailorMeasurement(item.id);
       if (editing?.id === item.id) cancelEdit();
+      setReceipt((current) => (current?.id === item.id ? null : current));
       setMessage(t('tailors.removed', { code: item.code }));
       await load(query);
     } catch {
       setError(t('tailors.saveFailed'));
+    }
+  }
+
+  function handlePrintReceipt(item: TailorMeasurement) {
+    const html = buildTailorReceiptHtml({
+      title: t('tailors.receiptTitle'),
+      codeLabel: t('tailors.code'),
+      nameLabel: t('tailors.customerName'),
+      givenLabel: t('tailors.givenOn'),
+      returnLabel: t('tailors.returnOn'),
+      code: item.code,
+      customerName: item.customerName,
+      givenOn: formatReceiptDate(item.givenOn, i18n.language),
+      returnOn: formatReceiptDate(item.returnOn, i18n.language),
+      dir: i18n.language === 'ckb' ? 'rtl' : 'ltr',
+    });
+    if (!printTailorReceipt(html)) {
+      setError(t('errors.allowPopups'));
     }
   }
 
@@ -241,6 +278,27 @@ const Tailors: React.FC = () => {
               {draft.paid ? formatCurrency(parsePriceInput(draft.paid)) : t('tailors.paidHint')}
             </span>
           </label>
+          <label className="block text-sm font-medium text-gray-700">
+            {t('tailors.givenOn')}
+            <input
+              className="input-field mt-1"
+              type="date"
+              value={draft.givenOn}
+              onChange={(event) => setField('givenOn', event.target.value)}
+              required
+            />
+          </label>
+          <label className="block text-sm font-medium text-gray-700">
+            {t('tailors.returnOn')}
+            <input
+              className="input-field mt-1"
+              type="date"
+              value={draft.returnOn}
+              min={draft.givenOn || undefined}
+              onChange={(event) => setField('returnOn', event.target.value)}
+              required
+            />
+          </label>
         </div>
 
         {message && (
@@ -299,6 +357,8 @@ const Tailors: React.FC = () => {
                   <th className="px-2 py-2">{t('tailors.cost')}</th>
                   <th className="px-2 py-2">{t('tailors.paid')}</th>
                   <th className="px-2 py-2">{t('tailors.remaining')}</th>
+                  <th className="px-2 py-2">{t('tailors.givenOn')}</th>
+                  <th className="px-2 py-2">{t('tailors.returnOn')}</th>
                   <th className="px-2 py-2" />
                 </tr>
               </thead>
@@ -317,7 +377,16 @@ const Tailors: React.FC = () => {
                     <td className="px-2 py-3">{formatCurrency(item.costIqd)}</td>
                     <td className="px-2 py-3">{formatCurrency(item.paidIqd)}</td>
                     <td className="px-2 py-3">{formatCurrency(item.remainingIqd)}</td>
+                    <td className="whitespace-nowrap px-2 py-3">{item.givenOn}</td>
+                    <td className="whitespace-nowrap px-2 py-3">{item.returnOn}</td>
                     <td className="px-2 py-3 text-right">
+                      <button
+                        type="button"
+                        className="mr-3 font-semibold text-black"
+                        onClick={() => setReceipt(item)}
+                      >
+                        {t('tailors.receipt')}
+                      </button>
                       <button
                         type="button"
                         className="mr-3 font-semibold text-black"
@@ -340,6 +409,44 @@ const Tailors: React.FC = () => {
           </div>
         )}
       </section>
+
+      {receipt && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div
+            className="w-full max-w-md rounded-3xl border-2 border-black bg-white p-6 shadow-xl"
+            role="dialog"
+            aria-labelledby="tailor-receipt-title"
+          >
+            <p id="tailor-receipt-title" className="text-xs font-semibold uppercase tracking-widest text-gray-500">
+              {t('tailors.receiptTitle')}
+            </p>
+            <p className="mt-4 text-xs uppercase tracking-wide text-gray-500">{t('tailors.code')}</p>
+            <p className="text-5xl font-bold text-black">{receipt.code}</p>
+            <p className="mt-4 text-xs uppercase tracking-wide text-gray-500">{t('tailors.customerName')}</p>
+            <p className="text-2xl font-semibold text-black">{receipt.customerName}</p>
+            <p className="mt-4 text-xs uppercase tracking-wide text-gray-500">{t('tailors.givenOn')}</p>
+            <p className="text-lg font-semibold text-black">
+              {formatReceiptDate(receipt.givenOn, i18n.language)}
+            </p>
+            <p className="mt-4 text-xs uppercase tracking-wide text-gray-500">{t('tailors.returnOn')}</p>
+            <p className="text-lg font-semibold text-black">
+              {formatReceiptDate(receipt.returnOn, i18n.language)}
+            </p>
+            <div className="mt-6 flex flex-wrap gap-3">
+              <button type="button" className="btn-primary" onClick={() => handlePrintReceipt(receipt)}>
+                {t('tailors.printReceipt')}
+              </button>
+              <button
+                type="button"
+                className="rounded-xl border border-gray-300 px-4 py-2 text-sm font-semibold"
+                onClick={() => setReceipt(null)}
+              >
+                {t('common.close')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
