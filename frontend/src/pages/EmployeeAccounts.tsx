@@ -30,6 +30,7 @@ const DEFAULT_SECTIONS: DashboardSectionKey[] = [
   "dailySales",
   "historySales",
   "taskEmployee",
+  "tailors",
 ];
 
 const emptyForm = () => ({

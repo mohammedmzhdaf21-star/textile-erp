@@ -135,6 +135,27 @@ model Customer {
   @@map("customers")
 }
 
+model TailorMeasurement {
+  id           String   @id @default(uuid())
+  code         Int      @unique @default(autoincrement())
+  customerName String   @db.VarChar(200)
+  phone        String   @db.VarChar(30)
+  shoulderCm   Decimal  @db.Decimal(6, 1)
+  armCm        Decimal  @db.Decimal(6, 1)
+  waistCm      Decimal  @db.Decimal(6, 1)
+  chestCm      Decimal  @db.Decimal(6, 1)
+  heightCm     Decimal  @db.Decimal(6, 1)
+  buttCm       Decimal  @db.Decimal(6, 1)
+  createdById  String?
+  createdBy    Employee? @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([phone])
+  @@index([customerName])
+  @@map("tailor_measurements")
+}
+
 model Color {
   id        String    @id @default(uuid())
   name      String    @unique @db.VarChar(50)
@@ -448,6 +469,7 @@ model Employee {
   deviceSignInsApproved DeviceSignInRequest[] @relation("DeviceSignInApprovedBy")
   attendanceRecords     AttendanceRecord[]
   greetingEvents        GreetingQueueEvent[]
+  tailorMeasurements    TailorMeasurement[]
 
   @@index([email])
   @@index([isActive])
