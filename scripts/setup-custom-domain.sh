@@ -10,7 +10,7 @@ cd "$ROOT"
 
 if [[ -f .env ]]; then set -a; source .env; set +a; fi
 
-TOKEN="${CLOUDFLARE_API_TOKEN:-}"
+TOKEN="${CLOUDFLARE_DNS_API_TOKEN:-${CLOUDFLARE_API_TOKEN:-}}"
 ZONE="${CLOUDFLARE_ZONE_ID:-}"
 TUNNEL="${CLOUDFLARE_TUNNEL_ID:-78344c43-882b-4652-b08f-ac57c98d0abb}"
 HOST="${ERP_HOSTNAME:-erp.kutalimzhda.com}"
