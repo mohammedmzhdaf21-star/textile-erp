@@ -10,6 +10,7 @@ import {
   recordSalePayment,
   listSalePayments,
 } from '../lib/sales';
+import { getBranchAnalysis } from '../lib/salesAnalysis';
 import { authenticate, requireRole } from '../middleware/authenticate';
 
 const router = Router();
@@ -284,6 +285,31 @@ router.get(
     }
   }
 );
+
+// ============================================================
+// GET /api/sales/analysis (every sale, daily, history, tasks)
+// ============================================================
+router.get('/analysis', async (req: Request, res: Response) => {
+  try {
+    const branchId = req.query.branchId as string | undefined;
+    const fromDateRaw = req.query.fromDate as string | undefined;
+    const toDateRaw = req.query.toDate as string | undefined;
+    if (!branchId || !fromDateRaw || !toDateRaw) {
+      return res.status(400).json({ error: 'branchId, fromDate, and toDate are required' });
+    }
+
+    const fromDate = new Date(fromDateRaw);
+    const toDate = new Date(toDateRaw);
+    if (Number.isNaN(fromDate.getTime()) || Number.isNaN(toDate.getTime()) || fromDate > toDate) {
+      return res.status(400).json({ error: 'Invalid date range' });
+    }
+
+    const report = await getBranchAnalysis({ branchId, fromDate, toDate });
+    return res.status(200).json(report);
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message || 'Failed to analyze sales' });
+  }
+});
 
 // ============================================================
 // GET /api/sales/:id

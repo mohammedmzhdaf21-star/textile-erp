@@ -921,7 +921,15 @@ const SalesView: React.FC = () => {
             {t('sales.subtitle')}
           </p>
         </div>
-        <div className="text-sm text-gray-500">{t('sales.currentBranch', { branch })}</div>
+        <div className="flex flex-wrap items-center gap-3">
+          <Link
+            to={`/analytics?branch=${branch}&focus=every`}
+            className="rounded-xl border border-gray-300 px-4 py-2 text-sm font-semibold text-black"
+          >
+            {t('dataAnalysis.analyze')}
+          </Link>
+          <div className="text-sm text-gray-500">{t('sales.currentBranch', { branch })}</div>
+        </div>
       </div>
 
       <section className="mt-6 grid grid-cols-2 sm:grid-cols-5 gap-3">

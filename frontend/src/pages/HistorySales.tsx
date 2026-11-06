@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import api from '../lib/api';
 import { useTranslation } from 'react-i18next';
 import { formatCurrency, formatSignedCurrency } from '../lib/currency';
@@ -351,8 +351,18 @@ const HistorySales: React.FC = () => {
             {t('historySales.subtitle')}
           </p>
         </div>
-        <div className="text-sm text-gray-500">
-          {selectedBranch ? t('historySales.branchSelected', { branch: selectedBranch }) : t('common.selectBranch')}
+        <div className="flex flex-wrap items-center gap-3">
+          {selectedBranch && (
+            <Link
+              to={`/analytics?branch=${selectedBranch}&focus=history`}
+              className="rounded-xl border border-gray-300 px-4 py-2 text-sm font-semibold text-black"
+            >
+              {t('dataAnalysis.analyze')}
+            </Link>
+          )}
+          <div className="text-sm text-gray-500">
+            {selectedBranch ? t('historySales.branchSelected', { branch: selectedBranch }) : t('common.selectBranch')}
+          </div>
         </div>
       </div>
 
