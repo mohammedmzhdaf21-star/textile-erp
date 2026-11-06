@@ -17,26 +17,54 @@ cloudflared_pids() {
 }
 
 stop_cloudflared() {
+  # shellcheck disable=SC1091
+  source "$ROOT/scripts/lib/tunnel-health.sh"
+
   if [[ -x /etc/init.d/cloudflared ]]; then
     if sudo /etc/init.d/cloudflared stop >>"$LOG_FILE" 2>&1; then
       return 0
     fi
-  elif command -v systemctl >/dev/null 2>&1; then
+  elif command -v systemctl >/dev/null 2>&1 \
+    && systemctl list-unit-files --type=service 2>/dev/null | grep -q '^cloudflared\.service'; then
     if sudo systemctl stop cloudflared >>"$LOG_FILE" 2>&1; then
       return 0
     fi
   fi
+
+  if tunnel_pm2_cmd describe textile-tunnel >/dev/null 2>&1; then
+    tunnel_pm2_cmd stop textile-tunnel >>"$LOG_FILE" 2>&1 || true
+    tunnel_pm2_cmd delete textile-tunnel >>"$LOG_FILE" 2>&1 || true
+    return 0
+  fi
+
   return 1
 }
 
 start_cloudflared() {
+  # shellcheck disable=SC1091
+  source "$ROOT/scripts/lib/tunnel-health.sh"
+
+  tunnel_health_load_env "$ROOT"
+
   if [[ -x /etc/init.d/cloudflared ]]; then
     sudo /etc/init.d/cloudflared start >>"$LOG_FILE" 2>&1
     return $?
   fi
-  if command -v systemctl >/dev/null 2>&1; then
+  if command -v systemctl >/dev/null 2>&1 \
+    && systemctl list-unit-files --type=service 2>/dev/null | grep -q '^cloudflared\.service'; then
     sudo systemctl start cloudflared >>"$LOG_FILE" 2>&1
     return $?
+  fi
+
+  if tunnel_pm2_start_connector "$ROOT" "$LOG_FILE"; then
+    log "RESTART: started PM2 textile-tunnel (no system cloudflared service)"
+    return 0
+  fi
+
+  if [[ -z "${CLOUDFLARE_TUNNEL_TOKEN:-}" ]]; then
+    log "RESTART: ERROR — set CLOUDFLARE_TUNNEL_TOKEN in .env to start the tunnel"
+  else
+    log "RESTART: ERROR — cloudflared not installed and PM2 tunnel failed to start"
   fi
   return 1
 }
