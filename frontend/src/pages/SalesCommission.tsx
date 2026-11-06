@@ -8,11 +8,17 @@ import {
   pushCommissionRateToServer,
 } from "../lib/commissionSettingsApi";
 import { formatCurrency, parsePriceInput, toPriceInput } from "../lib/currency";
+import { calculateSaleCommissions, type CommissionInputLine } from "../lib/commissionMath";
 
 type SaleItem = {
+  id?: string;
   inventoryItemId?: string | null;
+  isPlainCloth?: boolean;
+  soldAsUnit?: "METER" | "PIECE";
   quantitySold: string | number;
   soldPrice: string | number;
+  lineDiscount?: string | number;
+  inventoryItem?: { type?: string } | null;
 };
 
 type Sale = {
@@ -77,32 +83,31 @@ export default function SalesCommission() {
       const sales = (response.data?.sales || response.data?.items || []) as Sale[];
       const prices = getCachedItemMinimumPrices();
       const rows: Array<{ employee: string; saleId: string; itemId: string; commission: number }> = [];
-      const priceEps = 0.001;
 
       sales.forEach((sale) => {
         const employee = sale.employee?.name || sale.employeeName || t("common.unknownEmployee");
-        (sale.items || []).forEach((item) => {
-          if (!item.inventoryItemId) return;
-          const savedPrice = prices[item.inventoryItemId];
-          if (!savedPrice) return;
-          const soldPrice = Number(item.soldPrice || 0);
-          const quantity = Number(item.quantitySold || 0);
-          const minimumPrice = savedPrice.minimumPrice;
-          if (quantity <= 0 || soldPrice < minimumPrice - priceEps) return;
+        const lines: CommissionInputLine[] = (sale.items || []).map((item, index) => ({
+          id: item.id || `${sale.id}-${index}`,
+          isPlainCloth: Boolean(item.isPlainCloth),
+          isRemnant: item.inventoryItem?.type === "REMANENT",
+          soldAsUnit: item.soldAsUnit === "METER" ? "METER" : "PIECE",
+          soldPrice: Number(item.soldPrice || 0),
+          quantitySold: Number(item.quantitySold || 0),
+          lineDiscount: Number(item.lineDiscount || 0),
+          minimumPrice: item.inventoryItemId
+            ? prices[item.inventoryItemId]?.minimumPrice ?? null
+            : null,
+        }));
 
-          const basePart = baseAmount * quantity;
-          const margin = Math.max(0, soldPrice - minimumPrice);
-          const marginPart = margin * quantity * (rate / 100);
-          const commission = basePart + marginPart;
-
-          if (commission > 0) {
-            rows.push({
-              employee,
-              saleId: sale.id,
-              itemId: item.inventoryItemId,
-              commission,
-            });
-          }
+        calculateSaleCommissions(lines, rate, baseAmount).forEach((result) => {
+          if (result.commission <= 0) return;
+          const item = (sale.items || []).find((entry) => entry.id === result.id);
+          rows.push({
+            employee,
+            saleId: sale.id,
+            itemId: item?.inventoryItemId || result.id,
+            commission: result.commission,
+          });
         });
       });
 

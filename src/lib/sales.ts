@@ -5,7 +5,7 @@ import {
   restoreInventoryForSaleItem,
 } from './inventoryDeduction';
 import {
-  recordCommissionForSaleItem,
+  recordCommissionsForSale,
   removePendingCommissionsForSale,
 } from './commissions';
 import { computeSaleBalance, enrichSaleWithBalance, parseInitialPaidFromNotes } from './saleBalance';
@@ -301,6 +301,16 @@ export async function createSale(
     });
 
     // Process each item
+    const createdCommissionLines: Array<{
+      id: string;
+      inventoryItemId?: string | null;
+      isPlainCloth?: boolean;
+      plainClothName?: string | null;
+      soldPrice: number;
+      quantitySold: number;
+      lineDiscount?: number;
+      soldAsUnit: 'METER' | 'PIECE';
+    }> = [];
     for (const item of input.items) {
       let invItem: {
         id: string;
@@ -375,17 +385,23 @@ export async function createSale(
         },
       });
 
-      await recordCommissionForSaleItem(tx, {
-        employeeId: input.employeeId,
-        saleId: createdSale.id,
-        saleItemId: createdSaleItem.id,
+      createdCommissionLines.push({
+        id: createdSaleItem.id,
         inventoryItemId: item.inventoryItemId,
-        soldPrice: item.soldPrice,
-        quantitySold: item.quantitySold,
         isPlainCloth: item.isPlainCloth,
         plainClothName: item.plainClothName,
+        soldPrice: item.soldPrice,
+        quantitySold: item.quantitySold,
+        lineDiscount: item.lineDiscount,
+        soldAsUnit: item.soldAsUnit,
       });
     }
+
+    await recordCommissionsForSale(tx, {
+      employeeId: input.employeeId,
+      saleId: createdSale.id,
+      lines: createdCommissionLines,
+    });
 
     await createInitialSalePaymentIfNeeded(
       tx,
@@ -581,6 +597,16 @@ export async function processExchange(
       },
     });
 
+    const createdCommissionLines: Array<{
+      id: string;
+      inventoryItemId?: string | null;
+      isPlainCloth?: boolean;
+      plainClothName?: string | null;
+      soldPrice: number;
+      quantitySold: number;
+      lineDiscount?: number;
+      soldAsUnit: 'METER' | 'PIECE';
+    }> = [];
     for (const item of replacementItems) {
       let invItem: {
         id: string;
@@ -652,17 +678,23 @@ export async function processExchange(
         },
       });
 
-      await recordCommissionForSaleItem(tx, {
-        employeeId: input.employeeId,
-        saleId: createdSale.id,
-        saleItemId: createdSaleItem.id,
+      createdCommissionLines.push({
+        id: createdSaleItem.id,
         inventoryItemId: item.inventoryItemId,
-        soldPrice: item.soldPrice,
-        quantitySold: item.quantitySold,
         isPlainCloth: item.isPlainCloth,
         plainClothName: item.plainClothName,
+        soldPrice: item.soldPrice,
+        quantitySold: item.quantitySold,
+        lineDiscount: item.lineDiscount,
+        soldAsUnit: item.soldAsUnit,
       });
     }
+
+    await recordCommissionsForSale(tx, {
+      employeeId: input.employeeId,
+      saleId: createdSale.id,
+      lines: createdCommissionLines,
+    });
 
     if (saleTotal > 0) {
       await createInitialSalePaymentIfNeeded(
@@ -808,7 +840,7 @@ export async function listSales(params: ListSalesParams) {
       take,
       orderBy: { createdAt: 'desc' },
       include: {
-        items: { include: { color: true } },
+        items: { include: { color: true, inventoryItem: { select: { type: true } } } },
         branch: { select: { id: true, name: true } },
         employee: { select: { id: true, name: true } },
         customer: { select: { id: true, name: true, phone: true } },

@@ -159,8 +159,8 @@ export const canAccessAdminRoute = (user: { role?: string } | null | undefined, 
 
 export const readCommissionSettings = () => {
   const settings = readJson<CommissionSettings>(COMMISSION_SETTINGS_KEY, {
-    ratePercent: 5,
-    baseAmountPerUnit: 0,
+    ratePercent: 10,
+    baseAmountPerUnit: 5000,
   });
   return {
     ...settings,
