@@ -11,6 +11,7 @@ import {
   listSalePayments,
 } from '../lib/sales';
 import { authenticate, requireRole } from '../middleware/authenticate';
+import { resolveSaleEmployeeId } from '../lib/requestEmployee';
 
 const router = Router();
 
@@ -24,7 +25,6 @@ router.post('/', async (req: Request, res: Response) => {
   try {
     const {
       branchId,
-      employeeId,
       customerId,
       customerName,
       customerPhone,
@@ -36,11 +36,22 @@ router.post('/', async (req: Request, res: Response) => {
       idempotencyKey,
     } = req.body;
 
-    if (!branchId || !employeeId || !customerName || !customerPhone) {
+    if (!branchId || !customerName || !customerPhone) {
       return res.status(400).json({
         error:
-          'Missing required fields: branchId, employeeId, customerName, customerPhone',
+          'Missing required fields: branchId, customerName, customerPhone',
       });
+    }
+
+    let employeeId: string;
+    try {
+      employeeId = resolveSaleEmployeeId(req, req.body.employeeId);
+    } catch (err: any) {
+      const msg = err.message || 'Invalid employee';
+      if (msg.includes('identification missing')) {
+        return res.status(401).json({ error: msg });
+      }
+      return res.status(403).json({ error: msg });
     }
 
     if (!Array.isArray(items) || items.length === 0) {
@@ -120,7 +131,6 @@ router.post('/exchange', async (req: Request, res: Response) => {
   try {
     const {
       branchId,
-      employeeId,
       customerName,
       customerPhone,
       returnedInventory,
@@ -131,11 +141,22 @@ router.post('/exchange', async (req: Request, res: Response) => {
       notes,
     } = req.body;
 
-    if (!branchId || !employeeId || !customerName || !customerPhone) {
+    if (!branchId || !customerName || !customerPhone) {
       return res.status(400).json({
         error:
-          'Missing required fields: branchId, employeeId, customerName, customerPhone',
+          'Missing required fields: branchId, customerName, customerPhone',
       });
+    }
+
+    let employeeId: string;
+    try {
+      employeeId = resolveSaleEmployeeId(req, req.body.employeeId);
+    } catch (err: any) {
+      const msg = err.message || 'Invalid employee';
+      if (msg.includes('identification missing')) {
+        return res.status(401).json({ error: msg });
+      }
+      return res.status(403).json({ error: msg });
     }
 
     if (paymentStatus && paymentStatus !== 'FULL' && paymentStatus !== 'PARTIAL') {
