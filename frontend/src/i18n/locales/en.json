@@ -853,7 +853,7 @@
     "outstandingTotal": "Outstanding {{amount}}",
     "loading": "Loading owed money...",
     "failedToLoad": "Failed to load owed money",
-    "noSales": "No sales found for this branch.",
+    "noSales": "No money is still owed for this branch. Fully paid sales stay off this list.",
     "saleIdLabel": "Sale ID: {{id}}",
     "total": "Total",
     "paid": "Paid",
