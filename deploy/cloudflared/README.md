@@ -48,3 +48,19 @@ Run `npm run diagnose:tunnel` to verify.
 
 - Dashboard: Zero Trust → Tunnels → **HEALTHY** (green)
 - Terminal: `curl https://erp.kutalimzhda.com/health`
+
+## Public load balancer (optional)
+
+For Cloudflare health checks + future multi-server failover:
+
+```bash
+# One-time: add CLOUDFLARE_LB_API_TOKEN to .env (Load Balancing Write)
+npm run setup:load-balancer
+```
+
+This creates:
+- HTTPS monitor on `/health` (Host: `erp.kutalimzhda.com`)
+- Pool pointing at `<TUNNEL_UUID>.cfargotunnel.com` with Host header
+- Public load balancer on `erp.kutalimzhda.com`
+
+See `scripts/setup-load-balancer.sh` for details.

@@ -15,6 +15,7 @@
     "install:tunnel": "bash scripts/install-cloudflared-service.sh",
     "rebuild:tunnel": "bash scripts/rebuild-cloudflare-tunnel.sh",
     "diagnose:tunnel": "bash scripts/diagnose-tunnel-network.sh",
+    "setup:load-balancer": "bash scripts/setup-load-balancer.sh",
     "ensure:24-7": "bash scripts/ensure-24-7.sh",
     "setup:boot-persistence": "bash scripts/setup-boot-persistence.sh",
     "build": "tsc",
