@@ -67,22 +67,19 @@ export default function Login() {
       </div>
       <div className="w-full max-w-md animate-slide-up">
         <div className="text-center mb-8">
-          <div className="inline-block bg-black rounded-2xl p-4 mb-4 shadow-lg">
-            <svg
-              className="w-12 h-12 text-magenta-500"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
-              />
-            </svg>
-          </div>
-          <h1 className="text-4xl font-extrabold text-black tracking-tight">
+          <img
+            src="/kutali-mzhda-logo.jpg"
+            alt={t("login.shopName")}
+            className="mx-auto h-44 w-44 rounded-2xl object-cover shadow-lg"
+          />
+          <p
+            className="mt-4 text-3xl font-bold text-black"
+            dir="rtl"
+            style={{ fontFamily: '"Noto Sans Arabic", sans-serif' }}
+          >
+            {t("login.shopName")}
+          </p>
+          <h1 className="text-4xl font-extrabold text-black tracking-tight mt-3">
             {t("login.title")} <span className="text-magenta-500">{t("login.titleAccent")}</span>
           </h1>
           <p className="text-gray-500 mt-2">{t("login.subtitle")}</p>
