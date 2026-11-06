@@ -25,10 +25,23 @@ type MeasurementRow = {
   buttCm: Prisma.Decimal | number;
   costIqd: Prisma.Decimal | number;
   paidIqd: Prisma.Decimal | number;
+  givenOn: Date;
+  returnOn: Date;
   createdAt: Date;
   updatedAt: Date;
   createdBy: { id: string; name: string } | null;
 };
+
+function formatDateOnly(value: Date) {
+  const year = value.getUTCFullYear();
+  const month = String(value.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(value.getUTCDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function dateOnly(iso: string) {
+  return new Date(`${iso}T00:00:00.000Z`);
+}
 
 function serialize(row: MeasurementRow) {
   return {
@@ -45,6 +58,8 @@ function serialize(row: MeasurementRow) {
     costIqd: Number(row.costIqd),
     paidIqd: Number(row.paidIqd),
     remainingIqd: Math.round((Number(row.costIqd) - Number(row.paidIqd)) * 100) / 100,
+    givenOn: formatDateOnly(row.givenOn),
+    returnOn: formatDateOnly(row.returnOn),
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
     createdByName: row.createdBy?.name ?? null,
@@ -131,6 +146,8 @@ router.post('/', async (req: Request, res: Response) => {
         buttCm: input.buttCm,
         costIqd: input.costIqd,
         paidIqd: input.paidIqd,
+        givenOn: dateOnly(input.givenOn),
+        returnOn: dateOnly(input.returnOn),
         createdById: req.user!.userId,
       },
       include: includeCreatedBy,
@@ -173,6 +190,8 @@ router.patch('/:id', async (req: Request, res: Response) => {
         buttCm: input.buttCm,
         costIqd: input.costIqd,
         paidIqd: input.paidIqd,
+        givenOn: dateOnly(input.givenOn),
+        returnOn: dateOnly(input.returnOn),
       },
       include: includeCreatedBy,
     });

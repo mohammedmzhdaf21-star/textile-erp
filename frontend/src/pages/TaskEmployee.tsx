@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { getCurrentUser } from '../lib/auth';
 import { isAutoManagedCuttingTask } from '../lib/cuttingTasks';
@@ -99,7 +100,15 @@ const TaskEmployee: React.FC = () => {
           <h2 className="text-2xl font-bold text-black">{t('taskEmployee.title')}</h2>
           <p className="mt-1 max-w-2xl text-sm text-gray-600">{t('taskEmployee.subtitle')}</p>
         </div>
-        <div className="text-sm text-gray-500">{t('taskEmployee.signedInAs', { name: employeeName })}</div>
+        <div className="flex flex-wrap items-center gap-3">
+          <Link
+            to={`/analytics?branch=${selectedBranch}&focus=tasks`}
+            className="rounded-xl border border-gray-300 px-4 py-2 text-sm font-semibold text-black"
+          >
+            {t('dataAnalysis.analyze')}
+          </Link>
+          <div className="text-sm text-gray-500">{t('taskEmployee.signedInAs', { name: employeeName })}</div>
+        </div>
       </div>
 
       <section className="mt-6 grid grid-cols-5 gap-3">

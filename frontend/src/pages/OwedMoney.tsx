@@ -104,13 +104,11 @@ const OwedMoney: React.FC = () => {
           paymentStatus,
         };
       })
-      .filter((sale) => sale.totalAmount > 0)
+      .filter((sale) => sale.totalAmount > 0 && sale.paymentStatus !== 'PAID' && sale.outstandingAmount > 0.001)
       .sort((a, b) => b.outstandingAmount - a.outstandingAmount);
   }, [sales, selectedBranch]);
 
-  const outstandingRows = owedRows.filter((sale) => sale.outstandingAmount > 0);
-  const settledRows = owedRows.filter((sale) => sale.outstandingAmount <= 0);
-  const outstandingTotal = outstandingRows.reduce((sum, sale) => sum + sale.outstandingAmount, 0);
+  const outstandingTotal = owedRows.reduce((sum, sale) => sum + sale.outstandingAmount, 0);
 
   const loadBranchOwed = async (branch: BranchId) => {
     setSelectedBranch(branch);
@@ -190,10 +188,7 @@ const OwedMoney: React.FC = () => {
     }
   };
 
-  const rowClass = (sale: OwedRow) => {
-    if (sale.outstandingAmount <= 0) return 'border-green-400 border-l-8 bg-green-50';
-    return 'border-red-400 border-l-8 bg-red-50';
-  };
+  const rowClass = () => 'border-red-400 border-l-8 bg-red-50';
 
   return (
     <div className="max-w-full overflow-x-hidden p-4">
@@ -234,7 +229,10 @@ const OwedMoney: React.FC = () => {
               <div>
                 <h3 className="text-xl font-semibold text-black">{t('owedMoney.branchArrears', { branch: selectedBranch })}</h3>
                 <p className="text-sm text-gray-600">
-                  {outstandingRows.length} outstanding sale{outstandingRows.length === 1 ? '' : 's'}.
+                  {t('owedMoney.outstandingSales', {
+                    count: owedRows.length,
+                    plural: owedRows.length === 1 ? '' : 's',
+                  })}
                 </p>
               </div>
               <div className="rounded-full bg-magenta-500 px-4 py-2 text-sm font-semibold text-white">
@@ -245,7 +243,7 @@ const OwedMoney: React.FC = () => {
 
           {loading ? (
             <div className="rounded-3xl border border-gray-200 bg-white p-6 text-gray-600 shadow-sm">
-              Loading owed money...
+              {t('owedMoney.loading')}
             </div>
           ) : error ? (
             <div className="rounded-3xl border border-red-200 bg-red-50 p-6 text-red-700 shadow-sm">
@@ -253,11 +251,11 @@ const OwedMoney: React.FC = () => {
             </div>
           ) : owedRows.length === 0 ? (
             <div className="rounded-3xl border border-gray-200 bg-white p-6 text-gray-600 shadow-sm">
-              No sales found for this branch.
+              {t('owedMoney.noSales')}
             </div>
           ) : (
             <div className="space-y-4">
-              {[...outstandingRows, ...settledRows].map((sale) => (
+              {owedRows.map((sale) => (
                 <div key={sale.id} className={`rounded-3xl border p-5 shadow-sm ${rowClass(sale)}`}>
                   <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                     <button
@@ -298,14 +296,9 @@ const OwedMoney: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => openPaymentModal(sale)}
-                      disabled={sale.outstandingAmount <= 0}
-                      className={`rounded-2xl px-4 py-2 text-sm font-semibold ${
-                        sale.outstandingAmount <= 0
-                          ? 'bg-gray-200 text-gray-500'
-                          : 'bg-black text-white hover:bg-gray-800'
-                      }`}
+                      className="rounded-2xl bg-black px-4 py-2 text-sm font-semibold text-white hover:bg-gray-800"
                     >
-                      {sale.outstandingAmount <= 0 ? 'Settled' : 'Record Payment'}
+                      {t('owedMoney.recordPayment')}
                     </button>
                   </div>
                 </div>

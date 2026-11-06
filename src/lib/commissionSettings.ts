@@ -18,7 +18,7 @@ export type CommissionRateRecord = {
   baseAmountPerUnit: number;
 };
 
-const defaultRate = (): CommissionRateRecord => ({ ratePercent: 5, baseAmountPerUnit: 0 });
+const defaultRate = (): CommissionRateRecord => ({ ratePercent: 10, baseAmountPerUnit: 5000 });
 
 export async function getCommissionRate(): Promise<CommissionRateRecord> {
   const setting = await prisma.setting.findUnique({ where: { key: COMMISSION_RATE_KEY } });

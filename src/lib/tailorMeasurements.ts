@@ -14,6 +14,8 @@ export type TailorMeasurementInput = {
   phone: string;
   costIqd: number;
   paidIqd: number;
+  givenOn: string;
+  returnOn: string;
 } & Record<TailorMeasurementField, number>;
 
 export type TailorMeasurementErrorCode =
@@ -21,7 +23,9 @@ export type TailorMeasurementErrorCode =
   | 'PHONE_INVALID'
   | 'MEASUREMENT_INVALID'
   | 'MONEY_INVALID'
-  | 'PAID_EXCEEDS_COST';
+  | 'PAID_EXCEEDS_COST'
+  | 'DATE_INVALID'
+  | 'RETURN_BEFORE_GIVEN';
 
 export class TailorMeasurementError extends Error {
   code: TailorMeasurementErrorCode;
@@ -41,6 +45,24 @@ function roundMoney(value: number) {
 
 function roundCm(value: number) {
   return Math.round(value * 10) / 10;
+}
+
+export function parseDateOnly(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== month - 1 ||
+    date.getUTCDate() !== day
+  ) {
+    return null;
+  }
+  return `${match[1]}-${match[2]}-${match[3]}`;
 }
 
 export function parseTailorMeasurementInput(body: unknown): TailorMeasurementInput {
@@ -78,11 +100,22 @@ export function parseTailorMeasurementInput(body: unknown): TailorMeasurementInp
     throw new TailorMeasurementError('PAID_EXCEEDS_COST');
   }
 
+  const givenOn = parseDateOnly(raw.givenOn);
+  const returnOn = parseDateOnly(raw.returnOn);
+  if (!givenOn || !returnOn) {
+    throw new TailorMeasurementError('DATE_INVALID');
+  }
+  if (returnOn < givenOn) {
+    throw new TailorMeasurementError('RETURN_BEFORE_GIVEN');
+  }
+
   return {
     customerName,
     phone,
     costIqd,
     paidIqd,
+    givenOn,
+    returnOn,
     ...measurements,
   };
 }

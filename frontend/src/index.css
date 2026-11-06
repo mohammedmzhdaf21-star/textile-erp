@@ -6,7 +6,7 @@
    GLOBAL STYLES - MAGENTA / BLACK / WHITE
    ======================================== */
 
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+Arabic:wght@600;700&display=swap");
 
 * {
   box-sizing: border-box;

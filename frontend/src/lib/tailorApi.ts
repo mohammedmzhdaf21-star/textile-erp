@@ -15,6 +15,8 @@ export type TailorMeasurement = {
   costIqd: number;
   paidIqd: number;
   remainingIqd: number;
+  givenOn: string;
+  returnOn: string;
   createdAt: string;
   updatedAt: string;
   createdByName: string | null;
@@ -31,6 +33,8 @@ export type TailorMeasurementDraft = {
   buttCm: string;
   cost: string;
   paid: string;
+  givenOn: string;
+  returnOn: string;
 };
 
 export async function fetchTailorMeasurements(query: string) {
@@ -71,5 +75,7 @@ function toPayload(draft: TailorMeasurementDraft) {
     buttCm: Number(draft.buttCm),
     costIqd: parsePriceInput(draft.cost),
     paidIqd: parsePriceInput(draft.paid || 0),
+    givenOn: draft.givenOn,
+    returnOn: draft.returnOn,
   };
 }

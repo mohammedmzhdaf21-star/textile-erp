@@ -16,6 +16,8 @@ const valid = {
   buttCm: 98.2,
   costIqd: 25000,
   paidIqd: 10000,
+  givenOn: '2026-11-05',
+  returnOn: '2026-11-12',
 };
 
 describe('parseTailorMeasurementInput', () => {
@@ -28,6 +30,25 @@ describe('parseTailorMeasurementInput', () => {
     assert.equal(parsed.buttCm, 98.2);
     assert.equal(parsed.costIqd, 25000);
     assert.equal(parsed.paidIqd, 10000);
+    assert.equal(parsed.givenOn, '2026-11-05');
+    assert.equal(parsed.returnOn, '2026-11-12');
+  });
+
+  it('accepts a return on the same day it was given', () => {
+    const parsed = parseTailorMeasurementInput({ ...valid, returnOn: '2026-11-05' });
+    assert.equal(parsed.returnOn, '2026-11-05');
+  });
+
+  it('rejects a missing date or a return before the given day', () => {
+    assert.throws(
+      () => parseTailorMeasurementInput({ ...valid, givenOn: '2026-02-31' }),
+      (error: unknown) => error instanceof TailorMeasurementError && error.code === 'DATE_INVALID'
+    );
+    assert.throws(
+      () => parseTailorMeasurementInput({ ...valid, returnOn: '2026-11-04' }),
+      (error: unknown) =>
+        error instanceof TailorMeasurementError && error.code === 'RETURN_BEFORE_GIVEN'
+    );
   });
 
   it('accepts a customer who has not paid yet', () => {

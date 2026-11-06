@@ -224,6 +224,7 @@ const server = app.listen(PORT, async () => {
     ['legacy settings prices', migrateLegacySettingsPrices],
     ['legacy commission base', migrateLegacyCommissionBase],
     ['commission backfill', backfillCommissionEntries],
+    ['commission recalculate', recalculatePendingCommissionEntries],
     ['plain cloth recovery', recoverPlainClothNamesFromSales],
     ['plain cloth defaults', ensureDefaultPlainClothTypes],
   ];

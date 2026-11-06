@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import api from '../lib/api';
 import { useTranslation } from 'react-i18next';
 import { formatCurrency, formatSignedCurrency } from '../lib/currency';
@@ -207,7 +207,17 @@ const toDate = formatDate(tomorrow);
             Select a branch and explore today&apos;s sales grouped by employee.
           </p>
         </div>
-        <div className="text-sm text-gray-500">{t('dailySales.todayDate', { date: fromDate })}</div>
+        <div className="flex flex-wrap items-center gap-3">
+          {selectedBranch && (
+            <Link
+              to={`/analytics?branch=${selectedBranch}&focus=daily`}
+              className="rounded-xl border border-gray-300 px-4 py-2 text-sm font-semibold text-black"
+            >
+              {t('dataAnalysis.analyze')}
+            </Link>
+          )}
+          <div className="text-sm text-gray-500">{t('dailySales.todayDate', { date: fromDate })}</div>
+        </div>
       </div>
 
       <section className="mt-6 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">

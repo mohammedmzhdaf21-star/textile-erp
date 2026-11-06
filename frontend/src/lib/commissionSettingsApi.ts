@@ -8,8 +8,8 @@ type SettingsResponse = {
 };
 
 const defaultRate = (): CommissionSettings => ({
-  ratePercent: 5,
-  baseAmountPerUnit: 0,
+  ratePercent: 10,
+  baseAmountPerUnit: 5000,
 });
 
 let cachedRate: CommissionSettings = defaultRate();
