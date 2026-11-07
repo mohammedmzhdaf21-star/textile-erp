@@ -5,6 +5,7 @@ import QrScanInput from '../components/QrScanInput';
 import api from '../lib/api';
 import { getCurrentUser } from '../lib/auth';
 import { getCachedItemMinimumPrice } from '../lib/commissionSettingsApi';
+import { baselineForSoldUnit } from '../lib/commissionMath';
 import { formatCurrency, parsePriceInput, toPriceInputNumber } from '../lib/currency';
 import { fetchPlainClothTypes, type PlainClothType } from '../lib/plainClothApi';
 import type { SalePaymentChannel } from '../lib/paymentMethod';
@@ -77,6 +78,7 @@ type InventoryLookupItem = {
   costPrice?: number | string;
   color?: { name?: string };
   sourceItemId?: string | null;
+  pieceLength?: string | number | null;
   isPiecePackage?: boolean;
   packageComponents?: PackageComponent[];
   packageComponentStock?: Record<string, number>;
@@ -340,7 +342,22 @@ const SalesView: React.FC = () => {
       const availableMeters = availableMetersForScanItem(item);
       const unit = soldAsUnitForItem(item);
       const components = parsePackageComponents(item.packageComponents);
-      const savedPrice = getCachedItemMinimumPrice(item.id);
+      const ownPrice = getCachedItemMinimumPrice(item.id);
+      const sourcePrice = item.sourceItemId ? getCachedItemMinimumPrice(item.sourceItemId) : undefined;
+      const savedSource = ownPrice ?? sourcePrice;
+      const pieceMeters = Number(item.pieceLength || (item.type === 'REMANENT' ? item.meters : 0) || 0);
+      const savedPrice = savedSource
+        ? {
+            ...savedSource,
+            minimumPrice: baselineForSoldUnit({
+              minimumPrice: savedSource.minimumPrice,
+              priceUnit: savedSource.unit,
+              soldAsUnit: unit,
+              pieceMeters,
+            }),
+            unit: savedSource.unit === 'METER' && unit === 'PIECE' && pieceMeters > 0 ? 'PIECE' as const : savedSource.unit,
+          }
+        : undefined;
       if (savedPrice) {
         setScanState((current) => {
           const meters = availableMeters > 0 ? availableMeters : Math.max(current.soldMeters || 1, 0.01);

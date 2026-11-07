@@ -6,12 +6,19 @@ import {
   getItemMinimumPrice,
 } from './commissionSettings';
 import { getPlainClothPricingByName } from './plainClothPricing';
-import { calculateSaleCommissions, type CommissionInputLine } from './commissionMath';
+import { baselineForSoldUnit, calculateSaleCommissions, type CommissionInputLine } from './commissionMath';
+
+function positiveAmount(value: { toString(): string } | number | null | undefined) {
+  if (value == null) return 0;
+  const parsed = typeof value === 'number' ? value : parseFloat(value.toString());
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+}
 
 async function resolveMinimumPriceForCommission(
   tx: Prisma.TransactionClient,
   params: {
     inventoryItemId?: string | null;
+    soldAsUnit?: 'METER' | 'PIECE';
     isPlainCloth?: boolean;
     plainClothName?: string | null;
   }
@@ -23,21 +30,53 @@ async function resolveMinimumPriceForCommission(
 
   if (!params.inventoryItemId) return null;
 
-  const savedMinimum = await getItemMinimumPrice(params.inventoryItemId);
-  if (savedMinimum) return savedMinimum.minimumPrice;
-
-  const inv = await tx.inventoryItem.findUnique({
+  const soldAsUnit = params.soldAsUnit ?? 'PIECE';
+  const sold = await tx.inventoryItem.findUnique({
     where: { id: params.inventoryItemId },
-    select: { costPrice: true, subCode: true },
+    select: {
+      sourceItemId: true,
+      pieceLength: true,
+      meters: true,
+      type: true,
+      costPrice: true,
+      subCode: true,
+    },
   });
-  if (!inv) return null;
 
-  const costPrice = inv.costPrice ? parseFloat(inv.costPrice.toString()) : 0;
-  const subCode = inv.subCode != null ? Number(inv.subCode) : 0;
-  const fallback = costPrice > 0 ? costPrice : subCode;
-  if (!Number.isFinite(fallback) || fallback <= 0) return null;
+  const pieceMeters =
+    positiveAmount(sold?.pieceLength) ||
+    (sold?.type === 'REMANENT' ? positiveAmount(sold.meters) : 0);
 
-  return normalizeStoredAmount(fallback);
+  let cursor: string | null = params.inventoryItemId;
+  const seen = new Set<string>();
+  while (cursor && !seen.has(cursor) && seen.size < 6) {
+    seen.add(cursor);
+    const saved = await getItemMinimumPrice(cursor);
+    if (saved && saved.minimumPrice > 0) {
+      return baselineForSoldUnit({
+        minimumPrice: saved.minimumPrice,
+        priceUnit: saved.unit,
+        soldAsUnit,
+        pieceMeters,
+      });
+    }
+
+    if (cursor === params.inventoryItemId && sold?.sourceItemId) {
+      cursor = sold.sourceItemId;
+      continue;
+    }
+
+    const parent = await tx.inventoryItem.findUnique({
+      where: { id: cursor },
+      select: { sourceItemId: true },
+    });
+    cursor = parent?.sourceItemId ?? null;
+  }
+
+  const ownFallback = positiveAmount(sold?.costPrice) || positiveAmount(sold?.subCode);
+  if (ownFallback > 0) return normalizeStoredAmount(ownFallback);
+
+  return null;
 }
 
 export function calculateLineCommission(
@@ -102,6 +141,7 @@ export async function recordCommissionsForSale(
       ? null
       : await resolveMinimumPriceForCommission(tx, {
           inventoryItemId: line.inventoryItemId,
+          soldAsUnit: line.soldAsUnit,
         });
     priced.push({
       id: line.id,
@@ -428,6 +468,7 @@ export async function recalculatePendingCommissionEntries() {
         ? null
         : await resolveMinimumPriceForCommission(prisma, {
             inventoryItemId: item.inventoryItemId,
+            soldAsUnit: item.soldAsUnit,
           });
       lines.push({
         id: item.id,
@@ -498,6 +539,7 @@ export async function backfillCommissionEntries() {
         ? null
         : await resolveMinimumPriceForCommission(prisma, {
             inventoryItemId: item.inventoryItemId,
+            soldAsUnit: item.soldAsUnit,
           });
       lines.push({
         id: item.id,

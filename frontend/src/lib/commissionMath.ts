@@ -22,6 +22,19 @@ export type CommissionResultLine = {
   quantitySold: number;
 };
 
+export function baselineForSoldUnit(input: {
+  minimumPrice: number;
+  priceUnit: 'METER' | 'PIECE';
+  soldAsUnit: 'METER' | 'PIECE';
+  pieceMeters?: number;
+}) {
+  const meters = input.pieceMeters ?? 0;
+  if (input.priceUnit === 'METER' && input.soldAsUnit === 'PIECE' && meters > 0) {
+    return Number((input.minimumPrice * meters).toFixed(2));
+  }
+  return input.minimumPrice;
+}
+
 export function lineSaleAmount(line: {
   soldPrice: number;
   quantitySold: number;

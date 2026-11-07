@@ -840,7 +840,12 @@ export async function listSales(params: ListSalesParams) {
       take,
       orderBy: { createdAt: 'desc' },
       include: {
-        items: { include: { color: true, inventoryItem: { select: { type: true } } } },
+        items: {
+          include: {
+            color: true,
+            inventoryItem: { select: { type: true, sourceItemId: true, pieceLength: true, meters: true } },
+          },
+        },
         branch: { select: { id: true, name: true } },
         employee: { select: { id: true, name: true } },
         customer: { select: { id: true, name: true, phone: true } },

@@ -8,7 +8,7 @@ import {
   pushCommissionRateToServer,
 } from "../lib/commissionSettingsApi";
 import { formatCurrency, parsePriceInput, toPriceInput } from "../lib/currency";
-import { calculateSaleCommissions, type CommissionInputLine } from "../lib/commissionMath";
+import { baselineForSoldUnit, calculateSaleCommissions, type CommissionInputLine } from "../lib/commissionMath";
 
 type SaleItem = {
   id?: string;
@@ -18,7 +18,12 @@ type SaleItem = {
   quantitySold: string | number;
   soldPrice: string | number;
   lineDiscount?: string | number;
-  inventoryItem?: { type?: string } | null;
+  inventoryItem?: {
+    type?: string;
+    sourceItemId?: string | null;
+    pieceLength?: string | number | null;
+    meters?: string | number | null;
+  } | null;
 };
 
 type Sale = {
@@ -86,18 +91,34 @@ export default function SalesCommission() {
 
       sales.forEach((sale) => {
         const employee = sale.employee?.name || sale.employeeName || t("common.unknownEmployee");
-        const lines: CommissionInputLine[] = (sale.items || []).map((item, index) => ({
-          id: item.id || `${sale.id}-${index}`,
-          isPlainCloth: Boolean(item.isPlainCloth),
-          isRemnant: item.inventoryItem?.type === "REMANENT",
-          soldAsUnit: item.soldAsUnit === "METER" ? "METER" : "PIECE",
-          soldPrice: Number(item.soldPrice || 0),
-          quantitySold: Number(item.quantitySold || 0),
-          lineDiscount: Number(item.lineDiscount || 0),
-          minimumPrice: item.inventoryItemId
-            ? prices[item.inventoryItemId]?.minimumPrice ?? null
-            : null,
-        }));
+        const lines: CommissionInputLine[] = (sale.items || []).map((item, index) => {
+          const soldAsUnit = item.soldAsUnit === "METER" ? "METER" : "PIECE";
+          const saved =
+            (item.inventoryItemId ? prices[item.inventoryItemId] : undefined) ??
+            (item.inventoryItem?.sourceItemId ? prices[item.inventoryItem.sourceItemId] : undefined);
+          const pieceMeters = Number(
+            item.inventoryItem?.pieceLength ||
+              (item.inventoryItem?.type === "REMANENT" ? item.inventoryItem?.meters : 0) ||
+              0
+          );
+          return {
+            id: item.id || `${sale.id}-${index}`,
+            isPlainCloth: Boolean(item.isPlainCloth),
+            isRemnant: item.inventoryItem?.type === "REMANENT",
+            soldAsUnit,
+            soldPrice: Number(item.soldPrice || 0),
+            quantitySold: Number(item.quantitySold || 0),
+            lineDiscount: Number(item.lineDiscount || 0),
+            minimumPrice: saved
+              ? baselineForSoldUnit({
+                  minimumPrice: saved.minimumPrice,
+                  priceUnit: saved.unit,
+                  soldAsUnit,
+                  pieceMeters,
+                })
+              : null,
+          };
+        });
 
         calculateSaleCommissions(lines, rate, baseAmount).forEach((result) => {
           if (result.commission <= 0) return;

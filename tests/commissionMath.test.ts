@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { calculateSaleCommissions, type CommissionInputLine } from '../src/lib/commissionMath';
+import { baselineForSoldUnit, calculateSaleCommissions, type CommissionInputLine } from '../src/lib/commissionMath';
 
 const BASE = 5000;
 const RATE = 10;
@@ -34,6 +34,20 @@ function commissionOf(lines: CommissionInputLine[]) {
     .filter((line) => line.commission > 0)
     .reduce((sum, line) => sum + line.commission, 0);
 }
+
+describe('baseline inherited from a roll', () => {
+  it('turns a per-meter roll price into the piece baseline', () => {
+    assert.equal(
+      baselineForSoldUnit({
+        minimumPrice: 55_000,
+        priceUnit: 'METER',
+        soldAsUnit: 'PIECE',
+        pieceMeters: 2.25,
+      }),
+      123_750
+    );
+  });
+});
 
 describe('employee sale commission', () => {
   it('pays the baseline amount when a scanned item is sold at its baseline', () => {
