@@ -4,8 +4,9 @@ import { useTranslation } from 'react-i18next';
 import QrScanInput from '../components/QrScanInput';
 import api from '../lib/api';
 import { getCurrentUser } from '../lib/auth';
-import { getCachedItemMinimumPrice } from '../lib/commissionSettingsApi';
+import { fetchCommissionSettingsFromServer, getCachedItemMinimumPrice } from '../lib/commissionSettingsApi';
 import { baselineForSoldUnit } from '../lib/commissionMath';
+import { allocateCombinedSaleTotal } from '../lib/combinedSalePrice';
 import { formatCurrency, parsePriceInput, toPriceInputNumber } from '../lib/currency';
 import { fetchPlainClothTypes, type PlainClothType } from '../lib/plainClothApi';
 import type { SalePaymentChannel } from '../lib/paymentMethod';
@@ -45,6 +46,7 @@ type InventorySaleLine = {
   soldAsUnit: 'METER' | 'PIECE';
   quantity: number;
   linePrice: number;
+  baselineTotal?: number;
   sourceItemId?: string | null;
   code?: number;
   colorName?: string;
@@ -124,6 +126,43 @@ const lineUnitPrice = (linePriceShorthand: number, quantity: number) => {
 const plainClothPricePerMeter = (linePriceShorthand: number, meters: number) =>
   lineUnitPrice(linePriceShorthand, meters);
 
+const baselineTotalForSale = (input: {
+  itemId: string;
+  sourceItemId?: string | null;
+  soldAsUnit: 'METER' | 'PIECE';
+  quantity: number;
+  pieceMeters?: number;
+}) => {
+  const ownPrice = getCachedItemMinimumPrice(input.itemId);
+  const sourcePrice = input.sourceItemId ? getCachedItemMinimumPrice(input.sourceItemId) : undefined;
+  const saved = ownPrice ?? sourcePrice;
+  if (!saved || saved.minimumPrice <= 0 || input.quantity <= 0) return 0;
+  const perSoldUnit = baselineForSoldUnit({
+    minimumPrice: saved.minimumPrice,
+    priceUnit: saved.unit,
+    soldAsUnit: input.soldAsUnit,
+    pieceMeters: input.pieceMeters,
+  });
+  return perSoldUnit * input.quantity;
+};
+
+const priceParts = (lineTotal: number, quantity: number) => {
+  const total = Math.round((Number.isFinite(lineTotal) ? lineTotal : 0) * 100) / 100;
+  if (quantity <= 0 || total <= 0) return { soldPrice: 0, lineDiscount: 0 };
+  let soldPrice = Math.round((total / quantity) * 100) / 100;
+  let gross = Math.round(soldPrice * quantity * 100) / 100;
+  if (gross + 0.001 < total) {
+    soldPrice = Math.round((soldPrice + 0.01) * 100) / 100;
+    gross = Math.round(soldPrice * quantity * 100) / 100;
+  }
+  return {
+    soldPrice,
+    lineDiscount: Math.max(0, Math.round((gross - total) * 100) / 100),
+  };
+};
+
+type SalePriceMode = 'each' | 'together';
+
 type SalesInputSection = 'pieceScan' | 'rollScan' | 'plainCloth';
 
 type PieceCutSummary = {
@@ -198,6 +237,8 @@ const SalesView: React.FC = () => {
   const { t } = useTranslation();
   const [branch, setBranch] = useState<string>(resolveInitialSalesBranch);
   const [cart, setCart] = useState<SaleLine[]>([]);
+  const [priceMode, setPriceMode] = useState<SalePriceMode>('each');
+  const [combinedPrice, setCombinedPrice] = useState('');
   const [customerName, setCustomerName] = useState('Walk-in');
   const [customerPhone, setCustomerPhone] = useState('0000000000');
   const [paymentStatus, setPaymentStatus] = useState<'FULL' | 'PARTIAL'>('FULL');
@@ -230,6 +271,10 @@ const SalesView: React.FC = () => {
   };
 
   useEffect(() => {
+    void fetchCommissionSettingsFromServer().catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
     void fetchPlainClothTypes()
       .then((items) => {
         setPlainClothTypes(items);
@@ -246,6 +291,24 @@ const SalesView: React.FC = () => {
       })
       .catch(() => setPlainClothTypes([]));
   }, []);
+
+  const choosePriceMode = (mode: SalePriceMode) => {
+    setPriceMode(mode);
+    if (mode !== 'together') return;
+    setCombinedPrice((current) => {
+      if (current.trim() !== '') return current;
+      const sum = cart.reduce((total, line) => total + parsePriceInput(line.linePrice), 0);
+      return sum > 0 ? String(toPriceInputNumber(sum)) : current;
+    });
+    setPlainCloth((current) => {
+      const selected = plainClothTypes.find((item) => item.name === current.clothName);
+      if (!selected) return current;
+      return {
+        ...current,
+        linePrice: plainClothLinePriceShorthand(selected.pricePerM, current.meters || 1),
+      };
+    });
+  };
 
   const applyPlainClothSelection = (clothName: string) => {
     const selected = plainClothTypes.find((item) => item.name === clothName);
@@ -293,15 +356,33 @@ const SalesView: React.FC = () => {
     packageSaleMode,
   ]);
 
-  const lineTotal = (line: SaleLine) => {
-    if (line.type === 'inventory') return parsePriceInput(line.linePrice);
-    return parsePriceInput(line.linePrice);
+  const enteredLineTotal = (line: SaleLine) => parsePriceInput(line.linePrice);
+
+  const combinedTotalIqd = parsePriceInput(combinedPrice || 0);
+
+  const combinedAllocations = useMemo(() => {
+    if (priceMode !== 'together') return new Map<number, number>();
+    const rows = allocateCombinedSaleTotal(
+      cart.map((line, index) => ({
+        id: String(index),
+        isPlainCloth: line.type === 'plain',
+        clothCost: line.type === 'plain' ? parsePriceInput(line.linePrice) : 0,
+        baseline: line.type === 'inventory' ? line.baselineTotal ?? 0 : 0,
+      })),
+      combinedTotalIqd
+    );
+    return new Map(rows.map((row) => [Number(row.id), row.lineTotal]));
+  }, [cart, combinedTotalIqd, priceMode]);
+
+  const lineTotal = (line: SaleLine, index = -1) => {
+    if (priceMode === 'together') return combinedAllocations.get(index) ?? 0;
+    return enteredLineTotal(line);
   };
 
-  const saleTotal = useMemo(
-    () => cart.reduce((sum, line) => sum + lineTotal(line), 0),
-    [cart]
-  );
+  const saleTotal = useMemo(() => {
+    if (priceMode === 'together') return combinedTotalIqd;
+    return cart.reduce((sum, line) => sum + enteredLineTotal(line), 0);
+  }, [cart, combinedTotalIqd, priceMode]);
 
   const dueAmount = useMemo(() => {
     if (paymentStatus === 'FULL') return 0;
@@ -310,8 +391,10 @@ const SalesView: React.FC = () => {
 
   const addPlainClothLine = () => {
     if (!plainCloth.clothName.trim()) return alert(t('plainClothPricing.enterName'));
-    if (plainCloth.meters <= 0 || plainCloth.linePrice <= 0) {
-      return alert(t('sales.enterValidPlainCloth'));
+    if (plainCloth.meters <= 0 || (priceMode === 'each' && plainCloth.linePrice <= 0)) {
+      return alert(
+        priceMode === 'together' ? t('sales.enterPlainClothMeters') : t('sales.enterValidPlainCloth')
+      );
     }
     setCart((current) => [
       ...current,
@@ -446,7 +529,7 @@ const SalesView: React.FC = () => {
     if (!inventoryItemId) {
       return alert(t('sales.enterItemId'));
     }
-    if (scanState.linePrice <= 0) {
+    if (priceMode === 'each' && scanState.linePrice <= 0) {
       return alert(t('sales.enterValidPrice'));
     }
 
@@ -466,7 +549,7 @@ const SalesView: React.FC = () => {
 
       const components = parsePackageComponents(item.packageComponents);
       const isPiecePackage = Boolean(item.isPiecePackage && components.length > 0);
-      const linePrice = scanState.linePrice;
+      const linePrice = priceMode === 'together' ? 0 : scanState.linePrice;
       let description = t('sales.descriptionInventory', { type: item.type, branch: scanState.sourceBranch });
       let packageSummary = '';
       let linePackageMode: PackageSaleMode | undefined;
@@ -558,6 +641,8 @@ const SalesView: React.FC = () => {
         }
       }
 
+      await fetchCommissionSettingsFromServer().catch(() => undefined);
+
       setCart((current) => [
         ...current,
         {
@@ -569,6 +654,13 @@ const SalesView: React.FC = () => {
           soldAsUnit,
           quantity,
           linePrice,
+          baselineTotal: baselineTotalForSale({
+            itemId: cartItemId,
+            sourceItemId: item.sourceItemId,
+            soldAsUnit,
+            quantity,
+            pieceMeters: isPiecePackage || soldAsUnit !== 'PIECE' ? 0 : Number(scanState.soldMeters) || 0,
+          }),
           sourceItemId: item.sourceItemId,
           code: item.code,
           colorName: item.color?.name,
@@ -650,7 +742,7 @@ const SalesView: React.FC = () => {
     if (!Number.isFinite(meters) || meters <= 0) {
       return alert(t('itemConversion.enterValidMetersToCut'));
     }
-    if (!Number.isFinite(totalPrice) || totalPrice <= 0) {
+    if (priceMode === 'each' && (!Number.isFinite(totalPrice) || totalPrice <= 0)) {
       return alert(t('sales.enterValidPrice'));
     }
     if (meters > Number(rollCutSource.meters ?? 0)) {
@@ -672,6 +764,8 @@ const SalesView: React.FC = () => {
         newPieceId: result.pieceItemId,
       });
 
+      await fetchCommissionSettingsFromServer().catch(() => undefined);
+
       setCart((current) => [
         ...current,
         {
@@ -686,7 +780,14 @@ const SalesView: React.FC = () => {
           colorId: rollCutSource.colorId,
           soldAsUnit: result.createAsRemnant ? 'METER' : 'PIECE',
           quantity: result.createAsRemnant ? meters : 1,
-          linePrice: totalPrice,
+          linePrice: priceMode === 'together' ? 0 : totalPrice,
+          baselineTotal: baselineTotalForSale({
+            itemId: result.pieceItemId,
+            sourceItemId: rollCutSource.id,
+            soldAsUnit: result.createAsRemnant ? 'METER' : 'PIECE',
+            quantity: result.createAsRemnant ? meters : 1,
+            pieceMeters: result.createAsRemnant ? 0 : meters,
+          }),
           sourceItemId: rollCutSource.id,
           code: rollCutSource.code,
           colorName: rollCutSource.color?.name,
@@ -783,6 +884,10 @@ const SalesView: React.FC = () => {
   const createSale = async () => {
     if (!branch) return alert(t('sales.selectBranch'));
     if (cart.length === 0) return alert(t('sales.addLine'));
+    if (priceMode === 'together' && combinedTotalIqd <= 0) return alert(t('sales.enterCombinedPrice'));
+    if (priceMode === 'each' && cart.some((line) => enteredLineTotal(line) <= 0)) {
+      return alert(t('sales.enterValidPrice'));
+    }
     if (!customerName.trim() || !customerPhone.trim()) return alert(t('sales.provideCustomer'));
     if (paymentStatus === 'PARTIAL' && parsePriceInput(amountPaid) <= 0) return alert(t('sales.enterPartialPayment'));
 
@@ -811,15 +916,26 @@ const SalesView: React.FC = () => {
     try {
       const resolvedItems: any[] = [];
 
-      for (const line of cart) {
+      for (const [index, line] of cart.entries()) {
+        const allocated = lineTotal(line, index);
+        const quantity = line.type === 'inventory' ? line.quantity : line.meters;
+        const priced =
+          priceMode === 'together'
+            ? priceParts(allocated, quantity)
+            : {
+                soldPrice: line.type === 'inventory'
+                  ? lineUnitPrice(line.linePrice, line.quantity)
+                  : plainClothPricePerMeter(line.linePrice, line.meters),
+                lineDiscount: 0,
+              };
         if (line.type === 'inventory') {
           const payload: Record<string, unknown> = {
             inventoryItemId: line.inventoryItemId,
             colorId: line.colorId,
             soldAsUnit: line.soldAsUnit,
             quantitySold: line.quantity,
-            soldPrice: lineUnitPrice(line.linePrice, line.quantity),
-            lineDiscount: 0,
+            soldPrice: priced.soldPrice,
+            lineDiscount: priced.lineDiscount,
           };
           if (line.isPiecePackage) {
             payload.isPiecePackage = true;
@@ -834,14 +950,13 @@ const SalesView: React.FC = () => {
           if (line.qrCodeDataUrl) payload.qrCodeDataUrl = line.qrCodeDataUrl;
           resolvedItems.push(payload);
         } else {
-          const soldPricePerMeter = plainClothPricePerMeter(line.linePrice, line.meters);
           resolvedItems.push({
             inventoryItemId: undefined,
             colorId: 'PLAIN',
             soldAsUnit: 'METER',
             quantitySold: line.meters,
-            soldPrice: soldPricePerMeter,
-            lineDiscount: 0,
+            soldPrice: priced.soldPrice,
+            lineDiscount: priced.lineDiscount,
             plainClothName: line.clothName,
             isPlainCloth: true,
           });
@@ -915,6 +1030,7 @@ const SalesView: React.FC = () => {
           : t('sales.saleCreated', { branch, total: formatCurrency(saleTotal) })
       );
       setCart([]);
+      setCombinedPrice('');
       setAmountPaid('0');
       setPaymentStatus('FULL');
       setPaymentChannel('CASH');
@@ -1071,20 +1187,26 @@ const SalesView: React.FC = () => {
                     </p>
                   )}
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">
-                  {t('sales.salePriceTotal')}
-                </label>
-                <input
-                  type="number"
-                  min="0.01"
-                  step="0.01"
-                  value={scanState.linePrice}
-                  onChange={(e) => setScanState((s) => ({ ...s, linePrice: Number(e.target.value) }))}
-                  className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
-                />
-                <p className="mt-1 text-xs text-gray-500">{t('currency.thousandsHint')}</p>
-              </div>
+              {priceMode === 'each' ? (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    {t('sales.salePriceTotal')}
+                  </label>
+                  <input
+                    type="number"
+                    min="0.01"
+                    step="0.01"
+                    value={scanState.linePrice}
+                    onChange={(e) => setScanState((s) => ({ ...s, linePrice: Number(e.target.value) }))}
+                    className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
+                  />
+                  <p className="mt-1 text-xs text-gray-500">{t('currency.thousandsHint')}</p>
+                </div>
+              ) : (
+                <div className="flex items-end">
+                  <p className="text-xs text-gray-500">{t('sales.priceEnteredAtEnd')}</p>
+                </div>
+              )}
             </div>
 
             {detectedScanItem?.isPiecePackage && detectedPackageComponents.length > 0 && (
@@ -1302,19 +1424,26 @@ const SalesView: React.FC = () => {
                   className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">{t('sales.salePriceTotal')}</label>
-                <input
-                  type="number"
-                  min="0.01"
-                  step="0.01"
-                  value={rollCutScan.price}
-                  onChange={(e) =>
-                    setRollCutScan((current) => ({ ...current, price: Number(e.target.value) }))
-                  }
-                  className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
-                />
-              </div>
+              {priceMode === 'each' ? (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">{t('sales.salePriceTotal')}</label>
+                  <input
+                    type="number"
+                    min="0.01"
+                    step="0.01"
+                    value={rollCutScan.price}
+                    onChange={(e) =>
+                      setRollCutScan((current) => ({ ...current, price: Number(e.target.value) }))
+                    }
+                    className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
+                  />
+                  <p className="mt-1 text-xs text-gray-500">{t('currency.thousandsHint')}</p>
+                </div>
+              ) : (
+                <div className="flex items-end">
+                  <p className="text-xs text-gray-500">{t('sales.priceEnteredAtEnd')}</p>
+                </div>
+              )}
             </div>
             <button
               type="button"
@@ -1406,22 +1535,45 @@ const SalesView: React.FC = () => {
                   min="0.1"
                   step="0.1"
                   value={plainCloth.meters}
-                  onChange={(e) => setPlainCloth((current) => ({ ...current, meters: Number(e.target.value) }))}
+                  onChange={(e) => {
+                    const meters = Number(e.target.value);
+                    setPlainCloth((current) => {
+                      const selected = plainClothTypes.find((item) => item.name === current.clothName);
+                      return {
+                        ...current,
+                        meters,
+                        linePrice:
+                          priceMode === 'together' && selected
+                            ? plainClothLinePriceShorthand(selected.pricePerM, meters)
+                            : current.linePrice,
+                      };
+                    });
+                  }}
                   className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">{t('sales.plainClothLinePrice')}</label>
-                <input
-                  type="number"
-                  min="0"
-                  step="1"
-                  value={plainCloth.linePrice}
-                  onChange={(e) => setPlainCloth((current) => ({ ...current, linePrice: Number(e.target.value) }))}
-                  className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
-                />
-                <p className="mt-1 text-xs text-gray-500">{t('currency.thousandsHint')}</p>
-              </div>
+              {priceMode === 'each' ? (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">{t('sales.plainClothLinePrice')}</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={plainCloth.linePrice}
+                    onChange={(e) => setPlainCloth((current) => ({ ...current, linePrice: Number(e.target.value) }))}
+                    className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
+                  />
+                  <p className="mt-1 text-xs text-gray-500">{t('currency.thousandsHint')}</p>
+                </div>
+              ) : (
+                <div className="flex items-end">
+                  <p className="text-xs text-gray-500">
+                    {t('sales.clothCostInsideTotal', {
+                      amount: formatCurrency(parsePriceInput(plainCloth.linePrice)),
+                    })}
+                  </p>
+                </div>
+              )}
             </div>
             )}
             <button
@@ -1438,6 +1590,52 @@ const SalesView: React.FC = () => {
         <aside className="space-y-6">
           <div className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
             <h3 className="text-lg font-semibold text-black">{t('sales.saleSummary')}</h3>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => choosePriceMode('each')}
+                className={`rounded-full px-4 py-2 text-xs font-semibold ${
+                  priceMode === 'each'
+                    ? 'bg-black text-white'
+                    : 'border border-gray-300 bg-white text-gray-700'
+                }`}
+              >
+                {t('sales.priceEachLine')}
+              </button>
+              <button
+                type="button"
+                onClick={() => choosePriceMode('together')}
+                className={`rounded-full px-4 py-2 text-xs font-semibold ${
+                  priceMode === 'together'
+                    ? 'bg-black text-white'
+                    : 'border border-gray-300 bg-white text-gray-700'
+                }`}
+              >
+                {t('sales.priceTogether')}
+              </button>
+            </div>
+            <p className="mt-3 text-xs text-gray-500">
+              {priceMode === 'together' ? t('sales.priceModeHintTogether') : t('sales.priceModeHintEach')}
+            </p>
+            {priceMode === 'together' && (
+              <div className="mt-4">
+                <label className="block text-sm font-medium text-gray-700" htmlFor="combined-sale-price">
+                  {t('sales.combinedSalePrice')}
+                </label>
+                <input
+                  id="combined-sale-price"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={combinedPrice}
+                  onChange={(event) => setCombinedPrice(event.target.value)}
+                  className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
+                />
+                <p className="mt-1 text-xs text-gray-500">
+                  {t('sales.combinedSalePriceHint')} {t('currency.thousandsHint')}
+                </p>
+              </div>
+            )}
             <div className="mt-4 space-y-3 text-sm text-gray-700">
               <div className="flex justify-between">
                 <span>{t('common.date')}</span>
@@ -1553,8 +1751,12 @@ const SalesView: React.FC = () => {
                     <p className="text-sm text-gray-500">
                       {line.type === 'inventory'
                         ? line.isPiecePackage
-                          ? `${line.description}: ${line.packageSummary ?? 'package sale'} — ${formatCurrency(lineTotal(line))}`
+                          ? `${line.description}: ${line.packageSummary ?? 'package sale'} — ${formatCurrency(lineTotal(line, index))}`
+                          : priceMode === 'together'
+                          ? `${line.description}: ${line.quantity} ${line.soldAsUnit === 'PIECE' ? 'pieces' : 'meters'}`
                           : `${line.description}: ${line.quantity} ${line.soldAsUnit === 'PIECE' ? 'pieces' : 'meters'} — ${formatCurrency(parsePriceInput(line.linePrice))} (${formatCurrency(lineUnitPrice(line.linePrice, line.quantity))}/${line.soldAsUnit === 'PIECE' ? 'pc' : 'm'})`
+                        : priceMode === 'together'
+                        ? `${line.meters} meters`
                         : `${line.meters} meters — ${formatCurrency(parsePriceInput(line.linePrice))} (${formatCurrency(plainClothPricePerMeter(line.linePrice, line.meters))}/m)`}
                     </p>
                   </div>
@@ -1568,7 +1770,7 @@ const SalesView: React.FC = () => {
                 </div>
                 <div className="flex items-center justify-between text-sm text-gray-700">
                   <span>{t('common.lineTotal')}</span>
-                  <span>{formatCurrency(lineTotal(line))}</span>
+                  <span>{formatCurrency(lineTotal(line, index))}</span>
                 </div>
               </div>
             ))}
