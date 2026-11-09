@@ -7,6 +7,8 @@ import {
 } from './commissionSettings';
 import { getPlainClothPricingByName } from './plainClothPricing';
 import { baselineForSoldUnit, calculateSaleCommissions, type CommissionInputLine } from './commissionMath';
+import { tailorClothPieceCount } from './tailorCommission';
+import { readStoredTailorGarments } from './tailorGarments';
 
 function positiveAmount(value: { toString(): string } | number | null | undefined) {
   if (value == null) return 0;
@@ -211,6 +213,8 @@ export type PendingCommissionItemDetail = {
 
 export type PendingCommissionLine = {
   id: string;
+  source: 'sale' | 'tailor';
+  tailorCode: number | null;
   saleId: string;
   saleItemId: string;
   inventoryItemId: string | null;
@@ -327,6 +331,8 @@ export async function listPendingCommissions(options?: {
 
     const line: PendingCommissionLine = {
       id: entry.id,
+      source: 'sale',
+      tailorCode: null,
       saleId: entry.saleId,
       saleItemId: entry.saleItemId,
       inventoryItemId: entry.inventoryItemId,
@@ -363,6 +369,71 @@ export async function listPendingCommissions(options?: {
     }
   }
 
+  const tailorJobs = await prisma.tailorMeasurement.findMany({
+    where: {
+      commissionStatus: 'PENDING',
+      commissionIqd: { gt: 0 },
+      sellerEmployeeId: { not: null },
+      ...(options?.employeeId ? { sellerEmployeeId: options.employeeId } : {}),
+    },
+    include: {
+      sellerEmployee: { select: { id: true, name: true, email: true, role: true } },
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+
+  for (const job of tailorJobs) {
+    const seller = job.sellerEmployee;
+    if (!seller) continue;
+    const pieces = tailorClothPieceCount(readStoredTailorGarments(job.garments));
+    const commission = parseFloat(job.commissionIqd.toString());
+    const cost = parseFloat(job.costIqd.toString());
+    const line: PendingCommissionLine = {
+      id: job.id,
+      source: 'tailor',
+      tailorCode: job.code,
+      saleId: job.id,
+      saleItemId: job.id,
+      inventoryItemId: null,
+      soldPrice: cost.toFixed(2),
+      minimumPrice: '0.00',
+      quantitySold: pieces.toFixed(2),
+      ratePercent: '0.00',
+      commissionAmount: commission.toFixed(2),
+      createdAt: job.createdAt.toISOString(),
+      saleDate: job.createdAt.toISOString(),
+      sale: {
+        customerName: job.customerName,
+        customerPhone: job.phone,
+        totalPrice: cost.toFixed(2),
+        paymentMethod: 'TAILOR',
+        branchId: '',
+        branchName: '',
+        notes: null,
+      },
+      item: {
+        description: `Tailor ${job.code}`,
+        isPlainCloth: false,
+        plainClothName: null,
+        soldAsUnit: 'PIECE',
+        lineTotal: cost.toFixed(2),
+        colorName: null,
+      },
+    };
+
+    const existing = grouped.get(seller.id);
+    if (existing) {
+      existing.entries.push(line);
+      existing.totalPending = (parseFloat(existing.totalPending) + commission).toFixed(2);
+    } else {
+      grouped.set(seller.id, {
+        employee: seller,
+        totalPending: commission.toFixed(2),
+        entries: [line],
+      });
+    }
+  }
+
   return Array.from(grouped.values());
 }
 
@@ -379,8 +450,15 @@ export async function markEmployeeCommissionsPaid(
         sale: { isVoided: false },
       },
     });
+    const tailorJobs = await tx.tailorMeasurement.findMany({
+      where: {
+        sellerEmployeeId: employeeId,
+        commissionStatus: 'PENDING',
+        commissionIqd: { gt: 0 },
+      },
+    });
 
-    if (pending.length === 0) {
+    if (pending.length === 0 && tailorJobs.length === 0) {
       throw new Error('No pending commission entries for this employee');
     }
 
@@ -393,27 +471,34 @@ export async function markEmployeeCommissionsPaid(
       throw new Error('Employee not found');
     }
 
-    const totalAmount = pending.reduce(
-      (sum, entry) => sum + parseFloat(entry.commissionAmount.toString()),
-      0
-    );
+    const totalAmount =
+      pending.reduce((sum, entry) => sum + parseFloat(entry.commissionAmount.toString()), 0) +
+      tailorJobs.reduce((sum, job) => sum + parseFloat(job.commissionIqd.toString()), 0);
 
     const now = new Date();
-    await tx.employeeCommissionEntry.updateMany({
-      where: { id: { in: pending.map((entry) => entry.id) } },
-      data: {
-        status: 'PAID',
-        paidAt: now,
-        paidById,
-      },
-    });
+    if (pending.length > 0) {
+      await tx.employeeCommissionEntry.updateMany({
+        where: { id: { in: pending.map((entry) => entry.id) } },
+        data: {
+          status: 'PAID',
+          paidAt: now,
+          paidById,
+        },
+      });
+    }
+    if (tailorJobs.length > 0) {
+      await tx.tailorMeasurement.updateMany({
+        where: { id: { in: tailorJobs.map((job) => job.id) } },
+        data: { commissionStatus: 'PAID' },
+      });
+    }
 
     const payment = await tx.paidCommissionHistory.create({
       data: {
         employeeId,
         amountPaid: new Prisma.Decimal(totalAmount.toFixed(2)),
         paidAt: now,
-        notes: `Paid ${pending.length} commission line(s)`,
+        notes: `Paid ${pending.length + tailorJobs.length} commission line(s)`,
       },
     });
 
@@ -428,7 +513,8 @@ export async function markEmployeeCommissionsPaid(
           action: 'mark_paid',
           employeeName: employee.name,
           employeeEmail: employee.email,
-          entryCount: pending.length,
+          entryCount: pending.length + tailorJobs.length,
+          tailorCount: tailorJobs.length,
           amountPaid: totalAmount,
           paymentId: payment.id,
         } as Prisma.InputJsonValue,
@@ -437,7 +523,7 @@ export async function markEmployeeCommissionsPaid(
 
     return {
       payment,
-      paidCount: pending.length,
+      paidCount: pending.length + tailorJobs.length,
       amountPaid: totalAmount.toFixed(2),
     };
   });

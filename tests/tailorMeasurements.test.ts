@@ -18,6 +18,7 @@ const valid = {
   paidIqd: 10000,
   givenOn: '2026-11-05',
   returnOn: '2026-11-12',
+  garments: [{ id: 'kras', pieces: 1 }],
 };
 
 describe('parseTailorMeasurementInput', () => {
@@ -32,6 +33,38 @@ describe('parseTailorMeasurementInput', () => {
     assert.equal(parsed.paidIqd, 10000);
     assert.equal(parsed.givenOn, '2026-11-05');
     assert.equal(parsed.returnOn, '2026-11-12');
+    assert.deepEqual(parsed.garments, [{ id: 'kras', pieces: 1 }]);
+  });
+
+  it('keeps clothes in tailor order and allows a two-piece under-dress', () => {
+    const parsed = parseTailorMeasurementInput({
+      ...valid,
+      garments: [
+        { id: 'repair', pieces: 1 },
+        { id: 'underDress', pieces: 2 },
+        { id: 'kawa', pieces: 3 },
+      ],
+    });
+    assert.deepEqual(parsed.garments, [
+      { id: 'kawa', pieces: 3 },
+      { id: 'underDress', pieces: 2 },
+      { id: 'repair', pieces: 1 },
+    ]);
+  });
+
+  it('rejects clothes with no piece count or a three-piece under-dress', () => {
+    assert.throws(
+      () => parseTailorMeasurementInput({ ...valid, garments: [] }),
+      (error: unknown) => error instanceof TailorMeasurementError && error.code === 'GARMENTS_REQUIRED'
+    );
+    assert.throws(
+      () => parseTailorMeasurementInput({ ...valid, garments: [{ id: 'underDress', pieces: 3 }] }),
+      (error: unknown) => error instanceof TailorMeasurementError && error.code === 'GARMENTS_INVALID'
+    );
+    assert.throws(
+      () => parseTailorMeasurementInput({ ...valid, garments: [{ id: 'kawa', pieces: 21 }] }),
+      (error: unknown) => error instanceof TailorMeasurementError && error.code === 'GARMENTS_INVALID'
+    );
   });
 
   it('accepts a return on the same day it was given', () => {

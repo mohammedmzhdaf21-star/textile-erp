@@ -1,3 +1,5 @@
+import { parseTailorGarments, type TailorGarmentSelection } from './tailorGarments';
+
 export const TAILOR_MEASUREMENT_FIELDS = [
   'shoulderCm',
   'armCm',
@@ -16,6 +18,8 @@ export type TailorMeasurementInput = {
   paidIqd: number;
   givenOn: string;
   returnOn: string;
+  garments: TailorGarmentSelection[];
+  sellerEmployeeId: string | null;
 } & Record<TailorMeasurementField, number>;
 
 export type TailorMeasurementErrorCode =
@@ -25,7 +29,12 @@ export type TailorMeasurementErrorCode =
   | 'MONEY_INVALID'
   | 'PAID_EXCEEDS_COST'
   | 'DATE_INVALID'
-  | 'RETURN_BEFORE_GIVEN';
+  | 'RETURN_BEFORE_GIVEN'
+  | 'GARMENTS_REQUIRED'
+  | 'GARMENTS_INVALID'
+  | 'SELLER_REQUIRED'
+  | 'SELLER_INVALID'
+  | 'COMMISSION_PAID';
 
 export class TailorMeasurementError extends Error {
   code: TailorMeasurementErrorCode;
@@ -100,6 +109,19 @@ export function parseTailorMeasurementInput(body: unknown): TailorMeasurementInp
     throw new TailorMeasurementError('PAID_EXCEEDS_COST');
   }
 
+  const garments = parseTailorGarments(raw.garments);
+  if (!garments.ok) {
+    throw new TailorMeasurementError(garments.code);
+  }
+
+  let sellerEmployeeId: string | null = null;
+  if (raw.sellerEmployeeId != null && String(raw.sellerEmployeeId).trim() !== '') {
+    sellerEmployeeId = String(raw.sellerEmployeeId).trim();
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(sellerEmployeeId)) {
+      throw new TailorMeasurementError('SELLER_INVALID');
+    }
+  }
+
   const givenOn = parseDateOnly(raw.givenOn);
   const returnOn = parseDateOnly(raw.returnOn);
   if (!givenOn || !returnOn) {
@@ -116,6 +138,8 @@ export function parseTailorMeasurementInput(body: unknown): TailorMeasurementInp
     paidIqd,
     givenOn,
     returnOn,
+    garments: garments.garments,
+    sellerEmployeeId,
     ...measurements,
   };
 }

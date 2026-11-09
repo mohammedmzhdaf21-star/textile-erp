@@ -4,13 +4,26 @@ import axios from 'axios';
 import { useTranslation } from 'react-i18next';
 import { formatCurrency, parsePriceInput, toPriceInput } from '../lib/currency';
 import {
+  tailorClothPieceCount,
+  tailorCommissionIqd,
+} from '../lib/tailorCommission';
+import {
   createTailorMeasurement,
   deleteTailorMeasurement,
   fetchTailorMeasurements,
+  fetchTailorSellers,
   updateTailorMeasurement,
   type TailorMeasurement,
   type TailorMeasurementDraft,
 } from '../lib/tailorApi';
+import {
+  draftFromGarments,
+  garmentsFromDraft,
+  TAILOR_GARMENT_IDS,
+  TAILOR_GARMENT_MODE,
+  type TailorGarmentId,
+  type TailorGarmentSelection,
+} from '../lib/tailorGarments';
 import {
   buildTailorReceiptHtml,
   formatReceiptDate,
@@ -31,6 +44,8 @@ const emptyDraft = (): TailorMeasurementDraft => ({
   paid: '',
   givenOn: todayInBaghdad(),
   returnOn: '',
+  garments: {},
+  sellerEmployeeId: '',
 });
 
 const sizeFields = [
@@ -62,6 +77,7 @@ const Tailors: React.FC = () => {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [receipt, setReceipt] = useState<TailorMeasurement | null>(null);
+  const [sellers, setSellers] = useState<Array<{ id: string; name: string }>>([]);
 
   const load = useCallback(
     async (search: string) => {
@@ -84,8 +100,40 @@ const Tailors: React.FC = () => {
     void load('');
   }, [load]);
 
-  function setField(field: keyof TailorMeasurementDraft, value: string) {
+  useEffect(() => {
+    void fetchTailorSellers()
+      .then(setSellers)
+      .catch(() => setSellers([]));
+  }, []);
+
+  function setField(field: Exclude<keyof TailorMeasurementDraft, 'garments'>, value: string) {
     setDraft((current) => ({ ...current, [field]: value }));
+  }
+
+  function toggleGarment(id: TailorGarmentId) {
+    setDraft((current) => {
+      const garments = { ...current.garments };
+      if (garments[id]) delete garments[id];
+      else garments[id] = 1;
+      return { ...current, garments };
+    });
+  }
+
+  function setGarmentPieces(id: TailorGarmentId, pieces: number) {
+    setDraft((current) => ({
+      ...current,
+      garments: { ...current.garments, [id]: pieces },
+    }));
+  }
+
+  function pieceText(garment: TailorGarmentSelection) {
+    if (garment.pieces === 1) return t('tailors.onePiece');
+    if (garment.pieces === 2) return t('tailors.twoPieces');
+    return t('tailors.manyPieces', { count: garment.pieces });
+  }
+
+  function garmentLine(garment: TailorGarmentSelection) {
+    return `${t(`tailors.garments.${garment.id}`)} — ${pieceText(garment)}`;
   }
 
   function startEdit(item: TailorMeasurement) {
@@ -103,6 +151,8 @@ const Tailors: React.FC = () => {
       paid: toPriceInput(item.paidIqd),
       givenOn: item.givenOn,
       returnOn: item.returnOn,
+      garments: draftFromGarments(item.garments),
+      sellerEmployeeId: item.sellerEmployeeId ?? '',
     });
     setMessage(null);
     setError(null);
@@ -121,6 +171,17 @@ const Tailors: React.FC = () => {
     if (draft.returnOn && draft.givenOn && draft.returnOn < draft.givenOn) {
       setSaving(false);
       setError(t('tailors.errors.RETURN_BEFORE_GIVEN'));
+      return;
+    }
+    const selectedGarments = garmentsFromDraft(draft.garments);
+    if (selectedGarments.length === 0) {
+      setSaving(false);
+      setError(t('tailors.errors.GARMENTS_REQUIRED'));
+      return;
+    }
+    if (tailorClothPieceCount(selectedGarments) > 0 && !draft.sellerEmployeeId) {
+      setSaving(false);
+      setError(t('tailors.errors.SELLER_REQUIRED'));
       return;
     }
     const creating = !editing;
@@ -156,8 +217,11 @@ const Tailors: React.FC = () => {
       setReceipt((current) => (current?.id === item.id ? null : current));
       setMessage(t('tailors.removed', { code: item.code }));
       await load(query);
-    } catch {
-      setError(t('tailors.saveFailed'));
+    } catch (deleteError: unknown) {
+      const code = errorMessage(deleteError, '');
+      const key = `tailors.errors.${code}`;
+      const translated = t(key);
+      setError(translated === key ? t('tailors.saveFailed') : translated);
     }
   }
 
@@ -178,12 +242,23 @@ const Tailors: React.FC = () => {
       cost: formatCurrency(item.costIqd),
       paid: formatCurrency(item.paidIqd),
       remaining: formatCurrency(item.remainingIqd),
+      clothesLabel: t('tailors.clothes'),
+      clothes: item.garments.map(garmentLine),
       dir: i18n.language === 'ckb' ? 'rtl' : 'ltr',
     });
     if (!printTailorReceipt(html)) {
       setError(t('errors.allowPopups'));
     }
   }
+
+  const selectedGarments = garmentsFromDraft(draft.garments);
+  const clothPieces = tailorClothPieceCount(selectedGarments);
+  const commissionPreview = tailorCommissionIqd(clothPieces, parsePriceInput(draft.cost || 0));
+  const commissionLocked = editing?.commissionStatus === 'PAID' && editing.commissionIqd > 0;
+  const sellerOptions =
+    draft.sellerEmployeeId && !sellers.some((seller) => seller.id === draft.sellerEmployeeId)
+      ? [{ id: draft.sellerEmployeeId, name: editing?.sellerName || draft.sellerEmployeeId }, ...sellers]
+      : sellers;
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 p-4">
@@ -253,6 +328,69 @@ const Tailors: React.FC = () => {
           ))}
         </div>
 
+        <div className="mt-5">
+          <h3 className="text-sm font-semibold text-black">{t('tailors.clothes')}</h3>
+          <p className="mt-1 text-xs text-gray-500">{t('tailors.clothesHint')}</p>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {TAILOR_GARMENT_IDS.map((id) => {
+              const pieces = draft.garments[id];
+              const selected = Boolean(pieces);
+              return (
+                <div
+                  key={id}
+                  className={`rounded-2xl border px-3 py-3 ${selected ? 'border-black' : 'border-gray-200'}`}
+                >
+                  <label className="flex items-center gap-2 text-sm font-semibold text-black">
+                    <input
+                      type="checkbox"
+                      checked={selected}
+                      disabled={commissionLocked}
+                      onChange={() => toggleGarment(id)}
+                    />
+                    {t(`tailors.garments.${id}`)}
+                  </label>
+                  {selected && TAILOR_GARMENT_MODE[id] === 'oneOrTwo' && (
+                    <div className="mt-3 flex gap-2">
+                      {[1, 2].map((count) => (
+                        <button
+                          key={count}
+                          type="button"
+                          className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                            pieces === count ? 'bg-black text-white' : 'border border-gray-300 text-black'
+                          }`}
+                          disabled={commissionLocked}
+                          onClick={() => setGarmentPieces(id, count)}
+                        >
+                          {count === 1 ? t('tailors.onePiece') : t('tailors.twoPieces')}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {selected && TAILOR_GARMENT_MODE[id] === 'count' && (
+                    <label className="mt-3 block text-xs font-medium text-gray-600">
+                      {t('tailors.pieces')}
+                      <input
+                        className="input-field mt-1"
+                        type="number"
+                        min={1}
+                        max={20}
+                        step={1}
+                        value={pieces}
+                        disabled={commissionLocked}
+                        onChange={(event) => {
+                          const next = Number(event.target.value);
+                          if (!Number.isInteger(next)) return;
+                          setGarmentPieces(id, Math.min(20, Math.max(1, next)));
+                        }}
+                      />
+                    </label>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
           <label className="block text-sm font-medium text-gray-700">
             {t('tailors.cost')}
@@ -263,6 +401,7 @@ const Tailors: React.FC = () => {
               step="0.01"
               value={draft.cost}
               onChange={(event) => setField('cost', event.target.value)}
+              disabled={commissionLocked}
               required
             />
             <span className="mt-1 block text-xs text-gray-500">
@@ -305,6 +444,37 @@ const Tailors: React.FC = () => {
               required
             />
           </label>
+          <label className="block text-sm font-medium text-gray-700">
+            {t('tailors.seller')}
+            <select
+              className="input-field mt-1"
+              value={draft.sellerEmployeeId}
+              disabled={commissionLocked}
+              onChange={(event) => setField('sellerEmployeeId', event.target.value)}
+            >
+              <option value="">{t('tailors.sellerPlaceholder')}</option>
+              {sellerOptions.map((seller) => (
+                <option key={seller.id} value={seller.id}>
+                  {seller.name}
+                </option>
+              ))}
+            </select>
+            <span className="mt-1 block text-xs text-gray-500">{t('tailors.sellerHint')}</span>
+          </label>
+          <div className="rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+              {t('tailors.commission')}
+            </p>
+            <p className="mt-1 text-2xl font-bold text-black">{formatCurrency(commissionPreview)}</p>
+            <p className="mt-1 text-xs text-gray-600">
+              {clothPieces > 0
+                ? t('tailors.piecesUsed', { count: clothPieces })
+                : t('tailors.noClothPieces')}
+            </p>
+            {commissionLocked && (
+              <p className="mt-2 text-xs font-semibold text-gray-700">{t('tailors.errors.COMMISSION_PAID')}</p>
+            )}
+          </div>
         </div>
 
         {message && (
@@ -353,6 +523,8 @@ const Tailors: React.FC = () => {
                 <tr className="border-b border-gray-200 text-xs uppercase tracking-wide text-gray-500">
                   <th className="px-2 py-2">{t('tailors.code')}</th>
                   <th className="px-2 py-2">{t('tailors.customerName')}</th>
+                  <th className="px-2 py-2">{t('tailors.clothes')}</th>
+                  <th className="px-2 py-2">{t('tailors.commission')}</th>
                   <th className="px-2 py-2">{t('tailors.phone')}</th>
                   <th className="px-2 py-2">{t('tailors.shoulder')}</th>
                   <th className="px-2 py-2">{t('tailors.arm')}</th>
@@ -373,6 +545,17 @@ const Tailors: React.FC = () => {
                   <tr key={item.id} className="border-b border-gray-100">
                     <td className="px-2 py-3 font-bold text-black">{item.code}</td>
                     <td className="px-2 py-3">{item.customerName}</td>
+                    <td className="max-w-xs px-2 py-3">
+                      {item.garments.length === 0
+                        ? '—'
+                        : item.garments
+                            .map((garment) => garmentLine(garment))
+                            .join(i18n.language === 'ckb' ? '، ' : ', ')}
+                    </td>
+                    <td className="px-2 py-3">
+                      <div className="font-semibold text-black">{formatCurrency(item.commissionIqd)}</div>
+                      {item.sellerName && <div className="text-xs text-gray-500">{item.sellerName}</div>}
+                    </td>
                     <td className="px-2 py-3">{item.phone}</td>
                     <td className="px-2 py-3">{item.shoulderCm}</td>
                     <td className="px-2 py-3">{item.armCm}</td>
@@ -419,7 +602,7 @@ const Tailors: React.FC = () => {
       {receipt && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div
-            className="w-full max-w-md rounded-3xl border-2 border-black bg-white p-6 shadow-xl"
+            className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-3xl border-2 border-black bg-white p-6 shadow-xl"
             role="dialog"
             aria-labelledby="tailor-receipt-title"
           >
@@ -438,6 +621,16 @@ const Tailors: React.FC = () => {
             <p className="text-lg font-semibold text-black">
               {formatReceiptDate(receipt.returnOn, i18n.language)}
             </p>
+            {receipt.garments.length > 0 && (
+              <>
+                <p className="mt-4 text-xs uppercase tracking-wide text-gray-500">{t('tailors.clothes')}</p>
+                {receipt.garments.map((garment) => (
+                  <p key={garment.id} className="text-lg font-semibold text-black">
+                    {garmentLine(garment)}
+                  </p>
+                ))}
+              </>
+            )}
             <p className="mt-4 text-xs uppercase tracking-wide text-gray-500">{t('tailors.cost')}</p>
             <p className="text-lg font-semibold text-black">{formatCurrency(receipt.costIqd)}</p>
             <p className="mt-4 text-xs uppercase tracking-wide text-gray-500">{t('tailors.paid')}</p>
