@@ -13,14 +13,15 @@ import {
   getBranchLabel,
   BRANCH_ID_BY_CODE,
   formatDetailedStockBreakdownLine,
+  designCodeIndex,
   formatStockAmountLabel,
   formatTotalStockLabel,
   getItemTypeLabel,
   hasStockForRow,
   hasStockForType,
+  normalizeDesignCode,
   parseInventoryItemId,
   type BranchDestinationCode,
-  type BranchStockRow,
   type InventoryItemType,
   type InventoryStockItem,
 } from '../lib/inventoryCodes';
@@ -79,11 +80,12 @@ const InventoryView: React.FC = () => {
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [searchFamilyCode, setSearchFamilyCode] = useState<number | null>(null);
+  const [searchDesignCode, setSearchDesignCode] = useState('');
   const [searchColor, setSearchColor] = useState<Color | null>(null);
   const [searchSubCode, setSearchSubCode] = useState<number | null>(null);
   const [searchScannedId, setSearchScannedId] = useState<string | null>(null);
   const [selectedType, setSelectedType] = useState<InventoryItemType>('ROLL');
-  const [familyStock, setFamilyStock] = useState<BranchStockRow[]>([]);
+  const [familyCatalog, setFamilyCatalog] = useState<InventoryItemView[]>([]);
   const [stockBreakdownTarget, setStockBreakdownTarget] = useState<'total' | string | null>(null);
 
   const loadItems = useCallback(() => {
@@ -288,6 +290,39 @@ const InventoryView: React.FC = () => {
     }
   };
 
+  const loadFamilyCatalog = async (familyCode: number) => {
+    const collected: InventoryItemView[] = [];
+    let page = 1;
+    let total = 0;
+    do {
+      const response = await api.get('/inventory', {
+        params: { code: familyCode, page, pageSize: 200 },
+      });
+      const data = response.data;
+      const list = (Array.isArray(data) ? data : data?.items ?? []) as InventoryItemView[];
+      collected.push(...list);
+      total = Number(data?.pagination?.total ?? collected.length);
+      if (list.length === 0) break;
+      page += 1;
+    } while (collected.length < total && page <= 20);
+    return collected;
+  };
+
+  const colorsForDesign = (catalog: InventoryItemView[], familyCode: number, designCode: string) => {
+    const wanted = normalizeDesignCode(designCode);
+    const byId = new Map<string, Color>();
+    for (const item of catalog) {
+      if (Number(item.code) !== familyCode) continue;
+      if (normalizeDesignCode(item.designCode ?? '') !== wanted) continue;
+      if (!item.colorId) continue;
+      byId.set(item.colorId, {
+        id: item.colorId,
+        name: item.color?.name ?? t('common.unknownColor'),
+      });
+    }
+    return Array.from(byId.values()).sort((left, right) => left.name.localeCompare(right.name));
+  };
+
   const runQrSearch = async (rawValue?: string) => {
     const query = (rawValue ?? scanQuery).trim();
     if (!query) {
@@ -300,15 +335,18 @@ const InventoryView: React.FC = () => {
 
     try {
       let familyCode: number | null = null;
+      let designCode = '';
       let colorId: string | null = null;
       let colorName: string | null = null;
       let subCode: number | null = null;
       let scannedType: InventoryItemType = 'ROLL';
+      let colorCode: string | null = null;
 
       try {
         const itemResponse = await api.get(`/inventory/${encodeURIComponent(query)}`);
-        const item = itemResponse.data as InventoryItemView;
+        const item = itemResponse.data?.item ?? itemResponse.data;
         familyCode = Number(item.code);
+        designCode = normalizeDesignCode(item.designCode ?? '');
         colorId = item.colorId;
         colorName = item.color?.name ?? null;
         subCode = Number(item.subCode ?? item.costPrice ?? 0);
@@ -320,26 +358,31 @@ const InventoryView: React.FC = () => {
           throw new Error(t('inventory.couldNotReadFamilyCode'));
         }
         familyCode = parsed.familyCode;
+        designCode = normalizeDesignCode(parsed.designCode ?? '');
         subCode = parsed.subCode ?? null;
         scannedType = parsed.type ?? 'ROLL';
+        colorCode = parsed.colorCode ?? null;
         setSearchScannedId(query);
+      }
 
-        const listResponse = await api.get('/inventory', {
-          params: { code: familyCode, pageSize: 200 },
-        });
-        const list = Array.isArray(listResponse.data)
-          ? listResponse.data
-          : listResponse.data?.items ?? [];
+      if (!familyCode) {
+        throw new Error(t('inventory.couldNotDetermineScan'));
+      }
 
-        const colorMatches = (list as InventoryItemView[]).filter((item) => {
-          if (!parsed.colorCode) return true;
+      const catalog = await loadFamilyCatalog(familyCode);
+      if (!colorId) {
+        const wantedDesign = designCode;
+        const colorMatches = catalog.filter((item) => {
+          if (normalizeDesignCode(item.designCode ?? '') !== wantedDesign) return false;
+          if (!colorCode) return true;
           const colorLabel = item.color?.name
             ? item.color.name.replace(/[^a-z0-9]/gi, '').toUpperCase().slice(0, 3)
             : '';
-          return colorLabel.startsWith(parsed.colorCode.slice(0, 1));
+          return colorLabel.startsWith(colorCode.slice(0, 1));
         });
-
-        const matched = colorMatches[0] ?? (list as InventoryItemView[])[0];
+        const matched = colorMatches[0] ?? catalog.find(
+          (item) => normalizeDesignCode(item.designCode ?? '') === wantedDesign
+        );
         if (!matched) {
           throw new Error(t('inventory.noInventoryForFamily', { code: familyCode }));
         }
@@ -347,37 +390,57 @@ const InventoryView: React.FC = () => {
         colorName = matched.color?.name ?? null;
       }
 
-      if (!familyCode || !colorId) {
+      if (!colorId) {
         throw new Error(t('inventory.couldNotDetermineScan'));
       }
 
-      const stockResponse = await api.get('/inventory', {
-        params: { code: familyCode, colorId, pageSize: 200 },
-      });
-      const stockItems = Array.isArray(stockResponse.data)
-        ? stockResponse.data
-        : stockResponse.data?.items ?? [];
-
+      setFamilyCatalog(catalog);
       setSearchFamilyCode(familyCode);
+      setSearchDesignCode(designCode);
       setSearchColor({ id: colorId, name: colorName ?? t('common.unknownColor') });
       setSearchSubCode(subCode);
       setSelectedType(scannedType);
-      setFamilyStock(aggregateFamilyStock(stockItems as InventoryStockItem[], familyCode, colorId));
       setStockBreakdownTarget(null);
       setScanQuery(query);
     } catch (err: any) {
       const body = err?.response?.data;
       setSearchError(body?.error ?? err?.message ?? t('inventory.searchFailed'));
       setSearchFamilyCode(null);
+      setSearchDesignCode('');
       setSearchColor(null);
       setSearchSubCode(null);
       setSearchScannedId(null);
-      setFamilyStock([]);
+      setFamilyCatalog([]);
       setStockBreakdownTarget(null);
     } finally {
       setSearchLoading(false);
     }
   };
+
+  const designOptions = useMemo(() => {
+    if (searchFamilyCode === null) return [];
+    const designs = new Set<string>();
+    for (const item of familyCatalog) {
+      if (Number(item.code) !== searchFamilyCode) continue;
+      designs.add(normalizeDesignCode(item.designCode ?? ''));
+    }
+    if (!designs.has(searchDesignCode)) designs.add(searchDesignCode);
+    return Array.from(designs).sort((left, right) => {
+      const leftIndex = left ? designCodeIndex(left) : Number.MAX_SAFE_INTEGER;
+      const rightIndex = right ? designCodeIndex(right) : Number.MAX_SAFE_INTEGER;
+      return leftIndex - rightIndex;
+    });
+  }, [familyCatalog, searchDesignCode, searchFamilyCode]);
+
+  const designColorOptions = useMemo(() => {
+    if (searchFamilyCode === null) return [];
+    return colorsForDesign(familyCatalog, searchFamilyCode, searchDesignCode);
+  }, [colorsForDesign, familyCatalog, searchDesignCode, searchFamilyCode]);
+
+  const familyStock = useMemo(() => {
+    if (searchFamilyCode === null || !searchColor) return [];
+    return aggregateFamilyStock(familyCatalog, searchFamilyCode, searchColor.id, searchDesignCode);
+  }, [familyCatalog, searchColor, searchDesignCode, searchFamilyCode]);
 
   const branchesWithStock = useMemo(
     () => familyStock.filter((row) => hasStockForRow(row, selectedType)),
@@ -388,11 +451,22 @@ const InventoryView: React.FC = () => {
     setScanQuery('');
     setSearchError(null);
     setSearchFamilyCode(null);
+    setSearchDesignCode('');
     setSearchColor(null);
     setSearchSubCode(null);
     setSearchScannedId(null);
-    setFamilyStock([]);
-                    setStockBreakdownTarget(null);
+    setFamilyCatalog([]);
+    setStockBreakdownTarget(null);
+  };
+
+  const chooseDesign = (designCode: string) => {
+    const nextColors = colorsForDesign(familyCatalog, searchFamilyCode ?? 0, designCode);
+    setSearchDesignCode(designCode);
+    setStockBreakdownTarget(null);
+    setSearchColor((current) => {
+      if (current && nextColors.some((color) => color.id === current.id)) return current;
+      return nextColors[0] ?? current;
+    });
   };
 
   const overallHasStock = useMemo(
@@ -480,6 +554,22 @@ const InventoryView: React.FC = () => {
         <h3 className="text-lg font-semibold text-black">{t('inventory.qrSearchTitle')}</h3>
         <p className="mt-1 text-sm text-gray-500">{t('inventory.qrSearchDescription')}</p>
         <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-start">
+          <input
+            value={scanQuery}
+            onChange={(event) => setScanQuery(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') void runQrSearch();
+            }}
+            placeholder={t('inventory.scanPlaceholder')}
+            className="w-full rounded-xl border border-gray-300 px-3 py-3 text-sm sm:max-w-md"
+          />
+          <button
+            type="button"
+            onClick={() => void runQrSearch()}
+            className="rounded-xl bg-black px-4 py-3 text-sm font-semibold text-white"
+          >
+            {t('common.search')}
+          </button>
           <QrScanInput
             value={scanQuery}
             onChange={setScanQuery}
@@ -514,7 +604,11 @@ const InventoryView: React.FC = () => {
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <p className="text-sm font-semibold text-black">
-                  {t('inventory.familyColor', { code: searchFamilyCode, color: getColorLabel(t, searchColor.name) })}
+                  {t('inventory.familyDesignColor', {
+                    code: searchFamilyCode,
+                    design: searchDesignCode ? searchDesignCode.toUpperCase() : t('inventory.noDesign'),
+                    color: getColorLabel(t, searchColor.name),
+                  })}
                   {searchSubCode !== null ? t('inventory.subCodePrice', { price: formatCurrency(searchSubCode) }) : ''}
                 </p>
                 {searchScannedId && (
@@ -535,6 +629,49 @@ const InventoryView: React.FC = () => {
                   <strong>{formatTotalStockLabel(t, familyStock, selectedType)}</strong>
                 )}
               </p>
+            </div>
+
+            <div className="mt-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">{t('inventory.design')}</p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {designOptions.map((design) => (
+                  <button
+                    key={design || 'none'}
+                    type="button"
+                    onClick={() => chooseDesign(design)}
+                    className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
+                      searchDesignCode === design
+                        ? 'bg-black text-white'
+                        : 'border border-gray-300 bg-white text-gray-700 hover:border-black'
+                    }`}
+                  >
+                    {design ? design.toUpperCase() : t('inventory.noDesign')}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="mt-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">{t('inventory.color')}</p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {designColorOptions.map((color) => (
+                  <button
+                    key={color.id}
+                    type="button"
+                    onClick={() => {
+                      setSearchColor(color);
+                      setStockBreakdownTarget(null);
+                    }}
+                    className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
+                      searchColor.id === color.id
+                        ? 'bg-magenta-500 text-white'
+                        : 'border border-gray-300 bg-white text-gray-700 hover:border-magenta-400'
+                    }`}
+                  >
+                    {getColorLabel(t, color.name)}
+                  </button>
+                ))}
+              </div>
             </div>
 
             <div className="mt-4 flex flex-wrap gap-2">
@@ -690,6 +827,7 @@ const InventoryView: React.FC = () => {
                 {t('inventory.noStockFound', {
                   type: getItemTypeLabel(t, selectedType).toLowerCase(),
                   code: searchFamilyCode,
+                  design: searchDesignCode ? searchDesignCode.toUpperCase() : t('inventory.noDesign'),
                   color: getColorLabel(t, searchColor.name),
                 })}
               </p>

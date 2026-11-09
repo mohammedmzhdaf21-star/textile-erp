@@ -65,10 +65,16 @@ export function buildTailorReceiptHtml(input: {
   nameLabel: string;
   givenLabel: string;
   returnLabel: string;
+  costLabel: string;
+  paidLabel: string;
+  remainingLabel: string;
   code: number;
   customerName: string;
   givenOn: string;
   returnOn: string;
+  cost: string;
+  paid: string;
+  remaining: string;
   dir: 'ltr' | 'rtl';
 }) {
   const dir = input.dir === 'rtl' ? 'rtl' : 'ltr';
@@ -98,6 +104,12 @@ export function buildTailorReceiptHtml(input: {
       <p class="value">${escapeHtml(input.givenOn)}</p>
       <p class="label">${escapeHtml(input.returnLabel)}</p>
       <p class="value">${escapeHtml(input.returnOn)}</p>
+      <p class="label">${escapeHtml(input.costLabel)}</p>
+      <p class="value">${escapeHtml(input.cost)}</p>
+      <p class="label">${escapeHtml(input.paidLabel)}</p>
+      <p class="value">${escapeHtml(input.paid)}</p>
+      <p class="label">${escapeHtml(input.remainingLabel)}</p>
+      <p class="value">${escapeHtml(input.remaining)}</p>
     </div>
     <script>window.onload = () => { window.print(); };</script>
   </body>

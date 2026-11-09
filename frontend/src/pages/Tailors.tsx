@@ -168,10 +168,16 @@ const Tailors: React.FC = () => {
       nameLabel: t('tailors.customerName'),
       givenLabel: t('tailors.givenOn'),
       returnLabel: t('tailors.returnOn'),
+      costLabel: t('tailors.cost'),
+      paidLabel: t('tailors.paid'),
+      remainingLabel: t('tailors.remaining'),
       code: item.code,
       customerName: item.customerName,
       givenOn: formatReceiptDate(item.givenOn, i18n.language),
       returnOn: formatReceiptDate(item.returnOn, i18n.language),
+      cost: formatCurrency(item.costIqd),
+      paid: formatCurrency(item.paidIqd),
+      remaining: formatCurrency(item.remainingIqd),
       dir: i18n.language === 'ckb' ? 'rtl' : 'ltr',
     });
     if (!printTailorReceipt(html)) {
@@ -432,6 +438,12 @@ const Tailors: React.FC = () => {
             <p className="text-lg font-semibold text-black">
               {formatReceiptDate(receipt.returnOn, i18n.language)}
             </p>
+            <p className="mt-4 text-xs uppercase tracking-wide text-gray-500">{t('tailors.cost')}</p>
+            <p className="text-lg font-semibold text-black">{formatCurrency(receipt.costIqd)}</p>
+            <p className="mt-4 text-xs uppercase tracking-wide text-gray-500">{t('tailors.paid')}</p>
+            <p className="text-lg font-semibold text-black">{formatCurrency(receipt.paidIqd)}</p>
+            <p className="mt-4 text-xs uppercase tracking-wide text-gray-500">{t('tailors.remaining')}</p>
+            <p className="text-lg font-semibold text-black">{formatCurrency(receipt.remainingIqd)}</p>
             <div className="mt-6 flex flex-wrap gap-3">
               <button type="button" className="btn-primary" onClick={() => handlePrintReceipt(receipt)}>
                 {t('tailors.printReceipt')}
