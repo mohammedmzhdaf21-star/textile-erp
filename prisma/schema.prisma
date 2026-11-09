@@ -149,15 +149,21 @@ model TailorMeasurement {
   buttCm       Decimal  @db.Decimal(6, 1)
   costIqd      Decimal  @default(0) @db.Decimal(12, 2)
   paidIqd      Decimal  @default(0) @db.Decimal(12, 2)
+  garments     Json     @default("[]")
+  sellerEmployeeId String?
+  sellerEmployee   Employee? @relation("TailorSeller", fields: [sellerEmployeeId], references: [id], onDelete: SetNull)
+  commissionIqd    Decimal  @default(0) @db.Decimal(12, 2)
+  commissionStatus CommissionEntryStatus @default(PENDING)
   givenOn      DateTime @db.Date
   returnOn     DateTime @db.Date
   createdById  String?
-  createdBy    Employee? @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdBy    Employee? @relation("TailorCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
   @@index([phone])
   @@index([customerName])
+  @@index([sellerEmployeeId, commissionStatus])
   @@map("tailor_measurements")
 }
 
@@ -475,7 +481,8 @@ model Employee {
   deviceSignInsApproved DeviceSignInRequest[] @relation("DeviceSignInApprovedBy")
   attendanceRecords     AttendanceRecord[]
   greetingEvents        GreetingQueueEvent[]
-  tailorMeasurements    TailorMeasurement[]
+  tailorMeasurements    TailorMeasurement[] @relation("TailorCreatedBy")
+  tailorClothSales      TailorMeasurement[] @relation("TailorSeller")
 
   @@index([email])
   @@index([isActive])

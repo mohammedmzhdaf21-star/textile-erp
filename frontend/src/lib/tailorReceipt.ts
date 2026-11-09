@@ -75,6 +75,12 @@ export function buildTailorReceiptHtml(input: {
   cost: string;
   paid: string;
   remaining: string;
+  clothesLabel?: string;
+  clothes?: string[];
+  sellerLabel?: string;
+  seller?: string;
+  commissionLabel?: string;
+  commission?: string;
   dir: 'ltr' | 'rtl';
 }) {
   const dir = input.dir === 'rtl' ? 'rtl' : 'ltr';
@@ -104,6 +110,24 @@ export function buildTailorReceiptHtml(input: {
       <p class="value">${escapeHtml(input.givenOn)}</p>
       <p class="label">${escapeHtml(input.returnLabel)}</p>
       <p class="value">${escapeHtml(input.returnOn)}</p>
+      ${(input.clothes ?? [])
+        .map(
+          (line, index) =>
+            `${index === 0 ? `<p class="label">${escapeHtml(input.clothesLabel ?? '')}</p>` : ''}<p class="value">${escapeHtml(line)}</p>`
+        )
+        .join('\n      ')}
+      ${
+        input.seller
+          ? `<p class="label">${escapeHtml(input.sellerLabel ?? '')}</p>
+      <p class="value">${escapeHtml(input.seller)}</p>`
+          : ''
+      }
+      ${
+        input.commission
+          ? `<p class="label">${escapeHtml(input.commissionLabel ?? '')}</p>
+      <p class="value">${escapeHtml(input.commission)}</p>`
+          : ''
+      }
       <p class="label">${escapeHtml(input.costLabel)}</p>
       <p class="value">${escapeHtml(input.cost)}</p>
       <p class="label">${escapeHtml(input.paidLabel)}</p>

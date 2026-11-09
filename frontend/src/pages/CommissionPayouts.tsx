@@ -27,6 +27,8 @@ type PendingCommissionItemDetail = {
 
 type PendingLine = {
   id: string;
+  source?: 'sale' | 'tailor';
+  tailorCode?: number | null;
   saleId: string;
   inventoryItemId: string | null;
   soldPrice: string;
@@ -240,11 +242,13 @@ export default function CommissionPayouts() {
                         <div className="min-w-0 flex-1 space-y-2">
                           <div>
                             <div className="font-semibold text-black">
-                              {entry.item.isPlainCloth
-                                ? t("commissionPayouts.plainClothItem", {
-                                    name: entry.item.description,
-                                  })
-                                : entry.item.description}
+                              {entry.source === 'tailor'
+                                ? t('commissionPayouts.tailorItem', { code: entry.tailorCode })
+                                : entry.item.isPlainCloth
+                                  ? t("commissionPayouts.plainClothItem", {
+                                      name: entry.item.description,
+                                    })
+                                  : entry.item.description}
                             </div>
                             {!entry.item.isPlainCloth && entry.item.colorName && (
                               <div className="text-xs text-gray-500">
@@ -255,7 +259,9 @@ export default function CommissionPayouts() {
 
                           <div className="rounded-lg bg-gray-50 p-3 text-xs text-gray-700">
                             <div className="font-semibold text-gray-900">
-                              {t("commissionPayouts.saleDetailTitle")}
+                              {entry.source === 'tailor'
+                                ? t('commissionPayouts.tailorDetailTitle')
+                                : t("commissionPayouts.saleDetailTitle")}
                             </div>
                             <div className="mt-1">
                               {t("commissionPayouts.customerLine", {
@@ -263,48 +269,70 @@ export default function CommissionPayouts() {
                                 phone: entry.sale.customerPhone,
                               })}
                             </div>
-                            <div>
-                              {t("commissionPayouts.branchLine", {
-                                branch: entry.sale.branchName || entry.sale.branchId,
-                                total: formatCurrency(entry.sale.totalPrice),
-                                payment: resolveSalePaymentLabel(
-                                  t,
-                                  entry.sale.paymentMethod,
-                                  entry.sale.notes
-                                ),
-                              })}
-                            </div>
+                            {entry.source === 'tailor' ? (
+                              <div>
+                                {t('commissionPayouts.tailorPriceLine', {
+                                  total: formatCurrency(entry.sale.totalPrice),
+                                  pieces: Number(entry.quantitySold),
+                                })}
+                              </div>
+                            ) : (
+                              <div>
+                                {t("commissionPayouts.branchLine", {
+                                  branch: entry.sale.branchName || entry.sale.branchId,
+                                  total: formatCurrency(entry.sale.totalPrice),
+                                  payment: resolveSalePaymentLabel(
+                                    t,
+                                    entry.sale.paymentMethod,
+                                    entry.sale.notes
+                                  ),
+                                })}
+                              </div>
+                            )}
                             <div>
                               {t("commissionPayouts.saleDateLine", {
                                 date: new Date(entry.saleDate).toLocaleString(),
                               })}
                             </div>
-                            <div className="mt-1">
-                              {t("commissionPayouts.soldLine", {
-                                qty: Number(entry.quantitySold).toFixed(2),
-                                unit: unitLabel(entry.item.soldAsUnit),
-                                unitPrice: formatCurrency(entry.soldPrice),
-                                lineTotal: formatCurrency(entry.item.lineTotal),
-                              })}
-                            </div>
-                            <Link
-                              to={`/sales/${entry.saleId}`}
-                              state={{ returnTo: "/commission-payouts" }}
-                              className="mt-2 inline-block font-semibold text-magenta-600 hover:underline"
-                            >
-                              {t("commissionPayouts.viewSale")}
-                            </Link>
+                            {entry.source !== 'tailor' && (
+                              <div className="mt-1">
+                                {t("commissionPayouts.soldLine", {
+                                  qty: Number(entry.quantitySold).toFixed(2),
+                                  unit: unitLabel(entry.item.soldAsUnit),
+                                  unitPrice: formatCurrency(entry.soldPrice),
+                                  lineTotal: formatCurrency(entry.item.lineTotal),
+                                })}
+                              </div>
+                            )}
+                            {entry.source === 'tailor' ? (
+                              <Link
+                                to="/tailors"
+                                className="mt-2 inline-block font-semibold text-magenta-600 hover:underline"
+                              >
+                                {t('commissionPayouts.viewTailor', { code: entry.tailorCode })}
+                              </Link>
+                            ) : (
+                              <Link
+                                to={`/sales/${entry.saleId}`}
+                                state={{ returnTo: "/commission-payouts" }}
+                                className="mt-2 inline-block font-semibold text-magenta-600 hover:underline"
+                              >
+                                {t("commissionPayouts.viewSale")}
+                              </Link>
+                            )}
                           </div>
 
-                          <div className="text-xs text-gray-500">
-                            {t("commissionPayouts.lineDetail", {
-                              sold: formatCurrency(entry.soldPrice),
-                              min: formatCurrency(entry.minimumPrice),
-                              qty: Number(entry.quantitySold).toFixed(2),
-                              rate: Number(entry.ratePercent).toFixed(1),
-                              date: new Date(entry.saleDate).toLocaleString(),
-                            })}
-                          </div>
+                          {entry.source !== 'tailor' && (
+                            <div className="text-xs text-gray-500">
+                              {t("commissionPayouts.lineDetail", {
+                                sold: formatCurrency(entry.soldPrice),
+                                min: formatCurrency(entry.minimumPrice),
+                                qty: Number(entry.quantitySold).toFixed(2),
+                                rate: Number(entry.ratePercent).toFixed(1),
+                                date: new Date(entry.saleDate).toLocaleString(),
+                              })}
+                            </div>
+                          )}
                         </div>
                         <div className="whitespace-nowrap text-right">
                           <div className="text-xs text-gray-500">{t("nav.commission")}</div>

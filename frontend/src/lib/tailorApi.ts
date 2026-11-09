@@ -1,5 +1,10 @@
 import api from './api';
 import { parsePriceInput } from './currency';
+import {
+  garmentsFromDraft,
+  type TailorGarmentDraft,
+  type TailorGarmentSelection,
+} from './tailorGarments';
 
 export type TailorMeasurement = {
   id: string;
@@ -15,6 +20,12 @@ export type TailorMeasurement = {
   costIqd: number;
   paidIqd: number;
   remainingIqd: number;
+  garments: TailorGarmentSelection[];
+  sellerEmployeeId: string | null;
+  sellerName: string | null;
+  commissionIqd: number;
+  commissionStatus: 'PENDING' | 'PAID';
+  clothPieces: number;
   givenOn: string;
   returnOn: string;
   createdAt: string;
@@ -35,6 +46,8 @@ export type TailorMeasurementDraft = {
   paid: string;
   givenOn: string;
   returnOn: string;
+  garments: TailorGarmentDraft;
+  sellerEmployeeId: string;
 };
 
 export async function fetchTailorMeasurements(query: string) {
@@ -77,5 +90,14 @@ function toPayload(draft: TailorMeasurementDraft) {
     paidIqd: parsePriceInput(draft.paid || 0),
     givenOn: draft.givenOn,
     returnOn: draft.returnOn,
+    garments: garmentsFromDraft(draft.garments),
+    sellerEmployeeId: draft.sellerEmployeeId || null,
   };
+}
+
+export async function fetchTailorSellers() {
+  const { data } = await api.get<{ sellers: Array<{ id: string; name: string }> }>(
+    '/tailor-measurements/sellers'
+  );
+  return data.sellers;
 }
