@@ -7,8 +7,9 @@ import { fetchPlainClothTypes, type PlainClothType } from '../lib/plainClothApi'
 import QrScanInput from '../components/QrScanInput';
 import { resolveInventoryItem } from '../lib/inventoryLookup';
 import { BRANCH_ID_BY_CODE } from '../lib/inventoryCodes';
+import { useShopBranches } from '../lib/useShopBranches';
 
-type BranchCode = 'A' | 'B' | 'C' | 'E' | 'F';
+type BranchCode = string;
 
 type ReturnedInventoryLine = {
   inventoryItemId: string;
@@ -55,7 +56,6 @@ type InventoryLookupItem = {
   quantity: number;
 };
 
-const branchOptions: BranchCode[] = ['A', 'B', 'C', 'E', 'F'];
 const soldAsUnitForItem = (item: InventoryLookupItem): 'METER' | 'PIECE' =>
   item.type === 'PIECE' ? 'PIECE' : 'METER';
 
@@ -64,6 +64,7 @@ const amountLabelForUnit = (unit?: 'METER' | 'PIECE') =>
 
 const ExchangePage: React.FC = () => {
   const { t } = useTranslation();
+  const branchOptions = useShopBranches();
   const [selectedBranch, setSelectedBranch] = useState<BranchCode>('F');
   const [customerName, setCustomerName] = useState('Exchange Customer');
   const [customerPhone, setCustomerPhone] = useState('0000000000');
@@ -539,23 +540,23 @@ const ExchangePage: React.FC = () => {
           {branchOptions.map((branch) => (
             <button
               type="button"
-              key={branch}
+              key={branch.id}
               className={`rounded-2xl px-4 py-3 text-sm font-semibold transition ${
-                selectedBranch === branch
+                selectedBranch === branch.code
                   ? 'bg-magenta-500 text-white'
                   : 'bg-white text-gray-800 border border-gray-200 hover:bg-magenta-50'
               }`}
               onClick={() => {
-                setSelectedBranch(branch);
-                setReturnedScan((current) => ({ ...current, sourceBranch: branch }));
-                setNewScan((current) => ({ ...current, sourceBranch: branch }));
+                setSelectedBranch(branch.code);
+                setReturnedScan((current) => ({ ...current, sourceBranch: branch.code }));
+                setNewScan((current) => ({ ...current, sourceBranch: branch.code }));
                 setDetectedReturnedItem(null);
                 setDetectedNewItem(null);
                 setReturnedScanMessage(null);
                 setNewScanMessage(null);
               }}
             >
-              Branch {branch}
+              {branch.name}
             </button>
           ))}
         </div>
@@ -626,8 +627,8 @@ const ExchangePage: React.FC = () => {
                   className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
                 >
                   {branchOptions.map((branch) => (
-                    <option key={branch} value={branch}>
-                      Branch {branch}
+                    <option key={branch.id} value={branch.code}>
+                      {branch.name}
                     </option>
                   ))}
                 </select>
@@ -781,8 +782,8 @@ const ExchangePage: React.FC = () => {
                   className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
                 >
                   {branchOptions.map((branch) => (
-                    <option key={branch} value={branch}>
-                      Branch {branch}
+                    <option key={branch.id} value={branch.code}>
+                      {branch.name}
                     </option>
                   ))}
                 </select>

@@ -87,7 +87,7 @@ export async function listPendingEmployees() {
 export async function listBranches() {
   return prisma.branch.findMany({
     where: { isActive: true, deletedAt: null },
-    select: { id: true, name: true },
+    select: { id: true, code: true, name: true },
     orderBy: { id: 'asc' },
   });
 }

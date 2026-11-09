@@ -87,6 +87,14 @@ export default function EmployeeAccounts() {
     loadData();
   }, [loadData]);
 
+  useEffect(() => {
+    const refresh = () => {
+      void loadData();
+    };
+    window.addEventListener('shop-branches-updated', refresh);
+    return () => window.removeEventListener('shop-branches-updated', refresh);
+  }, [loadData]);
+
   const resetForm = () => {
     setEditingId(null);
     setForm(emptyForm());

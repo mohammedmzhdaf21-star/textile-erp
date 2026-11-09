@@ -32,6 +32,8 @@ import trusteesRoutes from './routes/trustees.routes';
 import attendanceRoutes from './routes/attendance.routes';
 import greetingQueueRoutes from './routes/greetingQueue.routes';
 import tailorMeasurementRoutes from './routes/tailorMeasurements.routes';
+import branchRoutes from './routes/branches.routes';
+import { refreshBranchCodeCache } from './lib/branches';
 import { migrateLegacyCommissionBase, migrateLegacySettingsPrices } from './lib/currency';
 import { backfillCommissionEntries, recalculatePendingCommissionEntries } from './lib/commissions';
 import { recoverPlainClothNamesFromSales, ensureDefaultPlainClothTypes } from './lib/plainClothPricing';
@@ -165,6 +167,7 @@ app.use('/api/trustees', trusteesRoutes);
 app.use('/api/attendance', attendanceRoutes);
 app.use('/api/greeting-queue', greetingQueueRoutes);
 app.use('/api/tailor-measurements', tailorMeasurementRoutes);
+app.use('/api/branches', branchRoutes);
 
 // ============================================================
 // FRONTEND SPA (serve built app for /login, /register, etc.)
@@ -219,6 +222,12 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
 // START SERVER
 // ============================================================
 const server = app.listen(PORT, async () => {
+  try {
+    await refreshBranchCodeCache();
+  } catch (error) {
+    console.warn('Branch code cache failed to load:', error);
+  }
+
   const migrationSteps: Array<[string, () => Promise<unknown>]> = [
     ['employee section backfill', backfillEmployeeAllowedSections],
     ['legacy settings prices', migrateLegacySettingsPrices],

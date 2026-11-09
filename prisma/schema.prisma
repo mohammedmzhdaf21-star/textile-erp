@@ -83,6 +83,7 @@ enum CommissionEntryStatus {
 
 model Branch {
   id        String    @id @db.VarChar(5)
+  code      String    @unique @db.VarChar(8)
   name      String    @db.VarChar(100)
   address   String?   @db.VarChar(500)
   phone     String?   @db.VarChar(20)
@@ -179,6 +180,7 @@ model InventoryItem {
   branch      Branch    @relation(fields: [branchId], references: [id], onDelete: Cascade)
 
   code        Int
+  designCode  String    @default("") @db.VarChar(8)
   subCode     Decimal   @db.Decimal(12, 2)
   colorId     String
   color       Color     @relation(fields: [colorId], references: [id], onDelete: Restrict)
@@ -207,7 +209,7 @@ model InventoryItem {
 
   saleItems   SaleItem[]
 
-  @@unique([branchId, code, subCode, colorId, type, pieceLength, packageKey])
+  @@unique([branchId, code, designCode, subCode, colorId, type, pieceLength, packageKey])
   @@index([branchId, code])
   @@index([branchId, type])
   @@index([colorId])

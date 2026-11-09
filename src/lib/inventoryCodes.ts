@@ -15,6 +15,59 @@ export const colorCodeFromName = (name: string, fallbackId = '') =>
 
 export const padFamilyCode = (familyCode: number) => String(familyCode).padStart(3, '0');
 
+const DESIGN_LETTERS = 'abcdefghijklmnopqrstuvwxyz';
+
+/** Design letters under a numeric code: a–z, then aa–zz, then aaa–zzz. */
+export function normalizeDesignCode(value: string) {
+  return value.trim().toLowerCase();
+}
+
+export function isDesignCode(value: string) {
+  return /^[a-z]{1,3}$/.test(normalizeDesignCode(value));
+}
+
+export function designCodeIndex(value: string) {
+  const code = normalizeDesignCode(value);
+  if (!isDesignCode(code)) return -1;
+  const first = code.charCodeAt(0) - 97;
+  if (code.length === 1) return first;
+  const second = code.charCodeAt(1) - 97;
+  if (code.length === 2) return 26 + first * 26 + second;
+  const third = code.charCodeAt(2) - 97;
+  return 26 + 676 + first * 676 + second * 26 + third;
+}
+
+export function designCodeFromIndex(index: number) {
+  if (index < 26) return DESIGN_LETTERS[Math.max(0, index)] ?? 'a';
+  if (index < 26 + 676) {
+    const offset = index - 26;
+    return DESIGN_LETTERS[Math.floor(offset / 26)] + DESIGN_LETTERS[offset % 26];
+  }
+  const offset = Math.min(index - 26 - 676, 26 * 676 - 1);
+  return (
+    DESIGN_LETTERS[Math.floor(offset / 676)] +
+    DESIGN_LETTERS[Math.floor((offset % 676) / 26)] +
+    DESIGN_LETTERS[offset % 26]
+  );
+}
+
+export function nextDesignCode(existing: string[]) {
+  const used = new Set(
+    existing.map((value) => normalizeDesignCode(value)).filter((value) => isDesignCode(value))
+  );
+  const limit = 26 + 676 + 26 * 676;
+  for (let index = 0; index < limit; index += 1) {
+    const code = designCodeFromIndex(index);
+    if (!used.has(code)) return code;
+  }
+  return 'zzz';
+}
+
+export function formatDesignCodeForId(value?: string | null) {
+  const code = normalizeDesignCode(value ?? '');
+  return isDesignCode(code) ? code.toUpperCase() : '';
+}
+
 export const padSubCode = (subCode: number) => {
   const rounded = Math.round(subCode * 100) / 100;
   if (Number.isInteger(rounded)) {
@@ -77,20 +130,26 @@ export const resolveMeteredInstanceKey = (input: {
     colorId: string;
     type: InventoryItemType;
     packageKey?: string;
+    designCode?: string | null;
   }>;
   branchId: string;
   familyCode: number;
   subCode: number;
   colorId: string;
+  designCode?: string;
 }) => {
+  const wantedDesign =
+    input.designCode !== undefined ? normalizeDesignCode(input.designCode) : undefined;
   const matching = input.items.filter((item) => {
     const itemPrice = Number(item.subCode ?? item.costPrice ?? 0);
+    const itemDesign = normalizeDesignCode(item.designCode ?? '');
     return (
       item.branchId === input.branchId &&
       Number(item.code) === Number(input.familyCode) &&
       Math.abs(itemPrice - input.subCode) < 0.001 &&
       item.colorId === input.colorId &&
-      item.type === input.type
+      item.type === input.type &&
+      (wantedDesign === undefined || itemDesign === wantedDesign)
     );
   });
 
@@ -194,13 +253,16 @@ export const buildInventoryItemId = (input: {
   packageComponents?: PackageComponent[];
   isPiecePackage?: boolean;
   instanceKey?: string;
+  designCode?: string;
 }) => {
   const colorCode = colorCodeFromName(input.colorName, input.colorId);
   const typeLetter = typeCode(input.type);
+  const design = formatDesignCodeForId(input.designCode);
+  const designPart = design ? `-${design}` : '';
 
   if (input.isPiecePackage && input.packageComponents?.length) {
     const packageSuffix = buildPackageIdSuffix(input.packageComponents);
-    return `${input.branchId}-${padFamilyCode(input.familyCode)}-${padSubCode(input.subCode)}-${colorCode}${typeLetter}-${packageSuffix}`;
+    return `${input.branchId}-${padFamilyCode(input.familyCode)}${designPart}-${padSubCode(input.subCode)}-${colorCode}${typeLetter}-${packageSuffix}`;
   }
 
   const lengthSuffix =
@@ -213,7 +275,7 @@ export const buildInventoryItemId = (input: {
     (input.type === 'ROLL' || input.type === 'REMANENT') && input.instanceKey
       ? `-${formatMeteredInstanceIdSuffix(input.instanceKey, input.type)}`
       : '';
-  return `${input.branchId}-${padFamilyCode(input.familyCode)}-${padSubCode(input.subCode)}-${colorCode}${typeLetter}${lengthSuffix}${pieceInstanceSuffix}${instanceSuffix}`;
+  return `${input.branchId}-${padFamilyCode(input.familyCode)}${designPart}-${padSubCode(input.subCode)}-${colorCode}${typeLetter}${lengthSuffix}${pieceInstanceSuffix}${instanceSuffix}`;
 };
 
 export const resolveInventoryItemId = (input: {
@@ -226,6 +288,7 @@ export const resolveInventoryItemId = (input: {
   pieceLength: number;
   isPiecePackage: boolean;
   packageComponents: unknown;
+  designCode?: string;
 }) => {
   const packageComponents = input.isPiecePackage
     ? parsePackageComponents(input.packageComponents)
@@ -241,5 +304,6 @@ export const resolveInventoryItemId = (input: {
     pieceLength: input.isPiecePackage ? undefined : input.pieceLength,
     packageComponents,
     isPiecePackage: input.isPiecePackage,
+    designCode: input.designCode,
   });
 };

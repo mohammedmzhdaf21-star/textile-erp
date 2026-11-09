@@ -2,8 +2,8 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { getCurrentUser } from '../lib/auth';
 import { isAutoManagedCuttingTask } from '../lib/cuttingTasks';
+import { useShopBranches } from '../lib/useShopBranches';
 import {
-  branches,
   getScheduleLabel,
   getTaskDisplayTitle,
   getTaskTemplateTitle,
@@ -28,6 +28,7 @@ import {
 
 const Tasks: React.FC = () => {
   const { t } = useTranslation();
+  const branches = useShopBranches();
   const user = getCurrentUser();
   const [selectedBranch, setSelectedBranch] = useState<BranchCode>('A');
   const [assignments, setAssignments] = useState<TaskAssignment[]>([]);
@@ -206,16 +207,16 @@ const Tasks: React.FC = () => {
       <section className="mt-6 grid grid-cols-5 gap-3">
         {branches.map((branch) => (
           <button
-            key={branch}
+            key={branch.id}
             type="button"
-            onClick={() => setSelectedBranch(branch)}
+            onClick={() => setSelectedBranch(branch.code)}
             className={`rounded-2xl border px-4 py-3 text-sm font-semibold transition ${
-              selectedBranch === branch
+              selectedBranch === branch.code
                 ? 'border-magenta-500 bg-magenta-500 text-white shadow-lg'
                 : 'border-gray-200 bg-white text-gray-800 hover:border-magenta-300 hover:bg-magenta-50'
             }`}
           >
-            {t('branches.label', { code: branch })}
+            {branch.name}
           </button>
         ))}
       </section>

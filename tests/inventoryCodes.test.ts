@@ -2,7 +2,10 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
   buildInventoryItemId,
+  designCodeFromIndex,
   formatPieceInstanceIdSuffix,
+  isDesignCode,
+  nextDesignCode,
   parsePieceInstanceNumberFromItem,
   resolvePieceInstanceKey,
 } from '../src/lib/inventoryCodes';
@@ -96,5 +99,37 @@ describe('resolvePieceInstanceKey', () => {
     });
 
     assert.equal(next, 'piece-2');
+  });
+});
+
+describe('design codes', () => {
+  it('walks a–z, then aa–zz, then aaa', () => {
+    assert.equal(isDesignCode('Aa'), true);
+    assert.equal(isDesignCode('a1'), false);
+    assert.equal(isDesignCode('aaaa'), false);
+    assert.equal(nextDesignCode([]), 'a');
+    assert.equal(nextDesignCode(['a', 'b', 'A']), 'c');
+    assert.equal(designCodeFromIndex(25), 'z');
+    assert.equal(designCodeFromIndex(26), 'aa');
+    assert.equal(designCodeFromIndex(27), 'ab');
+    assert.equal(designCodeFromIndex(26 + 675), 'zz');
+    assert.equal(designCodeFromIndex(26 + 676), 'aaa');
+    const throughZ = Array.from({ length: 26 }, (_, index) => designCodeFromIndex(index));
+    assert.equal(nextDesignCode(throughZ), 'aa');
+  });
+
+  it('puts the design letters into the item id and leaves old ids unchanged', () => {
+    const base = {
+      branchId: 'B001',
+      familyCode: 1,
+      subCode: 3500,
+      colorName: 'Red',
+      colorId: 'color-red',
+      type: 'PIECE' as const,
+      pieceLength: 2.25,
+    };
+    assert.equal(buildInventoryItemId(base), 'B001-001-3500-REDP0225');
+    assert.equal(buildInventoryItemId({ ...base, designCode: 'ab' }), 'B001-001-AB-3500-REDP0225');
+    assert.equal(buildInventoryItemId({ ...base, designCode: '' }), 'B001-001-3500-REDP0225');
   });
 });

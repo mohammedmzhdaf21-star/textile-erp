@@ -10,6 +10,7 @@ import {
   aggregateFamilyStock,
   BRANCH_CODE_BY_ID,
   BRANCH_DESTINATIONS,
+  getBranchLabel,
   BRANCH_ID_BY_CODE,
   formatDetailedStockBreakdownLine,
   formatStockAmountLabel,
@@ -657,12 +658,8 @@ const InventoryView: React.FC = () => {
                   >
                     <div className="flex items-center justify-between gap-3">
                       <div>
-                        <p className="text-sm font-semibold text-black">{t(destination.labelKey)}</p>
-                        <p className="text-xs text-gray-500">
-                          {destination.code === 'S'
-                            ? t('common.storage')
-                            : t('branches.label', { code: destination.code })}
-                        </p>
+                        <p className="text-sm font-semibold text-black">{getBranchLabel(t, destination.code)}</p>
+                        <p className="text-xs text-gray-500">{destination.id}</p>
                       </div>
                       <div className="text-right">
                         {isClickableStock ? (
@@ -713,9 +710,7 @@ const InventoryView: React.FC = () => {
               }`}
               onClick={() => setBranch(branch === destination.code ? null : destination.code)}
             >
-              {destination.code === 'S'
-                ? t('common.storage')
-                : t('branches.label', { code: destination.code })}
+              {getBranchLabel(t, destination.code)}
             </button>
           ))}
         </div>

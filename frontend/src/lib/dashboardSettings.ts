@@ -18,6 +18,7 @@ export type DashboardSectionKey =
   | 'exchange'
   | 'itemInput'
   | 'employeeAccounts'
+  | 'branches'
   | 'activityHistory'
   | 'attendance'
   | 'attendanceCheckIn'
@@ -66,6 +67,7 @@ export const dashboardSections: Array<{ key: DashboardSectionKey; labelKey: stri
   { key: 'exchange', labelKey: 'nav.exchange', route: '/exchange' },
   { key: 'itemInput', labelKey: 'nav.newItem', route: '/item-input' },
   { key: 'employeeAccounts', labelKey: 'nav.employeeAccounts', route: '/employee-accounts' },
+  { key: 'branches', labelKey: 'nav.branches', route: '/branches' },
   { key: 'activityHistory', labelKey: 'nav.activityHistory', route: '/activity-history' },
   { key: 'attendance', labelKey: 'nav.attendanceQr', route: '/attendance' },
   { key: 'attendanceCheckIn', labelKey: 'nav.attendanceCheckIn', route: '/attendance/check-in' },
@@ -150,6 +152,7 @@ export const ADMIN_ONLY_ROUTES = new Set([
   '/item-pricing',
   '/plain-cloth',
   '/sales-commission',
+  '/branches',
 ]);
 
 export const canAccessAdminRoute = (user: { role?: string } | null | undefined, route: string) => {

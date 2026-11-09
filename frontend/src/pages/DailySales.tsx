@@ -5,6 +5,8 @@ import { useTranslation } from 'react-i18next';
 import { formatCurrency, formatSignedCurrency } from '../lib/currency';
 import { resolveSalePaymentLabel } from '../lib/paymentMethod';
 import { resolveBranchId } from '../lib/inventoryCodes';
+import { useShopBranches } from '../lib/useShopBranches';
+import SaleManageActions from '../components/SaleManageActions';
 
 type Sale = {
   id: string;
@@ -45,9 +47,6 @@ type EmployeeGroup = {
   total: number;
   sales: Sale[];
 };
-
-const branches = ['A', 'B', 'C', 'E', 'F'] as const;
-type BranchId = typeof branches[number];
 
 const formatDate = (date: Date) => {
   const year = date.getFullYear();
@@ -95,7 +94,9 @@ const owedPaymentRowsFromApi = (payments: SalePaymentRecord[], dateKey: string):
 
 const DailySales: React.FC = () => {
   const { t } = useTranslation();
-  const [selectedBranch, setSelectedBranch] = useState<BranchId | null>(null);
+  const [selectedBranch, setSelectedBranch] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
+  const branches = useShopBranches();
   const [sales, setSales] = useState<Sale[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -166,7 +167,7 @@ const toDate = formatDate(tomorrow);
         console.error('Daily sales load error:', err);
       })
       .finally(() => setLoading(false));
-  }, [selectedBranch, fromDate, toDate]);
+  }, [selectedBranch, fromDate, toDate, reloadKey]);
 
   const groupedByEmployee = useMemo(() => {
     const groups: Record<string, EmployeeGroup> = {};
@@ -222,19 +223,19 @@ const toDate = formatDate(tomorrow);
 
       <section className="mt-6 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
         {branches.map((branch) => {
-          const isSelected = selectedBranch === branch;
+          const isSelected = selectedBranch === branch.code;
           return (
             <button
-              key={branch}
+              key={branch.id}
               type="button"
-              onClick={() => setSelectedBranch(branch)}
+              onClick={() => setSelectedBranch(branch.code)}
               className={`rounded-2xl border px-4 py-3 text-sm font-semibold transition-all ${
                 isSelected
                   ? 'border-magenta-500 bg-magenta-500 text-white shadow-lg'
                   : 'border-gray-200 bg-white text-gray-800 hover:border-magenta-300 hover:bg-magenta-50'
               }`}
             >
-              Branch {branch}
+              {branch.name}
             </button>
           );
         })}
@@ -293,16 +294,19 @@ const toDate = formatDate(tomorrow);
                       const isOwedPayment = Boolean(sale.notes?.includes('OWED PAYMENT'));
 
                       return (
-                        <button
+                        <div
                           key={sale.id}
-                          type="button"
-                          onClick={() =>
-                            navigate(`/sales/${sale.sourceSaleId || sale.id}`, {
-                              state: { returnTo: '/sales/daily' },
-                            })
-                          }
-                          className={`w-full rounded-2xl border p-4 text-left transition hover:border-black hover:bg-white ${getSaleBorder(sale)}`}
+                          className={`w-full rounded-2xl border p-4 text-left ${getSaleBorder(sale)}`}
                         >
+                          <button
+                            type="button"
+                            onClick={() =>
+                              navigate(`/sales/${sale.sourceSaleId || sale.id}`, {
+                                state: { returnTo: '/sales/daily' },
+                              })
+                            }
+                            className="w-full text-left"
+                          >
                           <div className="flex items-center justify-between gap-3">
                             <div>
                               <div className="break-all text-sm font-semibold text-black">
@@ -337,7 +341,11 @@ const toDate = formatDate(tomorrow);
                               {formatSignedCurrency(amount)}
                             </div>
                           </div>
-                        </button>
+                          </button>
+                          {!isOwedPayment && (
+                            <SaleManageActions saleId={sale.id} onChanged={() => setReloadKey((current) => current + 1)} />
+                          )}
+                        </div>
                       );
                     })}
                   </div>

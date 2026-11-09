@@ -1,6 +1,6 @@
 import type { TFunction } from 'i18next';
 
-export type BranchCode = 'A' | 'B' | 'C' | 'E' | 'F';
+export type BranchCode = string;
 export type TaskStatus = 'TODO' | 'DONE';
 export type TaskSchedule = 'DAILY' | 'EVERY_2_DAYS' | 'WEEKLY' | 'MONTHLY' | 'YEARLY' | 'ON_DEMAND';
 

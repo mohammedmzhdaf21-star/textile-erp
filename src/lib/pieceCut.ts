@@ -135,6 +135,7 @@ export async function cutPieceForSale(
         branchId: source.branchId,
         colorId: source.colorId,
         code: source.code,
+        designCode: source.designCode || '',
         isArchived: false,
       },
     });
@@ -202,6 +203,7 @@ export async function cutPieceForSale(
       type: soldShape.type,
       pieceLength: soldShape.type === 'PIECE' ? soldShape.pieceLength : undefined,
       instanceKey: soldRemnantInstanceKey,
+      designCode: source.designCode,
     });
 
     const remnantPieceItemId = buildInventoryItemId({
@@ -212,6 +214,7 @@ export async function cutPieceForSale(
       colorId: source.colorId,
       type: 'REMANENT',
       instanceKey: storeRemnantInstanceKey,
+      designCode: source.designCode,
     });
 
     if (soldPieceItemId === remnantPieceItemId) {
@@ -254,6 +257,7 @@ export async function cutPieceForSale(
         id: soldPieceItemId,
         branchId: source.branchId,
         code: source.code,
+        designCode: source.designCode || '',
         subCode: source.subCode,
         colorId: source.colorId,
         type: soldShape.type,
@@ -282,6 +286,7 @@ export async function cutPieceForSale(
         id: remnantPieceItemId,
         branchId: source.branchId,
         code: source.code,
+        designCode: source.designCode || '',
         subCode: source.subCode,
         colorId: source.colorId,
         type: 'REMANENT',

@@ -6,6 +6,8 @@ import {
 } from './packageStock';
 import {
   buildInventoryItemId,
+  isDesignCode,
+  normalizeDesignCode,
   resolveInventoryItemId,
   resolveMeteredInstanceKey,
 } from './inventoryCodes';
@@ -31,6 +33,7 @@ export interface CreateInventoryInput {
   id: string;
   branchId: string;
   code: number;
+  designCode?: string;
   subCode: number;
   colorId: string;
   type: 'ROLL' | 'PIECE' | 'REMANENT';
@@ -200,6 +203,11 @@ export async function createInventoryItem(
       : undefined;
 
   // Verify branch exists
+  const designCode = normalizeDesignCode(input.designCode ?? '');
+  if (designCode && !isDesignCode(designCode)) {
+    throw new Error('Design code must be 1 to 3 letters, from a to zzz');
+  }
+
   const branch = await prisma.branch.findUnique({ where: { id: input.branchId } });
   if (!branch) throw new Error('Branch not found');
 
@@ -218,6 +226,7 @@ export async function createInventoryItem(
         subCode: input.subCode,
         colorId: input.colorId,
         type: effectiveType,
+        designCode,
       },
       select: {
         id: true,
@@ -228,6 +237,7 @@ export async function createInventoryItem(
         type: true,
         packageKey: true,
         costPrice: true,
+        designCode: true,
       },
     });
 
@@ -242,11 +252,13 @@ export async function createInventoryItem(
         colorId: item.colorId,
         type: item.type,
         packageKey: item.packageKey,
+        designCode: item.designCode,
       })),
       branchId: input.branchId,
       familyCode: input.code,
       subCode: input.subCode,
       colorId: input.colorId,
+      designCode,
     });
 
     itemId = buildInventoryItemId({
@@ -257,6 +269,7 @@ export async function createInventoryItem(
       colorId: color.id,
       type: effectiveType,
       instanceKey: packageKey || undefined,
+      designCode,
     });
     qrCodeValue = itemId;
   } else if (effectiveType !== input.type) {
@@ -272,6 +285,7 @@ export async function createInventoryItem(
       packageComponents: input.isPiecePackage
         ? parsePackageComponents(input.packageComponents)
         : undefined,
+      designCode,
     });
     qrCodeValue = itemId;
   }
@@ -288,6 +302,7 @@ export async function createInventoryItem(
         id: itemId,
         branchId: input.branchId,
         code: input.code,
+        designCode,
         subCode: input.subCode,
         colorId: input.colorId,
         type: effectiveType,
@@ -446,6 +461,7 @@ export async function updateInventoryItem(
     pieceLength: storedPieceLength,
     isPiecePackage: existing.isPiecePackage,
     packageComponents: existing.packageComponents,
+    designCode: existing.designCode,
   });
 
   const identityChanged =
@@ -461,6 +477,7 @@ export async function updateInventoryItem(
       where: {
         branchId: existing.branchId,
         code: nextCode,
+        designCode: existing.designCode,
         subCode: nextSubCode,
         colorId: nextColorId,
         type: effectiveType,
@@ -549,6 +566,7 @@ export async function updateInventoryItem(
         id: nextId,
         branchId: existing.branchId,
         code: nextCode,
+        designCode: existing.designCode,
         subCode: nextSubCode,
         colorId: nextColorId,
         type: effectiveType,

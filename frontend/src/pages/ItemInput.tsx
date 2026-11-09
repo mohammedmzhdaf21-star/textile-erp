@@ -5,12 +5,17 @@ import { Link } from 'react-router-dom';
 import api from '../lib/api';
 import { getCurrentUser } from '../lib/auth';
 import { formatCurrency, normalizeStoredAmount, parsePriceInput, toPriceInputNumber } from '../lib/currency';
+import { pushItemMinimumPriceToServer } from '../lib/commissionSettingsApi';
 import {
   BRANCH_DESTINATIONS,
+  getBranchLabel,
   BRANCH_CODE_BY_ID,
   BRANCH_ID_BY_CODE,
   buildInventoryItemId,
   getItemTypeLabel,
+  isDesignCode,
+  nextDesignCode,
+  normalizeDesignCode,
   printInventoryLabel,
   resolveMeteredInstanceKey,
   type BranchDestinationCode,
@@ -43,6 +48,7 @@ type InventoryItemView = {
   id: string;
   branchId: string;
   code: number;
+  designCode?: string;
   subCode?: number | string;
   colorId: string;
   type: InventoryItemType;
@@ -66,6 +72,7 @@ const ItemInputPage: React.FC = () => {
   const [colorId, setColorId] = useState<string>('');
   const [type, setType] = useState<InventoryItemType>('ROLL');
   const [familyCode, setFamilyCode] = useState<number>(1);
+  const [designCode, setDesignCode] = useState('a');
   const [subCode, setSubCode] = useState<number>(15);
   const [meters, setMeters] = useState<number>(1);
   const [quantity, setQuantity] = useState<number>(1);
@@ -94,6 +101,7 @@ const ItemInputPage: React.FC = () => {
   const [isSavingColor, setIsSavingColor] = useState(false);
   const [colorFormError, setColorFormError] = useState<string | null>(null);
   const familyCodeRequestId = useRef(0);
+  const designTouched = useRef(false);
 
   const branchId = BRANCH_ID_BY_CODE[destination];
   const selectedColor = colors.find((color) => color.id === colorId);
@@ -115,18 +123,31 @@ const ItemInputPage: React.FC = () => {
     [isPiecePackage, normalizedPackageComponents]
   );
 
+  const previewShape = useMemo(
+    () =>
+      normalizeInventoryShape({
+        type,
+        meters: Number(meters),
+        pieceLength: Number(pieceLength),
+        quantity: Number(quantity),
+        isPiecePackage,
+      }),
+    [isPiecePackage, meters, pieceLength, quantity, type]
+  );
+
   const meteredInstanceKey = useMemo(() => {
-    if (type !== 'ROLL' && type !== 'REMANENT') return '';
+    if (previewShape.type !== 'ROLL' && previewShape.type !== 'REMANENT') return '';
     if (!branchId || !familyCode || !colorId || subCode < 0) return '';
     return resolveMeteredInstanceKey({
-      type,
+      type: previewShape.type,
       items: familyItems,
       branchId,
       familyCode,
-      subCode,
+      subCode: parsePriceInput(subCode),
       colorId,
+      designCode,
     });
-  }, [branchId, colorId, familyCode, familyItems, subCode, type]);
+  }, [branchId, colorId, designCode, familyCode, familyItems, previewShape.type, subCode]);
 
   const generatedItemId = useMemo(() => {
     if (!branchId || !familyCode || !selectedColor || subCode < 0) return '';
@@ -134,11 +155,13 @@ const ItemInputPage: React.FC = () => {
     return buildInventoryItemId({
       branchId,
       familyCode,
-      subCode,
+      subCode: parsePriceInput(subCode),
+      designCode,
       colorName: selectedColor.name,
       colorId: selectedColor.id,
-      type,
-      pieceLength: type === 'PIECE' && !isPiecePackage ? pieceLength : undefined,
+      type: previewShape.type,
+      pieceLength:
+        previewShape.type === 'PIECE' && !isPiecePackage ? previewShape.pieceLength : undefined,
       isPiecePackage,
       packageComponents: normalizedPackageComponents,
       instanceKey: meteredInstanceKey || undefined,
@@ -150,10 +173,10 @@ const ItemInputPage: React.FC = () => {
     isPiecePackage,
     meteredInstanceKey,
     normalizedPackageComponents,
-    pieceLength,
+    previewShape,
     selectedColor,
+    designCode,
     subCode,
-    type,
   ]);
 
   const amountLabel = useMemo(() => {
@@ -182,7 +205,7 @@ const ItemInputPage: React.FC = () => {
     const unique = new Map<string, InventoryItemView>();
     familyItems.forEach((item) => {
       const price = normalizeStoredAmount(Number(item.subCode ?? item.costPrice ?? 0));
-      const key = `${item.code}-${price}-${item.colorId}-${item.type}-${item.pieceLength ?? 0}-${item.packageKey ?? ''}`;
+      const key = `${item.code}-${item.designCode ?? ''}-${price}-${item.colorId}-${item.type}-${item.pieceLength ?? 0}-${item.packageKey ?? ''}`;
       if (!unique.has(key)) unique.set(key, item);
     });
     return Array.from(unique.values()).sort(
@@ -195,6 +218,7 @@ const ItemInputPage: React.FC = () => {
     const sameBase =
       item.branchId === branchId &&
       item.code === familyCode &&
+      normalizeDesignCode(item.designCode ?? '') === normalizeDesignCode(designCode) &&
       Math.abs(itemPrice - parsePriceInput(subCode)) < 0.001 &&
       item.colorId === colorId &&
       item.type === type;
@@ -292,6 +316,14 @@ const ItemInputPage: React.FC = () => {
   }, [familyCode, successMessage]);
 
   useEffect(() => {
+    if (designTouched.current) return;
+    const used = familyItems
+      .filter((item) => item.code === familyCode)
+      .map((item) => item.designCode ?? '');
+    setDesignCode(nextDesignCode(used));
+  }, [familyCode, familyItems]);
+
+  useEffect(() => {
     if (!generatedItemId) {
       setQrDataUrl('');
       return;
@@ -328,6 +360,7 @@ const ItemInputPage: React.FC = () => {
         0
       );
       if (requestId !== familyCodeRequestId.current) return;
+      designTouched.current = false;
       setFamilyCode(maxFamilyCode + 1);
     } catch (error) {
       if (requestId !== familyCodeRequestId.current) return;
@@ -407,6 +440,9 @@ const ItemInputPage: React.FC = () => {
     if (!branchId || !colorId || !familyCode || subCode < 0) {
       return alert(t('itemInput.chooseRequiredFields'));
     }
+    if (!isDesignCode(designCode)) {
+      return alert(t('itemInput.enterDesignCode'));
+    }
     if ((type === 'ROLL' || type === 'REMANENT') && meters <= 0) {
       return alert(t('itemInput.enterPositiveMeters'));
     }
@@ -451,14 +487,17 @@ const ItemInputPage: React.FC = () => {
       return setErrorMessage(t('itemInput.failedRefreshBeforeCreate'));
     }
 
+    const storedSubCode = parsePriceInput(subCode);
+
     if (effectiveType === 'ROLL' || effectiveType === 'REMANENT') {
       instanceKeyForCreate = resolveMeteredInstanceKey({
         type: effectiveType,
         items: freshItems,
         branchId,
         familyCode,
-        subCode,
+        subCode: storedSubCode,
         colorId,
+        designCode,
       });
     }
 
@@ -466,7 +505,8 @@ const ItemInputPage: React.FC = () => {
       id = buildInventoryItemId({
         branchId,
         familyCode,
-        subCode,
+        subCode: storedSubCode,
+        designCode,
         colorName: selectedColor.name,
         colorId: selectedColor.id,
         type: effectiveType,
@@ -481,11 +521,11 @@ const ItemInputPage: React.FC = () => {
       return alert(t('itemInput.couldNotBuildId'));
     }
 
-    const storedSubCode = parsePriceInput(subCode);
     const payload: Record<string, unknown> = {
       id,
       branchId,
       code: familyCode,
+      designCode: normalizeDesignCode(designCode),
       subCode: storedSubCode,
       colorId,
       type: effectiveType,
@@ -521,7 +561,19 @@ const ItemInputPage: React.FC = () => {
         margin: 1,
         width: 240,
       });
+      try {
+        await pushItemMinimumPriceToServer({
+          itemId: savedId,
+          unit: effectiveType === 'PIECE' ? 'PIECE' : 'METER',
+          minimumPrice: storedSubCode,
+          updatedAt: new Date().toISOString(),
+        });
+      } catch (priceError) {
+        console.error('Failed to save commission baseline', priceError);
+        setErrorMessage(t('itemInput.baselineSaveFailed'));
+      }
       setSuccessMessage(t('itemInput.itemCreated', { id: savedId, branch: branchLabel }));
+      designTouched.current = false;
       setCreatedItemId(savedId);
       setCreatedItemQrDataUrl(savedQrDataUrl);
       setQrDataUrl(savedQrDataUrl);
@@ -555,7 +607,7 @@ const ItemInputPage: React.FC = () => {
       familyCode,
       subCode: parsePriceInput(subCode),
       type,
-      typeLabel: getItemTypeLabel(t, type),
+      typeLabel: getItemTypeLabel(t, previewShape.type),
       colorName: selectedColor.name,
       branchLabel,
       amountLabel,
@@ -598,7 +650,10 @@ const ItemInputPage: React.FC = () => {
                   type="number"
                   min="1"
                   value={familyCode}
-                  onChange={(e) => setFamilyCode(Number(e.target.value))}
+                  onChange={(e) => {
+                    designTouched.current = false;
+                    setFamilyCode(Number(e.target.value));
+                  }}
                   className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
                 />
                 <p className="mt-1 text-xs text-gray-500">{t('itemInput.familyCodeHint')}</p>
@@ -628,6 +683,10 @@ const ItemInputPage: React.FC = () => {
                       key={item.id}
                       type="button"
                       onClick={() => {
+                        if (item.designCode) {
+                          designTouched.current = true;
+                          setDesignCode(normalizeDesignCode(item.designCode));
+                        }
                         setSubCode(toPriceInputNumber(item.subCode ?? item.costPrice ?? 0));
                         setColorId(item.colorId);
                         setType(item.type);
@@ -651,6 +710,7 @@ const ItemInputPage: React.FC = () => {
                       }}
                       className="rounded-full border border-gray-300 bg-white px-3 py-1 text-xs font-semibold text-gray-700 hover:border-black"
                     >
+                      {item.designCode ? `${normalizeDesignCode(item.designCode).toUpperCase()} · ` : ''}
                       {formatCurrency(Number(item.subCode ?? item.costPrice ?? 0))} ·{' '}
                       {getColorLabel(t, item.color?.name) || t('common.color')} · {getItemTypeLabel(t, item.type)}
                       {item.isPiecePackage
@@ -666,20 +726,44 @@ const ItemInputPage: React.FC = () => {
             </div>
           </div>
 
-          <div className="mt-6 grid gap-4 sm:grid-cols-2">
-            <div>
-              <label className="block text-sm font-medium text-gray-700">{t('itemInput.subCodePrice')}</label>
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                value={subCode}
-                onChange={(e) => setSubCode(Number(e.target.value))}
-                className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
-              />
-              <p className="mt-1 text-xs text-gray-500">{t('itemInput.subCodeHint')} {t('currency.thousandsHint')}</p>
-            </div>
 
+          <div className="mt-6">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+              <div className="flex-1">
+                <label className="block text-sm font-medium text-gray-700">{t('itemInput.designCode')}</label>
+                <input
+                  type="text"
+                  maxLength={3}
+                  value={designCode}
+                  onChange={(e) => {
+                    designTouched.current = true;
+                    setDesignCode(e.target.value.toLowerCase().replace(/[^a-z]/g, '').slice(0, 3));
+                  }}
+                  className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm uppercase"
+                  placeholder="A"
+                />
+                <p className="mt-1 text-xs text-gray-500">{t('itemInput.designCodeHint')}</p>
+                {!isDesignCode(designCode) && (
+                  <p className="mt-1 text-xs font-semibold text-red-600">{t('itemInput.enterDesignCode')}</p>
+                )}
+              </div>
+              <button
+                type="button"
+                className="rounded-xl border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-white"
+                onClick={() => {
+                  designTouched.current = true;
+                  const used = familyItems
+                    .filter((item) => item.code === familyCode)
+                    .map((item) => item.designCode ?? '');
+                  setDesignCode(nextDesignCode(used));
+                }}
+              >
+                {t('itemInput.nextDesign')}
+              </button>
+            </div>
+          </div>
+
+          <div className="mt-6">
             <div>
               <div className="flex items-center justify-between gap-2">
                 <label className="block text-sm font-medium text-gray-700">{t('itemInput.color')}</label>
@@ -758,7 +842,114 @@ const ItemInputPage: React.FC = () => {
                 </select>
               )}
             </div>
+          </div>
 
+          <div className="mt-6">
+            <div>
+              <label className="block text-sm font-medium text-gray-700">{t('itemInput.baselinePrice')}</label>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={subCode}
+                onChange={(e) => setSubCode(Number(e.target.value))}
+                className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
+              />
+              <p className="mt-1 text-xs text-gray-500">{t('itemInput.baselineHint')} {t('currency.thousandsHint')}</p>
+            </div>
+          </div>
+
+          <section className="mt-6 rounded-2xl border border-gray-200 bg-gray-50 p-5">
+            <h4 className="text-base font-semibold text-black">{t('itemInput.itemDescription')}</h4>
+            <p className="mt-1 text-sm text-gray-500">
+              {t('itemInput.itemDescriptionHint')}
+            </p>
+            <textarea
+              value={description}
+              onChange={(event) => setDescription(event.target.value)}
+              rows={4}
+              className="mt-4 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
+              placeholder={t('itemInput.descriptionPlaceholder')}
+            />
+          </section>
+
+          <section className="mt-6 rounded-2xl border border-gray-200 bg-gray-50 p-5">
+              <label className="flex items-start gap-3">
+                <input
+                  type="checkbox"
+                  checked={isPiecePackage}
+                  onChange={(event) => {
+                    const checked = event.target.checked;
+                    setIsPiecePackage(checked);
+                    if (checked) setType('PIECE');
+                  }}
+                  className="mt-1 h-4 w-4 rounded border-gray-300"
+                />
+                <span>
+                  <span className="block text-sm font-semibold text-black">{t('itemInput.piecePackage')}</span>
+                  <span className="mt-1 block text-sm text-gray-600">
+                    {t('itemInput.piecePackageDescription')}
+                  </span>
+                </span>
+              </label>
+
+              {isPiecePackage && (
+                <div className="mt-5 space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-sm font-semibold text-gray-800">{t('itemInput.piecesInPackage')}</p>
+                    <button
+                      type="button"
+                      onClick={addPackageComponent}
+                      className="rounded-lg border border-gray-300 bg-white px-3 py-1 text-xs font-semibold text-gray-700 hover:border-black"
+                    >
+                      Add piece
+                    </button>
+                  </div>
+
+                  {packageComponents.map((component, index) => (
+                    <div key={index} className="grid grid-cols-[1fr_120px_auto] gap-2">
+                      <input
+                        type="text"
+                        value={component.name}
+                        onChange={(event) =>
+                          updatePackageComponent(index, 'name', event.target.value)
+                        }
+                        className="rounded-xl border border-gray-300 px-3 py-2 text-sm"
+                        placeholder={t('itemInput.pieceNamePlaceholder')}
+                      />
+                      <input
+                        type="number"
+                        min="1"
+                        value={component.countPerPackage}
+                        onChange={(event) =>
+                          updatePackageComponent(index, 'countPerPackage', Number(event.target.value))
+                        }
+                        className="rounded-xl border border-gray-300 px-3 py-2 text-sm"
+                        placeholder={t('common.count')}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removePackageComponent(index)}
+                        disabled={packageComponents.length <= 2}
+                        className="rounded-xl border border-gray-300 px-3 py-2 text-xs font-semibold text-red-600 disabled:cursor-not-allowed disabled:text-gray-400"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ))}
+
+                  <p className="text-sm text-gray-600">
+                    {t('itemInput.eachPackageContains', { count: totalPiecesPerPackage(normalizedPackageComponents), summary: 
+                    formatPackageSummary(normalizedPackageComponents) })}
+                  </p>
+                </div>
+              )}
+            </section>
+
+          <section className="mt-6 rounded-2xl border border-gray-200 bg-gray-50 p-5">
+            <h4 className="text-base font-semibold text-black">{t('itemInput.stock')}</h4>
+            <p className="mt-1 text-sm text-gray-500">{t('itemInput.stockHint')}</p>
+            <div className="mt-4 grid gap-4 sm:grid-cols-2">
             <div>
               <label className="block text-sm font-medium text-gray-700">{t('itemInput.type')}</label>
               <select
@@ -826,80 +1017,8 @@ const ItemInputPage: React.FC = () => {
                 {t('itemInput.savedAsRemnantHint', { threshold: REMNANT_THRESHOLD_METERS })}
               </p>
             )}
-          </div>
-
-          {type === 'PIECE' && (
-            <section className="mt-6 rounded-2xl border border-gray-200 bg-gray-50 p-5">
-              <label className="flex items-start gap-3">
-                <input
-                  type="checkbox"
-                  checked={isPiecePackage}
-                  onChange={(event) => setIsPiecePackage(event.target.checked)}
-                  className="mt-1 h-4 w-4 rounded border-gray-300"
-                />
-                <span>
-                  <span className="block text-sm font-semibold text-black">{t('itemInput.piecePackage')}</span>
-                  <span className="mt-1 block text-sm text-gray-600">
-                    {t('itemInput.piecePackageDescription')}
-                  </span>
-                </span>
-              </label>
-
-              {isPiecePackage && (
-                <div className="mt-5 space-y-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="text-sm font-semibold text-gray-800">{t('itemInput.piecesInPackage')}</p>
-                    <button
-                      type="button"
-                      onClick={addPackageComponent}
-                      className="rounded-lg border border-gray-300 bg-white px-3 py-1 text-xs font-semibold text-gray-700 hover:border-black"
-                    >
-                      Add piece
-                    </button>
-                  </div>
-
-                  {packageComponents.map((component, index) => (
-                    <div key={index} className="grid grid-cols-[1fr_120px_auto] gap-2">
-                      <input
-                        type="text"
-                        value={component.name}
-                        onChange={(event) =>
-                          updatePackageComponent(index, 'name', event.target.value)
-                        }
-                        className="rounded-xl border border-gray-300 px-3 py-2 text-sm"
-                        placeholder={t('itemInput.pieceNamePlaceholder')}
-                      />
-                      <input
-                        type="number"
-                        min="1"
-                        value={component.countPerPackage}
-                        onChange={(event) =>
-                          updatePackageComponent(index, 'countPerPackage', Number(event.target.value))
-                        }
-                        className="rounded-xl border border-gray-300 px-3 py-2 text-sm"
-                        placeholder={t('common.count')}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => removePackageComponent(index)}
-                        disabled={packageComponents.length <= 2}
-                        className="rounded-xl border border-gray-300 px-3 py-2 text-xs font-semibold text-red-600 disabled:cursor-not-allowed disabled:text-gray-400"
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  ))}
-
-                  <p className="text-sm text-gray-600">
-                    {t('itemInput.eachPackageContains', { count: totalPiecesPerPackage(normalizedPackageComponents), summary: 
-                    formatPackageSummary(normalizedPackageComponents) })}
-                  </p>
-                </div>
-              )}
-            </section>
-          )}
-
-          <div className="mt-6">
+            </div>
+          <div className="mt-4">
             <label className="block text-sm font-medium text-gray-700">{t('itemInput.sendToBranch')}</label>
             <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
               {BRANCH_DESTINATIONS.map((branch) => (
@@ -913,24 +1032,11 @@ const ItemInputPage: React.FC = () => {
                       : 'border border-gray-200 bg-white text-gray-800 hover:border-black'
                   }`}
                 >
-                  {t(branch.labelKey)}
+                  {getBranchLabel(t, branch.code)}
                 </button>
               ))}
             </div>
           </div>
-
-          <section className="mt-6 rounded-2xl border border-gray-200 bg-gray-50 p-5">
-            <h4 className="text-base font-semibold text-black">{t('itemInput.itemDescription')}</h4>
-            <p className="mt-1 text-sm text-gray-500">
-              {t('itemInput.itemDescriptionHint')}
-            </p>
-            <textarea
-              value={description}
-              onChange={(event) => setDescription(event.target.value)}
-              rows={4}
-              className="mt-4 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
-              placeholder={t('itemInput.descriptionPlaceholder')}
-            />
           </section>
 
           <section className="mt-6 rounded-2xl border border-gray-200 bg-gray-50 p-5">
@@ -961,42 +1067,7 @@ const ItemInputPage: React.FC = () => {
             )}
           </section>
 
-          <div className="mt-6 flex flex-col gap-3 sm:flex-row">
-            <button
-              type="button"
-              className="btn-primary flex-1"
-              onClick={handleCreateItem}
-              disabled={loadingDefaults || duplicateExists}
-            >
-              {loadingDefaults ? t('common.loading') : t('itemInput.saveItemAndQr')}
-            </button>
-            {qrDataUrl && generatedItemId && (
-              <button
-                type="button"
-                className="rounded-xl border border-gray-300 px-4 py-3 text-sm font-semibold text-gray-800 hover:bg-gray-50"
-                onClick={() => handlePrint(generatedItemId, qrDataUrl)}
-              >
-                Print label
-              </button>
-            )}
-          </div>
-
-          {duplicateExists && (
-            <p className="mt-4 text-sm font-semibold text-red-600">
-              {type === 'PIECE' && isPiecePackage
-                ? t('itemInput.duplicatePackage', {
-                    summary: formatPackageSummary(normalizedPackageComponents),
-                    branch: branchLabel,
-                  })
-                : type === 'PIECE'
-                  ? t('itemInput.duplicatePiece', { length: pieceLength, branch: branchLabel })
-                  : t('itemInput.duplicateOther', { branch: branchLabel })}
-            </p>
-          )}
-        </section>
-
-        <aside className="space-y-6">
-          <section className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
+          <section className="mt-6 rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
             <h3 className="text-lg font-semibold text-black">{t('itemInput.qrLabel')}</h3>
             <p className="mt-1 text-sm text-gray-500">
               {t('itemInput.qrLabelHint')}
@@ -1015,12 +1086,16 @@ const ItemInputPage: React.FC = () => {
                       <strong>{familyCode}</strong>
                     </div>
                     <div className="flex justify-between">
-                      <span>{t('itemInput.subCodeLabel')}</span>
+                      <span>{t('itemInput.designLabel')}</span>
+                      <strong className="uppercase">{designCode || t('common.dash')}</strong>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>{t('itemInput.baselinePrice')}</span>
                       <strong>{formatCurrency(parsePriceInput(subCode))}</strong>
                     </div>
                     <div className="flex justify-between">
                       <span>{t('itemInput.type')}</span>
-                      <strong>{getItemTypeLabel(t, type)}</strong>
+                      <strong>{getItemTypeLabel(t, previewShape.type)}</strong>
                     </div>
                     <div className="flex justify-between">
                       <span>{t('itemInput.amountLabel')}</span>
@@ -1092,6 +1167,41 @@ const ItemInputPage: React.FC = () => {
             )}
           </section>
 
+          <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+            <button
+              type="button"
+              className="btn-primary flex-1"
+              onClick={handleCreateItem}
+              disabled={loadingDefaults || duplicateExists || !isDesignCode(designCode)}
+            >
+              {loadingDefaults ? t('common.loading') : t('itemInput.saveItemAndQr')}
+            </button>
+            {qrDataUrl && generatedItemId && (
+              <button
+                type="button"
+                className="rounded-xl border border-gray-300 px-4 py-3 text-sm font-semibold text-gray-800 hover:bg-gray-50"
+                onClick={() => handlePrint(generatedItemId, qrDataUrl)}
+              >
+                Print label
+              </button>
+            )}
+          </div>
+
+          {duplicateExists && (
+            <p className="mt-4 text-sm font-semibold text-red-600">
+              {type === 'PIECE' && isPiecePackage
+                ? t('itemInput.duplicatePackage', {
+                    summary: formatPackageSummary(normalizedPackageComponents),
+                    branch: branchLabel,
+                  })
+                : type === 'PIECE'
+                  ? t('itemInput.duplicatePiece', { length: pieceLength, branch: branchLabel })
+                  : t('itemInput.duplicateOther', { branch: branchLabel })}
+            </p>
+          )}
+        </section>
+
+        <aside className="space-y-6">
           {successMessage && (
             <div className="rounded-2xl border border-green-200 bg-green-50 p-4 text-sm text-green-700">
               {successMessage}
