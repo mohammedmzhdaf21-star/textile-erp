@@ -5,6 +5,8 @@ import { useTranslation } from 'react-i18next';
 import { formatCurrency, formatSignedCurrency } from '../lib/currency';
 import { isImmediatePaymentMethod, resolveSalePaymentLabel } from '../lib/paymentMethod';
 import { BRANCH_ID_BY_CODE } from '../lib/inventoryCodes';
+import { useShopBranches } from '../lib/useShopBranches';
+import SaleManageActions from '../components/SaleManageActions';
 
 type Sale = {
   id: string;
@@ -42,9 +44,6 @@ type DateBucket = {
   toDate: string;
   sales: Sale[];
 };
-
-const branches = ['A', 'B', 'C', 'E', 'F'] as const;
-type BranchId = typeof branches[number];
 
 const HISTORY_DAYS = 10;
 
@@ -164,7 +163,8 @@ const saleBorderClass = (sale: Sale) => {
 
 const HistorySales: React.FC = () => {
   const { t } = useTranslation();
-  const [selectedBranch, setSelectedBranch] = useState<BranchId | null>(null);
+  const branches = useShopBranches();
+  const [selectedBranch, setSelectedBranch] = useState<string | null>(null);
   const [buckets, setBuckets] = useState<DateBucket[]>([]);
   const [selectedDateKey, setSelectedDateKey] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -204,7 +204,7 @@ const HistorySales: React.FC = () => {
     return Object.values(groups).sort((a, b) => b.total - a.total);
   }, [selectedBucket]);
 
-  const loadBranchHistory = async (branch: BranchId) => {
+  const loadBranchHistory = async (branch: string) => {
     setSelectedBranch(branch);
     setSelectedDateKey(null);
     setSearchResults(null);
@@ -290,20 +290,29 @@ const HistorySales: React.FC = () => {
     setSearchError(null);
   };
 
+  const refreshAfterSaleChange = () => {
+    if (selectedBranch) void loadBranchHistory(selectedBranch);
+    if (searchResults) void runSaleSearch();
+  };
+
   const renderSaleButton = (sale: Sale) => {
     const amount = saleCashAmount(sale);
     const matchedItemId = sale.items?.find((item) => item.inventoryItemId)?.inventoryItemId;
+    const isOwedPayment = Boolean(sale.notes?.includes('OWED PAYMENT') || sale.id.startsWith('owed-payment-'));
 
     return (
-      <button
+      <div
         key={sale.id}
+        className={`w-full rounded-2xl border p-4 text-left ${saleBorderClass(sale)}`}
+      >
+      <button
         type="button"
         onClick={() =>
           navigate(`/sales/${sale.id}`, {
             state: { returnTo: '/sales/history' },
           })
         }
-        className={`w-full rounded-2xl border p-4 text-left transition hover:border-magenta-300 hover:bg-white ${saleBorderClass(sale)}`}
+        className="w-full text-left"
       >
         <div className="flex items-center justify-between gap-3">
           <div>
@@ -339,6 +348,8 @@ const HistorySales: React.FC = () => {
           </div>
         </div>
       </button>
+      {!isOwedPayment && <SaleManageActions saleId={sale.id} onChanged={refreshAfterSaleChange} />}
+      </div>
     );
   };
 
@@ -421,19 +432,19 @@ const HistorySales: React.FC = () => {
 
       <section className="mt-6 grid grid-cols-5 gap-3">
         {branches.map((branch) => {
-          const isSelected = selectedBranch === branch;
+          const isSelected = selectedBranch === branch.code;
           return (
             <button
-              key={branch}
+              key={branch.id}
               type="button"
-              onClick={() => loadBranchHistory(branch)}
+              onClick={() => loadBranchHistory(branch.code)}
               className={`rounded-2xl border px-4 py-3 text-sm font-semibold transition-all ${
                 isSelected
                   ? 'border-magenta-500 bg-magenta-500 text-white shadow-lg'
                   : 'border-gray-200 bg-white text-gray-800 hover:border-magenta-300 hover:bg-magenta-50'
               }`}
             >
-              Branch {branch}
+              {branch.name}
             </button>
           );
         })}

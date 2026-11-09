@@ -80,6 +80,7 @@ const navigation: Array<NavItem | NavGroup> = [
     ],
   },
   { to: '/employee-accounts', labelKey: 'nav.employeeAccounts', end: true, adminOnly: true },
+  { to: '/branches', labelKey: 'nav.branches', end: true, adminOnly: true },
 ];
 
 function isNavGroup(entry: NavItem | NavGroup): entry is NavGroup {

@@ -223,6 +223,7 @@ router.post(
         pictureName,
         pictureDataUrl,
         description,
+        designCode,
         isPiecePackage,
         packageKey,
         packageComponents,
@@ -254,6 +255,7 @@ router.post(
           id,
           branchId,
           code: parseInt(String(code), 10),
+          designCode: designCode !== undefined ? String(designCode) : '',
           subCode: parsedSubCode,
           colorId,
           type,
@@ -292,7 +294,7 @@ router.post(
       if (msg.includes('not found')) {
         return res.status(404).json({ error: msg });
       }
-      if (msg.includes('require') || msg.includes('positive')) {
+      if (msg.includes('require') || msg.includes('positive') || msg.includes('Design code')) {
         return res.status(400).json({ error: msg });
       }
       if (msg.includes('Unique constraint')) {

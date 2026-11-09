@@ -18,6 +18,7 @@ import DataAnalysis from './pages/DataAnalysis';
 import TrusteeCommission from './pages/TrusteeCommission';
 import SaleDetail from './pages/SaleDetail';
 import EmployeeAccounts from './pages/EmployeeAccounts';
+import BranchesPage from './pages/Branches';
 import ItemPricing from './pages/ItemPricing';
 import PlainClothPricing from './pages/PlainClothPricing';
 import SalesCommission from './pages/SalesCommission';
@@ -253,6 +254,14 @@ function App() {
           element={
             <ProtectedLayout>
               <EmployeeAccounts />
+            </ProtectedLayout>
+          }
+        />
+        <Route
+          path="/branches"
+          element={
+            <ProtectedLayout>
+              <BranchesPage />
             </ProtectedLayout>
           }
         />

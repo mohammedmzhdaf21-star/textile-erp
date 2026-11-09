@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { BRANCH_DESTINATIONS, BRANCH_ID_BY_CODE, type BranchDestinationCode } from '../lib/inventoryCodes';
+import { BRANCH_DESTINATIONS, BRANCH_ID_BY_CODE, getBranchLabel, type BranchDestinationCode } from '../lib/inventoryCodes';
 import {
   fetchAttendanceRecords,
   fetchDailyAttendanceQr,
@@ -70,7 +70,7 @@ const Attendance: React.FC = () => {
         >
           {BRANCH_DESTINATIONS.map((branch) => (
             <option key={branch.code} value={branch.code}>
-              {t(branch.labelKey)} ({branch.id})
+              {getBranchLabel(t, branch.code)} ({branch.id})
             </option>
           ))}
         </select>

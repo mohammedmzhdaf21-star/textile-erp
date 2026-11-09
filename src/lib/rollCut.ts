@@ -89,6 +89,7 @@ export async function cutRollToPiece(
           colorId: roll.colorId,
           type: 'PIECE',
           code: roll.code,
+          designCode: roll.designCode || '',
           isArchived: false,
           isPiecePackage: false,
         },
@@ -133,6 +134,7 @@ export async function cutRollToPiece(
             colorId: roll.colorId,
             type: 'PIECE',
             code: roll.code,
+            designCode: roll.designCode || '',
             isArchived: false,
           },
         });
@@ -166,6 +168,7 @@ export async function cutRollToPiece(
         type: createAsRemnant ? 'REMANENT' : 'PIECE',
         pieceLength: createAsRemnant ? undefined : cutMeters,
         instanceKey: pieceInstanceKey,
+        designCode: roll.designCode,
       });
 
       if (uniquePiece && !createAsRemnant) {
@@ -187,6 +190,7 @@ export async function cutRollToPiece(
             type: 'PIECE',
             pieceLength: cutMeters,
             instanceKey: pieceInstanceKey,
+            designCode: roll.designCode,
           });
         }
       }
@@ -250,6 +254,7 @@ export async function cutRollToPiece(
           id: pieceItemId,
           branchId: roll.branchId,
           code: roll.code,
+          designCode: roll.designCode || '',
           subCode: roll.subCode,
           colorId: roll.colorId,
           type: createAsRemnant ? 'REMANENT' : 'PIECE',

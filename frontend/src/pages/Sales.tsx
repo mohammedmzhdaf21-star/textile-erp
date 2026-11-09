@@ -17,7 +17,8 @@ import {
 import { completeCuttingTasksAfterRollToPiece, maybeCreateCuttingTaskAfterPieceSale } from '../lib/cuttingTasks';
 import { getColorLabel } from '../lib/colorLabels';
 import { resolveInventoryItem } from '../lib/inventoryLookup';
-import { BRANCH_CODE_BY_ID, BRANCH_ID_BY_CODE, resolveBranchId } from '../lib/inventoryCodes';
+import { BRANCH_CODE_BY_ID, BRANCH_ID_BY_CODE, getSalesBranches, resolveBranchId } from '../lib/inventoryCodes';
+import { useShopBranches } from '../lib/useShopBranches';
 import { printPieceInventoryLabel } from '../lib/pieceLabel';
 import {
   cutRollToPieceStock,
@@ -87,11 +88,10 @@ type InventoryLookupItem = {
   version?: number;
 };
 
-const branchOptions = ['A', 'B', 'C', 'E', 'F'];
-
 const resolveInitialSalesBranch = (): string => {
+  const options = getSalesBranches().map((entry) => entry.code);
   const fromUrl = new URLSearchParams(window.location.search).get('branch')?.trim().toUpperCase();
-  if (fromUrl && branchOptions.includes(fromUrl)) {
+  if (fromUrl && options.includes(fromUrl)) {
     return fromUrl;
   }
 
@@ -99,12 +99,12 @@ const resolveInitialSalesBranch = (): string => {
   const firstBranchId = user?.branchIds?.[0];
   if (firstBranchId) {
     const code = BRANCH_CODE_BY_ID[firstBranchId];
-    if (code && branchOptions.includes(code)) {
+    if (code && options.includes(code)) {
       return code;
     }
   }
 
-  return 'A';
+  return options[0] || 'A';
 };
 const soldAsUnitForItem = (item: InventoryLookupItem): 'METER' | 'PIECE' => {
   if (item.type === 'PIECE' && !item.isPiecePackage) return 'PIECE';
@@ -235,6 +235,8 @@ function SalesCollapsibleSection({
 
 const SalesView: React.FC = () => {
   const { t } = useTranslation();
+  const salesBranches = useShopBranches();
+  const branchOptions = salesBranches.map((entry) => entry.code);
   const [branch, setBranch] = useState<string>(resolveInitialSalesBranch);
   const [cart, setCart] = useState<SaleLine[]>([]);
   const [priceMode, setPriceMode] = useState<SalePriceMode>('each');
@@ -1085,7 +1087,7 @@ const SalesView: React.FC = () => {
                 : 'bg-white text-gray-800 border border-gray-200 hover:bg-magenta-50'
             }`}
           >
-            Branch {option}
+            {salesBranches.find((entry) => entry.code === option)?.name || option}
           </button>
         ))}
       </section>
@@ -1143,7 +1145,7 @@ const SalesView: React.FC = () => {
                   className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
                 >
                   {branchOptions.map((option) => (
-                    <option key={option} value={option}>{t('common.branchLabel', { code: option })}</option>
+                    <option key={option} value={option}>{salesBranches.find((entry) => entry.code === option)?.name || option}</option>
                   ))}
                 </select>
               </div>

@@ -13,12 +13,12 @@ async function main() {
   console.log('🏢 Creating branches...');
   await prisma.branch.createMany({
     data: [
-      { id: 'B000', name: 'Storage', address: 'Warehouse', phone: '+1234567899' },
-      { id: 'B001', name: 'Branch A', address: '123 Market Street', phone: '+1234567890' },
-      { id: 'B002', name: 'Branch B', address: '456 City Center', phone: '+1234567891' },
-      { id: 'B003', name: 'Branch C', address: '789 Shopping Mall', phone: '+1234567892' },
-      { id: 'B004', name: 'Branch E', address: '901 East Plaza', phone: '+1234567893' },
-      { id: 'B005', name: 'Branch F', address: '1002 Fashion Row', phone: '+1234567894' },
+      { id: 'B000', code: 'S', name: 'Storage', address: 'Warehouse', phone: '+1234567899' },
+      { id: 'B001', code: 'A', name: 'Branch A', address: '123 Market Street', phone: '+1234567890' },
+      { id: 'B002', code: 'B', name: 'Branch B', address: '456 City Center', phone: '+1234567891' },
+      { id: 'B003', code: 'C', name: 'Branch C', address: '789 Shopping Mall', phone: '+1234567892' },
+      { id: 'B004', code: 'E', name: 'Branch E', address: '901 East Plaza', phone: '+1234567893' },
+      { id: 'B005', code: 'F', name: 'Branch F', address: '1002 Fashion Row', phone: '+1234567894' },
     ],
     skipDuplicates: true,
   });

@@ -4,6 +4,7 @@ import api from '../lib/api';
 import { useTranslation } from 'react-i18next';
 import { formatCurrency, parsePriceInput } from '../lib/currency';
 import { BRANCH_ID_BY_CODE } from '../lib/inventoryCodes';
+import { useShopBranches } from '../lib/useShopBranches';
 
 type Sale = {
   id: string;
@@ -29,9 +30,6 @@ type OwedRow = Sale & {
   paidAmount: number;
   outstandingAmount: number;
 };
-
-const branches = ['A', 'B', 'C', 'E', 'F'] as const;
-type BranchId = typeof branches[number];
 
 const toMoneyNumber = (value: unknown) => {
   const parsed = Number(value ?? 0);
@@ -60,7 +58,8 @@ const extractSales = (data: unknown): Sale[] => {
 
 const OwedMoney: React.FC = () => {
   const { t } = useTranslation();
-  const [selectedBranch, setSelectedBranch] = useState<BranchId | null>(null);
+  const branches = useShopBranches();
+  const [selectedBranch, setSelectedBranch] = useState<string | null>(null);
   const [sales, setSales] = useState<Sale[]>([]);
   const [loading, setLoading] = useState(false);
   const [savingPayment, setSavingPayment] = useState(false);
@@ -110,7 +109,7 @@ const OwedMoney: React.FC = () => {
 
   const outstandingTotal = owedRows.reduce((sum, sale) => sum + sale.outstandingAmount, 0);
 
-  const loadBranchOwed = async (branch: BranchId) => {
+  const loadBranchOwed = async (branch: string) => {
     setSelectedBranch(branch);
     setLoading(true);
     setError(null);
@@ -188,7 +187,7 @@ const OwedMoney: React.FC = () => {
     }
   };
 
-  const rowClass = () => 'border-red-400 border-l-8 bg-red-50';
+  const rowClass = (_sale: OwedRow) => 'border-red-400 border-l-8 bg-red-50';
 
   return (
     <div className="max-w-full overflow-x-hidden p-4">
@@ -204,19 +203,19 @@ const OwedMoney: React.FC = () => {
 
       <section className="mt-6 grid grid-cols-5 gap-3">
         {branches.map((branch) => {
-          const isSelected = selectedBranch === branch;
+          const isSelected = selectedBranch === branch.code;
           return (
             <button
-              key={branch}
+              key={branch.id}
               type="button"
-              onClick={() => loadBranchOwed(branch)}
+              onClick={() => loadBranchOwed(branch.code)}
               className={`rounded-2xl border px-4 py-3 text-sm font-semibold transition-all ${
                 isSelected
                   ? 'border-magenta-500 bg-magenta-500 text-white shadow-lg'
                   : 'border-gray-200 bg-white text-gray-800 hover:border-magenta-300 hover:bg-magenta-50'
               }`}
             >
-              Branch {branch}
+              {branch.name}
             </button>
           );
         })}

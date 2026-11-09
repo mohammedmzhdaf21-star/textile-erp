@@ -4,7 +4,8 @@ import api from '../lib/api';
 import { useTranslation } from 'react-i18next';
 import { formatCurrency } from '../lib/currency';
 import { getColorLabel } from '../lib/colorLabels';
-import { BRANCH_ID_BY_CODE } from '../lib/inventoryCodes';
+import { BRANCH_ID_BY_CODE, getSalesBranches } from '../lib/inventoryCodes';
+import { useShopBranches } from '../lib/useShopBranches';
 
 type DesignColorRow = {
   designCode: string;
@@ -38,9 +39,6 @@ type AnalysisReport = {
   tasks: TaskBreakdown;
 };
 
-const branches = ['A', 'B', 'C', 'E', 'F'] as const;
-type BranchId = (typeof branches)[number];
-
 const baghdadTodayKey = () =>
   new Intl.DateTimeFormat('en-CA', {
     timeZone: 'Asia/Baghdad',
@@ -58,7 +56,8 @@ const addCalendarDays = (dayKey: string, days: number) => {
 
 const rangeForFocus = (focus: string | null, branch: string | null) => {
   const today = baghdadTodayKey();
-  const selected = branches.includes(branch as BranchId) ? (branch as BranchId) : 'A';
+  const codes = getSalesBranches().map((entry) => entry.code);
+  const selected = branch && codes.includes(branch) ? branch : codes[0] || 'A';
   if (focus === 'daily') return { branch: selected, from: today, to: today };
   if (focus === 'history') return { branch: selected, from: addCalendarDays(today, -10), to: addCalendarDays(today, -1) };
   if (focus === 'every' || focus === 'tasks') {
@@ -71,7 +70,8 @@ const DataAnalysis: React.FC = () => {
   const { t } = useTranslation();
   const [params] = useSearchParams();
   const initial = rangeForFocus(params.get('focus'), params.get('branch'));
-  const [selectedBranch, setSelectedBranch] = useState<BranchId>(initial.branch);
+  const branches = useShopBranches();
+  const [selectedBranch, setSelectedBranch] = useState<string>(initial.branch);
   const [fromDate, setFromDate] = useState(initial.from);
   const [toDate, setToDate] = useState(initial.to);
   const [report, setReport] = useState<AnalysisReport | null>(null);
@@ -198,11 +198,11 @@ const DataAnalysis: React.FC = () => {
             <label className="block text-sm font-medium text-gray-700">{t('dataAnalysis.branch')}</label>
             <select
               value={selectedBranch}
-              onChange={(event) => setSelectedBranch(event.target.value as BranchId)}
+              onChange={(event) => setSelectedBranch(event.target.value)}
               className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
             >
               {branches.map((branch) => (
-                <option key={branch} value={branch}>{t('common.branchLabel', { code: branch })}</option>
+                <option key={branch.id} value={branch.code}>{branch.name}</option>
               ))}
             </select>
           </div>

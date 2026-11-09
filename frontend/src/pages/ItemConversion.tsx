@@ -3,12 +3,13 @@ import QRCode from 'qrcode';
 import api from '../lib/api';
 import { completeCuttingTasksAfterRollToPiece } from '../lib/cuttingTasks';
 import { BRANCH_CODE_BY_ID, BRANCH_ID_BY_CODE } from '../lib/inventoryCodes';
+import { useShopBranches } from '../lib/useShopBranches';
 import { cutRollToPieceStock, type RollInventoryItem } from '../lib/rollToPiece';
 import { getColorLabel } from '../lib/colorLabels';
 import { useTranslation } from 'react-i18next';
 import QrScanInput from '../components/QrScanInput';
 
-type BranchCode = 'A' | 'B' | 'C' | 'E' | 'F';
+type BranchCode = string;
 type ItemType = 'ROLL' | 'PIECE' | 'REMANENT';
 type SoldUnit = 'METER' | 'PIECE';
 
@@ -40,8 +41,6 @@ type ConversionSummary = {
   qrCodeDataUrl: string;
   details: string;
 };
-
-const branches: BranchCode[] = ['A', 'B', 'C', 'E', 'F'];
 
 const toNumber = (value: unknown) => {
   const parsed = Number(value ?? 0);
@@ -80,6 +79,7 @@ const createQrDataUrl = (itemId: string) =>
 
 const ItemConversion: React.FC = () => {
   const { t } = useTranslation();
+  const branches = useShopBranches();
   const [transferSourceId, setTransferSourceId] = useState('');
   const [transferSource, setTransferSource] = useState<InventoryItem | null>(null);
   const [transferToBranch, setTransferToBranch] = useState<BranchCode>('C');
@@ -352,7 +352,7 @@ const ItemConversion: React.FC = () => {
                 className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
               >
                 {branches.map((branch) => (
-                  <option key={branch} value={branch}>{t('common.branchLabel', { code: branch })}</option>
+                  <option key={branch.id} value={branch.code}>{branch.name}</option>
                 ))}
               </select>
             </div>

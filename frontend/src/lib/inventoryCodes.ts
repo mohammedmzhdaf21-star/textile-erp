@@ -3,24 +3,70 @@ import { buildPackageIdSuffix, type PackageComponent } from './piecePackages';
 
 export type InventoryItemType = 'ROLL' | 'PIECE' | 'REMANENT';
 
-export const BRANCH_DESTINATIONS = [
-  { code: 'A', id: 'B001', labelKey: 'branches.A' },
-  { code: 'B', id: 'B002', labelKey: 'branches.B' },
-  { code: 'C', id: 'B003', labelKey: 'branches.C' },
-  { code: 'E', id: 'B004', labelKey: 'branches.E' },
-  { code: 'F', id: 'B005', labelKey: 'branches.F' },
-  { code: 'S', id: 'B000', labelKey: 'branches.S' },
-] as const;
+export type ShopBranch = {
+  code: string;
+  id: string;
+  name: string;
+};
 
-export type BranchDestinationCode = (typeof BRANCH_DESTINATIONS)[number]['code'];
+export type BranchDestination = ShopBranch & { labelKey: string };
 
-export const BRANCH_ID_BY_CODE: Record<BranchDestinationCode, string> = Object.fromEntries(
+const FALLBACK_BRANCHES: ShopBranch[] = [
+  { code: 'A', id: 'B001', name: 'Branch A' },
+  { code: 'B', id: 'B002', name: 'Branch B' },
+  { code: 'C', id: 'B003', name: 'Branch C' },
+  { code: 'E', id: 'B004', name: 'Branch E' },
+  { code: 'F', id: 'B005', name: 'Branch F' },
+  { code: 'S', id: 'B000', name: 'Storage' },
+];
+
+const toDestination = (branch: ShopBranch): BranchDestination => ({
+  ...branch,
+  labelKey: `branches.${branch.code}`,
+});
+
+let shopBranches: ShopBranch[] = FALLBACK_BRANCHES.map((branch) => ({ ...branch }));
+
+export const BRANCH_DESTINATIONS: BranchDestination[] = FALLBACK_BRANCHES.map(toDestination);
+
+export type BranchDestinationCode = string;
+
+export const BRANCH_ID_BY_CODE: Record<string, string> = Object.fromEntries(
   BRANCH_DESTINATIONS.map((branch) => [branch.code, branch.id])
-) as Record<BranchDestinationCode, string>;
+);
 
-export const BRANCH_CODE_BY_ID: Record<string, BranchDestinationCode> = Object.fromEntries(
+export const BRANCH_CODE_BY_ID: Record<string, string> = Object.fromEntries(
   BRANCH_DESTINATIONS.map((branch) => [branch.id, branch.code])
 );
+
+export function getShopBranches() {
+  return shopBranches;
+}
+
+export function getSalesBranches() {
+  return shopBranches.filter((branch) => branch.code !== 'S');
+}
+
+export function applyShopBranches(rows: ShopBranch[]) {
+  const next = rows
+    .map((row) => ({
+      code: String(row.code || '').trim().toUpperCase(),
+      id: String(row.id || '').trim(),
+      name: String(row.name || '').trim() || String(row.code || '').trim().toUpperCase(),
+    }))
+    .filter((row) => row.code && row.id);
+  shopBranches = (next.length ? next : FALLBACK_BRANCHES).map((branch) => ({ ...branch }));
+  BRANCH_DESTINATIONS.splice(0, BRANCH_DESTINATIONS.length, ...shopBranches.map(toDestination));
+  for (const key of Object.keys(BRANCH_ID_BY_CODE)) delete BRANCH_ID_BY_CODE[key];
+  for (const key of Object.keys(BRANCH_CODE_BY_ID)) delete BRANCH_CODE_BY_ID[key];
+  for (const branch of shopBranches) {
+    BRANCH_ID_BY_CODE[branch.code] = branch.id;
+    BRANCH_CODE_BY_ID[branch.id] = branch.code;
+  }
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('shop-branches-updated'));
+  }
+}
 
 export const ITEM_TYPE_LABEL_KEYS: Record<InventoryItemType, string> = {
   ROLL: 'itemTypes.ROLL',
@@ -39,8 +85,11 @@ export const getItemTypeLabel = (t: TFunction, type: InventoryItemType) =>
   t(ITEM_TYPE_LABEL_KEYS[type]);
 
 export const getBranchLabel = (t: TFunction, code: BranchDestinationCode) => {
-  const destination = BRANCH_DESTINATIONS.find((branch) => branch.code === code);
-  return destination ? t(destination.labelKey) : code;
+  const destination = getShopBranches().find((branch) => branch.code === code);
+  const key = `branches.${code}`;
+  const translated = t(key);
+  if (translated !== key) return translated;
+  return destination?.name || t('branches.label', { code });
 };
 
 export function resolveBranchId(code: string): string {
@@ -62,6 +111,59 @@ export const formatSubCode = (price: number) =>
   Number.isInteger(price) ? String(price) : price.toFixed(2);
 
 export const padFamilyCode = (familyCode: number) => String(familyCode).padStart(3, '0');
+
+const DESIGN_LETTERS = 'abcdefghijklmnopqrstuvwxyz';
+
+/** Design letters under a numeric code: a–z, then aa–zz, then aaa–zzz. */
+export function normalizeDesignCode(value: string) {
+  return value.trim().toLowerCase();
+}
+
+export function isDesignCode(value: string) {
+  return /^[a-z]{1,3}$/.test(normalizeDesignCode(value));
+}
+
+export function designCodeIndex(value: string) {
+  const code = normalizeDesignCode(value);
+  if (!isDesignCode(code)) return -1;
+  const first = code.charCodeAt(0) - 97;
+  if (code.length === 1) return first;
+  const second = code.charCodeAt(1) - 97;
+  if (code.length === 2) return 26 + first * 26 + second;
+  const third = code.charCodeAt(2) - 97;
+  return 26 + 676 + first * 676 + second * 26 + third;
+}
+
+export function designCodeFromIndex(index: number) {
+  if (index < 26) return DESIGN_LETTERS[Math.max(0, index)] ?? 'a';
+  if (index < 26 + 676) {
+    const offset = index - 26;
+    return DESIGN_LETTERS[Math.floor(offset / 26)] + DESIGN_LETTERS[offset % 26];
+  }
+  const offset = Math.min(index - 26 - 676, 26 * 676 - 1);
+  return (
+    DESIGN_LETTERS[Math.floor(offset / 676)] +
+    DESIGN_LETTERS[Math.floor((offset % 676) / 26)] +
+    DESIGN_LETTERS[offset % 26]
+  );
+}
+
+export function nextDesignCode(existing: string[]) {
+  const used = new Set(
+    existing.map((value) => normalizeDesignCode(value)).filter((value) => isDesignCode(value))
+  );
+  const limit = 26 + 676 + 26 * 676;
+  for (let index = 0; index < limit; index += 1) {
+    const code = designCodeFromIndex(index);
+    if (!used.has(code)) return code;
+  }
+  return 'zzz';
+}
+
+export function formatDesignCodeForId(value?: string | null) {
+  const code = normalizeDesignCode(value ?? '');
+  return isDesignCode(code) ? code.toUpperCase() : '';
+}
 
 export const padSubCode = (subCode: number) => {
   const rounded = Math.round(subCode * 100) / 100;
@@ -180,20 +282,26 @@ export const resolveMeteredInstanceKey = (input: {
     colorId: string;
     type: InventoryItemType;
     packageKey?: string;
+    designCode?: string | null;
   }>;
   branchId: string;
   familyCode: number;
   subCode: number;
   colorId: string;
+  designCode?: string;
 }) => {
+  const wantedDesign =
+    input.designCode !== undefined ? normalizeDesignCode(input.designCode) : undefined;
   const matching = input.items.filter((item) => {
     const itemPrice = Number(item.subCode ?? item.costPrice ?? 0);
+    const itemDesign = normalizeDesignCode(item.designCode ?? '');
     return (
       item.branchId === input.branchId &&
       Number(item.code) === Number(input.familyCode) &&
       Math.abs(itemPrice - input.subCode) < 0.001 &&
       item.colorId === input.colorId &&
-      item.type === input.type
+      item.type === input.type &&
+      (wantedDesign === undefined || itemDesign === wantedDesign)
     );
   });
 
@@ -217,13 +325,16 @@ export const buildInventoryItemId = (input: {
   packageComponents?: PackageComponent[];
   isPiecePackage?: boolean;
   instanceKey?: string;
+  designCode?: string;
 }) => {
   const colorCode = colorCodeFromName(input.colorName, input.colorId);
   const typeLetter = typeCode(input.type);
+  const design = formatDesignCodeForId(input.designCode);
+  const designPart = design ? `-${design}` : '';
 
   if (input.isPiecePackage && input.packageComponents?.length) {
     const packageSuffix = buildPackageIdSuffix(input.packageComponents);
-    return `${input.branchId}-${padFamilyCode(input.familyCode)}-${padSubCode(input.subCode)}-${colorCode}${typeLetter}-${packageSuffix}`;
+    return `${input.branchId}-${padFamilyCode(input.familyCode)}${designPart}-${padSubCode(input.subCode)}-${colorCode}${typeLetter}-${packageSuffix}`;
   }
 
   const lengthSuffix =
@@ -237,7 +348,7 @@ export const buildInventoryItemId = (input: {
         ? `-${formatMeteredInstanceIdSuffix(input.instanceKey, input.type)}`
         : ''
     : '';
-  return `${input.branchId}-${padFamilyCode(input.familyCode)}-${padSubCode(input.subCode)}-${colorCode}${typeLetter}${lengthSuffix}${instanceSuffix}`;
+  return `${input.branchId}-${padFamilyCode(input.familyCode)}${designPart}-${padSubCode(input.subCode)}-${colorCode}${typeLetter}${lengthSuffix}${instanceSuffix}`;
 };
 
 export type ParsedInventoryItemId = {

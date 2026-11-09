@@ -2,7 +2,8 @@ import React, { useEffect, useMemo, useState } from 'react';
 import api from '../lib/api';
 import { useTranslation } from 'react-i18next';
 import { formatCurrency } from '../lib/currency';
-import { BRANCH_ID_BY_CODE } from '../lib/inventoryCodes';
+import { BRANCH_ID_BY_CODE, getSalesBranches } from '../lib/inventoryCodes';
+import { useShopBranches } from '../lib/useShopBranches';
 import {
   createTrusteeRule,
   deleteTrusteeRule,
@@ -11,7 +12,7 @@ import {
   type TrusteeRule,
 } from '../lib/trusteesApi';
 
-type BranchCode = 'A' | 'B' | 'C' | 'E' | 'F';
+type BranchCode = string;
 
 type SaleItem = {
   inventoryItemId?: string | null;
@@ -60,10 +61,13 @@ type DailyBreakdown = {
   sales: Sale[];
 };
 
-const branches: BranchCode[] = ['A', 'B', 'C', 'E', 'F'];
+const salesBranchCodes = () => getSalesBranches().map((entry) => entry.code);
+
+const emptySalesByBranch = (): Record<string, Sale[]> =>
+  Object.fromEntries(salesBranchCodes().map((code) => [code, []]));
 
 const toBranchCodes = (values: string[]) =>
-  branches.filter((branch) => values.includes(branch));
+  values.filter((value) => salesBranchCodes().includes(value));
 
 const toMoneyNumber = (value: unknown) => {
   const parsed = Number(value ?? 0);
@@ -114,7 +118,7 @@ const extractSales = (data: unknown): Sale[] => {
 };
 
 const uniqueBranches = (values: BranchCode[]) =>
-  branches.filter((branch) => values.includes(branch));
+  [...new Set(values.filter((value) => salesBranchCodes().includes(value)))];
 
 const branchBreakdownForRule = (
   ruleBranches: BranchCode[],
@@ -176,7 +180,7 @@ const dayExpansionKey = (resultId: string, branch: BranchCode, date: string) =>
   `${resultId}:${branch}:${date}`;
 
 const isBranchCode = (value: unknown): value is BranchCode =>
-  typeof value === 'string' && branches.includes(value as BranchCode);
+  typeof value === 'string' && salesBranchCodes().includes(value);
 
 const normalizeRule = (rule: TrusteeRule): TrusteeRuleView => {
   const assignedBranches = toBranchCodes(rule.branches.filter(isBranchCode));
@@ -189,6 +193,7 @@ const normalizeRule = (rule: TrusteeRule): TrusteeRuleView => {
 
 const TrusteeCommission: React.FC = () => {
   const { t } = useTranslation();
+  const branches = useShopBranches();
   const today = new Date();
   const weekAgo = new Date();
   weekAgo.setDate(today.getDate() - 7);
@@ -202,13 +207,7 @@ const TrusteeCommission: React.FC = () => {
   const [assignedBranches, setAssignedBranches] = useState<BranchCode[]>([]);
   const [percentage, setPercentage] = useState('0');
   const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
-  const [salesByBranch, setSalesByBranch] = useState<Record<BranchCode, Sale[]>>({
-    A: [],
-    B: [],
-    C: [],
-    E: [],
-    F: [],
-  });
+  const [salesByBranch, setSalesByBranch] = useState<Record<string, Sale[]>>(emptySalesByBranch);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -376,7 +375,7 @@ const TrusteeCommission: React.FC = () => {
       end.setHours(23, 59, 59, 999);
 
       if (start > end) {
-        setSalesByBranch({ A: [], B: [], C: [], E: [], F: [] });
+        setSalesByBranch(emptySalesByBranch());
         setError(t('trusteeCommission.invalidDateRange'));
         setLoading(false);
         return;
@@ -402,17 +401,13 @@ const TrusteeCommission: React.FC = () => {
       );
 
       setSalesByBranch({
-        A: [],
-        B: [],
-        C: [],
-        E: [],
-        F: [],
+        ...emptySalesByBranch(),
         ...Object.fromEntries(loadedEntries),
       });
     } catch (err: any) {
       const status = err?.response?.status;
       const body = err?.response?.data;
-      setSalesByBranch({ A: [], B: [], C: [], E: [], F: [] });
+      setSalesByBranch(emptySalesByBranch());
       setError(
         `Request failed${status ? ` (status ${status})` : ''}: ${
           body?.error ?? body?.message ?? err?.message ?? t('trusteeCommission.failedToLoad')
@@ -465,16 +460,16 @@ const TrusteeCommission: React.FC = () => {
             <div className="mt-2 grid grid-cols-5 gap-2">
               {branches.map((branch) => (
                 <button
-                  key={branch}
+                  key={branch.id}
                   type="button"
-                  onClick={() => toggleAssignedBranch(branch)}
+                  onClick={() => toggleAssignedBranch(branch.code)}
                   className={`rounded-xl border px-3 py-2 text-sm font-semibold ${
-                    assignedBranches.includes(branch)
+                    assignedBranches.includes(branch.code)
                       ? 'border-magenta-500 bg-magenta-500 text-white'
                       : 'border-gray-200 bg-white text-gray-700 hover:border-magenta-300'
                   }`}
                 >
-                  {branch}
+                  {branch.name}
                 </button>
               ))}
             </div>

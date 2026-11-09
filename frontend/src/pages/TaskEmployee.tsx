@@ -3,9 +3,9 @@ import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { getCurrentUser } from '../lib/auth';
 import { isAutoManagedCuttingTask } from '../lib/cuttingTasks';
-import { BRANCH_CODE_BY_ID } from '../lib/inventoryCodes';
+import { BRANCH_CODE_BY_ID, getSalesBranches } from '../lib/inventoryCodes';
+import { useShopBranches } from '../lib/useShopBranches';
 import {
-  branches,
   getScheduleLabel,
   getTaskDisplayTitle,
   isTaskComplete,
@@ -17,8 +17,8 @@ import { completeTaskApi, fetchTasks, notifyTasksUpdated } from '../lib/tasksApi
 const defaultBranchForUser = (branchIds?: string[]): BranchCode => {
   if (branchIds?.length) {
     const code = BRANCH_CODE_BY_ID[branchIds[0]];
-    if (code && branches.includes(code as BranchCode)) {
-      return code as BranchCode;
+    if (code && getSalesBranches().some((entry) => entry.code === code)) {
+      return code;
     }
   }
   return 'A';
@@ -26,6 +26,7 @@ const defaultBranchForUser = (branchIds?: string[]): BranchCode => {
 
 const TaskEmployee: React.FC = () => {
   const { t } = useTranslation();
+  const branches = useShopBranches();
   const user = getCurrentUser();
   const [selectedBranch, setSelectedBranch] = useState<BranchCode>(() =>
     defaultBranchForUser(user?.branchIds)
@@ -114,16 +115,16 @@ const TaskEmployee: React.FC = () => {
       <section className="mt-6 grid grid-cols-5 gap-3">
         {branches.map((branch) => (
           <button
-            key={branch}
+            key={branch.id}
             type="button"
-            onClick={() => setSelectedBranch(branch)}
+            onClick={() => setSelectedBranch(branch.code)}
             className={`rounded-2xl border px-4 py-3 text-sm font-semibold transition ${
-              selectedBranch === branch
+              selectedBranch === branch.code
                 ? 'border-magenta-500 bg-magenta-500 text-white shadow-lg'
                 : 'border-gray-200 bg-white text-gray-800 hover:border-magenta-300 hover:bg-magenta-50'
             }`}
           >
-            {t('branches.label', { code: branch })}
+            {branch.name}
           </button>
         ))}
       </section>

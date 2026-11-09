@@ -894,6 +894,218 @@ export async function getSale(id: string) {
 // ============================================================
 // VOID A SALE (restocks inventory)
 // ============================================================
+const SALE_PAYMENT_METHODS = ['CASH', 'FIB', 'CARD', 'TRANSFER', 'CREDIT'] as const;
+export type SalePaymentMethod = (typeof SALE_PAYMENT_METHODS)[number];
+
+export interface UpdateSaleItemInput {
+  id: string;
+  quantitySold: number;
+  lineTotal: number;
+}
+
+export interface UpdateSaleInput {
+  customerName: string;
+  customerPhone: string;
+  paymentMethod: SalePaymentMethod;
+  notes?: string | null;
+  items: UpdateSaleItemInput[];
+}
+
+/** Split a line total into a unit price and a remainder discount so quantity × price − discount matches. */
+export function splitLineTotal(lineTotal: number, quantity: number) {
+  const total = Math.round((Number.isFinite(lineTotal) ? lineTotal : 0) * 100) / 100;
+  if (!Number.isFinite(quantity) || quantity <= 0) {
+    throw new Error('Quantity must be positive');
+  }
+  if (total < 0) throw new Error('Price cannot be negative');
+  if (total === 0) return { soldPrice: 0, lineDiscount: 0 };
+
+  let soldPrice = Math.round((total / quantity) * 100) / 100;
+  let gross = Math.round(soldPrice * quantity * 100) / 100;
+  if (gross + 0.001 < total) {
+    soldPrice = Math.round((soldPrice + 0.01) * 100) / 100;
+    gross = Math.round(soldPrice * quantity * 100) / 100;
+  }
+  return {
+    soldPrice,
+    lineDiscount: Math.max(0, Math.round((gross - total) * 100) / 100),
+  };
+}
+
+export async function updateSale(
+  saleId: string,
+  input: UpdateSaleInput,
+  performedById?: string,
+  performedByEmail?: string
+) {
+  const customerName = input.customerName?.trim() ?? '';
+  const customerPhone = input.customerPhone?.trim() ?? '';
+  if (!customerName) throw new Error('Customer name is required');
+  if (!customerPhone) throw new Error('Customer phone is required');
+  if (!SALE_PAYMENT_METHODS.includes(input.paymentMethod)) {
+    throw new Error('Payment method is not valid');
+  }
+  if (!input.items?.length) throw new Error('Sale must have at least one item');
+
+  const sale = await prisma.$transaction(async (tx) => {
+    const existingSale = await tx.sale.findUnique({
+      where: { id: saleId },
+      include: {
+        items: true,
+        payments: true,
+        refunds: true,
+        commissionEntries: { select: { status: true } },
+      },
+    });
+
+    if (!existingSale) throw new Error('Sale not found');
+    if (existingSale.isVoided) throw new Error('Cannot edit a voided sale');
+
+    const isExchange = (existingSale.notes ?? '').includes('EXCHANGE');
+    const hasPaidCommission = existingSale.commissionEntries.some((entry) => entry.status === 'PAID');
+    const itemById = new Map(existingSale.items.map((item) => [item.id, item]));
+
+    if (
+      input.items.length !== existingSale.items.length ||
+      input.items.some((item) => !itemById.has(item.id))
+    ) {
+      throw new Error('Sale lines cannot be added or removed. Delete the sale and enter it again.');
+    }
+
+    const nextLines = input.items.map((item) => {
+      const existing = itemById.get(item.id)!;
+      const oldQty = parseFloat(existing.quantitySold.toString());
+      const oldPrice = parseFloat(existing.soldPrice.toString());
+      const oldDiscount = parseFloat(existing.lineDiscount.toString());
+      const oldTotal = Math.round((oldPrice * oldQty - oldDiscount) * 100) / 100;
+      const quantitySold = Math.round(item.quantitySold * 100) / 100;
+      const lineTotal = Math.round(item.lineTotal * 100) / 100;
+      const qtyChanged = Math.abs(quantitySold - oldQty) > 0.001;
+      const totalChanged = Math.abs(lineTotal - oldTotal) > 0.02;
+      const parts =
+        !qtyChanged && !totalChanged
+          ? { soldPrice: oldPrice, lineDiscount: oldDiscount }
+          : splitLineTotal(lineTotal, quantitySold);
+      return { existing, parts, qtyChanged, totalChanged, quantitySold, lineTotal };
+    });
+
+    if (isExchange && nextLines.some((line) => line.qtyChanged || line.totalChanged)) {
+      throw new Error('An exchange can only change the customer, phone, payment method, and notes.');
+    }
+    if (hasPaidCommission && nextLines.some((line) => line.qtyChanged || line.totalChanged)) {
+      throw new Error('This sale has a paid commission, so its prices and quantities stay as they are.');
+    }
+    if (nextLines.some((line) => line.qtyChanged && line.existing.isPiecePackage)) {
+      throw new Error('Package quantities cannot be changed. Delete the sale and enter it again.');
+    }
+
+    for (const line of nextLines) {
+      if (!line.qtyChanged || !line.existing.inventoryItemId || line.existing.isPlainCloth) continue;
+      const oldQty = parseFloat(line.existing.quantitySold.toString());
+      const delta = Math.round((line.quantitySold - oldQty) * 100) / 100;
+      if (Math.abs(delta) < 0.001) continue;
+      const movement = {
+        inventoryItemId: line.existing.inventoryItemId,
+        soldAsUnit: line.existing.soldAsUnit,
+        quantitySold: Math.abs(delta),
+      };
+      if (delta > 0) {
+        await deductInventoryForSaleItem(tx, movement, existingSale.branchId);
+      } else {
+        await restoreInventoryForSaleItem(tx, movement);
+      }
+    }
+
+    for (const line of nextLines) {
+      if (!line.qtyChanged && !line.totalChanged) continue;
+      await tx.saleItem.update({
+        where: { id: line.existing.id },
+        data: {
+          quantitySold: new Prisma.Decimal(line.quantitySold.toFixed(2)),
+          soldPrice: new Prisma.Decimal(line.parts.soldPrice.toFixed(2)),
+          lineDiscount: new Prisma.Decimal(line.parts.lineDiscount.toFixed(2)),
+        },
+      });
+    }
+
+    const discount = parseFloat(existingSale.discount.toString());
+    const lineSum = nextLines.reduce(
+      (sum, line) => sum + line.parts.soldPrice * line.quantitySold - line.parts.lineDiscount,
+      0
+    );
+    const totalPrice = Math.round(((isExchange ? parseFloat(existingSale.totalPrice.toString()) : lineSum - discount) * 100)) / 100;
+    if (totalPrice < 0) throw new Error('Total price cannot be negative after discounts');
+
+    const matchedCustomer = await tx.customer.findUnique({ where: { phone: customerPhone } });
+
+    await tx.sale.update({
+      where: { id: saleId },
+      data: {
+        customerName,
+        customerPhone,
+        customerId: matchedCustomer?.id ?? null,
+        paymentMethod: input.paymentMethod,
+        notes: input.notes?.trim() ? input.notes.trim() : null,
+        totalPrice: new Prisma.Decimal(totalPrice.toFixed(2)),
+      },
+    });
+
+    if (!isExchange && existingSale.refunds.length === 0 && existingSale.payments.length === 1) {
+      const paid = parseFloat(existingSale.payments[0].amount.toString());
+      const oldTotal = parseFloat(existingSale.totalPrice.toString());
+      if (Math.abs(paid - oldTotal) < 0.02) {
+        await tx.salePayment.update({
+          where: { id: existingSale.payments[0].id },
+          data: { amount: new Prisma.Decimal(totalPrice.toFixed(2)) },
+        });
+      }
+    }
+
+    const linesChanged = nextLines.some((line) => line.qtyChanged || line.totalChanged);
+    if (!isExchange && !hasPaidCommission && linesChanged) {
+      await removePendingCommissionsForSale(tx, saleId);
+      await recordCommissionsForSale(tx, {
+        employeeId: existingSale.employeeId,
+        saleId,
+        lines: nextLines.map((line) => ({
+          id: line.existing.id,
+          inventoryItemId: line.existing.inventoryItemId,
+          isPlainCloth: line.existing.isPlainCloth,
+          plainClothName: line.existing.plainClothName,
+          soldPrice: line.parts.soldPrice,
+          quantitySold: line.quantitySold,
+          lineDiscount: line.parts.lineDiscount,
+          soldAsUnit: line.existing.soldAsUnit,
+        })),
+      });
+    }
+
+    await tx.auditLog.create({
+      data: {
+        entityType: 'Sale',
+        entityId: saleId,
+        action: 'UPDATE',
+        performedById: performedById || null,
+        performedByEmail: performedByEmail || null,
+        branchId: existingSale.branchId,
+        changes: {
+          customerName,
+          customerPhone,
+          paymentMethod: input.paymentMethod,
+          totalPrice,
+        } as Prisma.InputJsonValue,
+      },
+    });
+
+    return tx.sale.findUnique({
+      where: { id: saleId },
+      include: saleIncludeWithPayments,
+    });
+  });
+
+  return sale ? enrichSaleWithBalance(sale) : sale;
+}
+
 export async function voidSale(
   saleId: string,
   reason: string,

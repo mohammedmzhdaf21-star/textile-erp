@@ -3,6 +3,7 @@ import {
   createSale,
   listSales,
   getSale,
+  updateSale,
   voidSale,
   processRefund,
   processExchange,
@@ -331,6 +332,72 @@ router.get('/:id', async (req: Request, res: Response) => {
     return res.status(500).json({ error: msg });
   }
 });
+
+// ============================================================
+// PUT /api/sales/:id (ADMIN, MANAGER)
+// ============================================================
+router.put(
+  '/:id',
+  requireRole('ADMIN', 'MANAGER'),
+  async (req: Request, res: Response) => {
+    try {
+      const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+      const { customerName, customerPhone, paymentMethod, notes, items } = req.body ?? {};
+
+      if (!id) {
+        return res.status(400).json({ error: 'Sale id is required' });
+      }
+      if (!req.user?.userId) {
+        return res.status(401).json({ error: 'User identification missing' });
+      }
+
+      const parsedItems = Array.isArray(items)
+        ? items.map((item) => ({
+            id: String(item?.id ?? ''),
+            quantitySold: parseFloat(String(item?.quantitySold)),
+            lineTotal: parseFloat(String(item?.lineTotal)),
+          }))
+        : [];
+
+      const sale = await updateSale(
+        id,
+        {
+          customerName: String(customerName ?? ''),
+          customerPhone: String(customerPhone ?? ''),
+          paymentMethod,
+          notes: notes === undefined || notes === null ? null : String(notes),
+          items: parsedItems,
+        },
+        req.user.userId,
+        req.user.email
+      );
+
+      return res.status(200).json({ message: 'Sale updated', sale });
+    } catch (error: any) {
+      const msg = error.message || 'Failed to update sale';
+      if (msg.includes('not found')) {
+        return res.status(404).json({ error: msg });
+      }
+      if (
+        msg.includes('required') ||
+        msg.includes('valid') ||
+        msg.includes('positive') ||
+        msg.includes('negative') ||
+        msg.includes('voided') ||
+        msg.includes('cannot') ||
+        msg.includes('Cannot') ||
+        msg.includes('paid commission') ||
+        msg.includes('exchange') ||
+        msg.includes('Package') ||
+        msg.includes('Not enough') ||
+        msg.includes('lines cannot')
+      ) {
+        return res.status(400).json({ error: msg });
+      }
+      return res.status(500).json({ error: msg });
+    }
+  }
+);
 
 // ============================================================
 // POST /api/sales/:id/void (MANAGER+ only)

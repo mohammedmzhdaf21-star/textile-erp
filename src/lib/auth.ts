@@ -94,7 +94,7 @@ export async function registerEmployee(input: {
 export async function listPublicBranches() {
   return prisma.branch.findMany({
     where: { isActive: true, deletedAt: null },
-    select: { id: true, name: true },
+    select: { id: true, code: true, name: true },
     orderBy: { id: 'asc' },
   });
 }

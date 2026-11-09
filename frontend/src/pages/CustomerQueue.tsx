@@ -4,6 +4,7 @@ import { getCurrentUser, type User } from '../lib/auth';
 import {
   BRANCH_CODE_BY_ID,
   BRANCH_DESTINATIONS,
+  getBranchLabel,
   BRANCH_ID_BY_CODE,
   type BranchDestinationCode,
 } from '../lib/inventoryCodes';
@@ -134,7 +135,7 @@ const CustomerQueue: React.FC = () => {
         >
           {BRANCH_DESTINATIONS.map((branch) => (
             <option key={branch.code} value={branch.code}>
-              {t(branch.labelKey)} ({branch.id})
+              {getBranchLabel(t, branch.code)} ({branch.id})
             </option>
           ))}
         </select>

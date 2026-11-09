@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { ensureCommissionSettingsSynced } from '../lib/commissionSettingsApi';
+import api from '../lib/api';
+import { applyShopBranches } from '../lib/inventoryCodes';
 import Sidebar from './Sidebar';
 import SidebarToggle from './SidebarToggle';
 
@@ -12,6 +14,7 @@ type AppShellProps = {
 
 const AppShell: React.FC<AppShellProps> = ({ children }) => {
   const location = useLocation();
+  const [branchVersion, setBranchVersion] = useState(0);
   const [isOpen, setIsOpen] = useState(() => {
     const stored = localStorage.getItem(SIDEBAR_STORAGE_KEY);
     return stored === null ? true : stored === 'true';
@@ -27,6 +30,19 @@ const AppShell: React.FC<AppShellProps> = ({ children }) => {
 
   useEffect(() => {
     void ensureCommissionSettingsSynced();
+    void api
+      .get<{ branches: Array<{ id: string; code: string; name: string }> }>('/branches')
+      .then((response) => {
+        applyShopBranches(response.data.branches ?? []);
+        setBranchVersion((current) => current + 1);
+      })
+      .catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    const sync = () => setBranchVersion((current) => current + 1);
+    window.addEventListener('shop-branches-updated', sync);
+    return () => window.removeEventListener('shop-branches-updated', sync);
   }, []);
 
   useEffect(() => {
@@ -59,7 +75,7 @@ const AppShell: React.FC<AppShellProps> = ({ children }) => {
       />
       <SidebarToggle isOpen={isOpen} onToggle={toggleSidebar} />
       <main className={`app-shell__main ${isOpen ? 'app-shell__main--with-sidebar' : ''}`}>
-        <div className="app-shell__content">{children}</div>
+        <div className="app-shell__content" data-branches={branchVersion}>{children}</div>
       </main>
     </div>
   );
