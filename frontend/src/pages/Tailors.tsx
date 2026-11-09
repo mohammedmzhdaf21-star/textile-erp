@@ -244,10 +244,6 @@ const Tailors: React.FC = () => {
       remaining: formatCurrency(item.remainingIqd),
       clothesLabel: t('tailors.clothes'),
       clothes: item.garments.map(garmentLine),
-      sellerLabel: t('tailors.seller'),
-      seller: item.sellerName ?? '',
-      commissionLabel: t('tailors.commission'),
-      commission: item.sellerName || item.commissionIqd > 0 ? formatCurrency(item.commissionIqd) : '',
       dir: i18n.language === 'ckb' ? 'rtl' : 'ltr',
     });
     if (!printTailorReceipt(html)) {
@@ -633,18 +629,6 @@ const Tailors: React.FC = () => {
                     {garmentLine(garment)}
                   </p>
                 ))}
-              </>
-            )}
-            {receipt.sellerName && (
-              <>
-                <p className="mt-4 text-xs uppercase tracking-wide text-gray-500">{t('tailors.seller')}</p>
-                <p className="text-lg font-semibold text-black">{receipt.sellerName}</p>
-              </>
-            )}
-            {(receipt.sellerName || receipt.commissionIqd > 0) && (
-              <>
-                <p className="mt-4 text-xs uppercase tracking-wide text-gray-500">{t('tailors.commission')}</p>
-                <p className="text-lg font-semibold text-black">{formatCurrency(receipt.commissionIqd)}</p>
               </>
             )}
             <p className="mt-4 text-xs uppercase tracking-wide text-gray-500">{t('tailors.cost')}</p>

@@ -41,6 +41,8 @@ describe('tailor receipt', () => {
     assert.match(html, /کەوا — 2 pieces/);
     assert.match(html, /ژێر کراس — One piece/);
     assert.match(html, /کاری دەستی — 1 piece/);
+    assert.doesNotMatch(html, /commission/i);
+    assert.doesNotMatch(html, /Employee who sold/);
     assert.equal(formatReceiptDate('2026-11-12', 'ckb'), 'پێنجشەممە، 12ی تشرینی دووەم 2026');
   });
 
