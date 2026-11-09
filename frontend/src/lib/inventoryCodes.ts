@@ -105,8 +105,6 @@ export const colorCodeFromName = (name: string, fallbackId = '') =>
     .toUpperCase()
     .slice(0, 3) || fallbackId.slice(0, 3).toUpperCase();
 
-import { formatCurrency } from './currency';
-
 export const formatSubCode = (price: number) =>
   Number.isInteger(price) ? String(price) : price.toFixed(2);
 
@@ -354,6 +352,7 @@ export const buildInventoryItemId = (input: {
 export type ParsedInventoryItemId = {
   branchId?: string;
   familyCode?: number;
+  designCode?: string;
   subCode?: number;
   colorCode?: string;
   type?: InventoryItemType;
@@ -370,23 +369,16 @@ export const parseInventoryItemId = (raw: string): ParsedInventoryItemId => {
   const value = raw.trim();
   const result: ParsedInventoryItemId = { raw: value };
 
-  const modern = value.match(/^([A-Z]\d{3})-(\d{3})-(\d+)-([A-Z]{3})([RPM])(\d{4})?(?:-P(\d{2}))?$/i);
+  const modern = value.match(
+    /^([A-Z]\d{3})-(\d+)-(?:([A-Z]{1,3})-)?(\d+)-([A-Z]{3})([RPM])(\d{4})?(?:-P(\d{2}))?(?:-[RM]\d{2})?$/i
+  );
   if (modern) {
     result.branchId = modern[1].toUpperCase();
     result.familyCode = Number(modern[2]);
-    result.subCode = Number(modern[3]);
-    result.colorCode = modern[4].toUpperCase();
-    result.type = TYPE_FROM_SUFFIX[modern[5].toUpperCase()];
-    return result;
-  }
-
-  const modernShort = value.match(/^([A-Z]\d{3})-(\d{3})-(\d+)-([A-Z]{3})([RPM])$/i);
-  if (modernShort) {
-    result.branchId = modernShort[1].toUpperCase();
-    result.familyCode = Number(modernShort[2]);
-    result.subCode = Number(modernShort[3]);
-    result.colorCode = modernShort[4].toUpperCase();
-    result.type = TYPE_FROM_SUFFIX[modernShort[5].toUpperCase()];
+    result.designCode = modern[3] ? modern[3].toLowerCase() : '';
+    result.subCode = Number(modern[4]);
+    result.colorCode = modern[5].toUpperCase();
+    result.type = TYPE_FROM_SUFFIX[modern[6].toUpperCase()];
     return result;
   }
 
@@ -407,6 +399,7 @@ export type InventoryStockItem = {
   id: string;
   branchId: string;
   code: number;
+  designCode?: string | null;
   subCode?: number | string;
   costPrice?: number | string;
   colorId: string;
@@ -434,9 +427,16 @@ export type BranchStockRow = {
 export const aggregateFamilyStock = (
   items: InventoryStockItem[],
   familyCode: number,
-  colorId: string
+  colorId: string,
+  designCode?: string | null
 ): BranchStockRow[] => {
-  const matching = items.filter((item) => item.code === familyCode && item.colorId === colorId);
+  const wantedDesign =
+    designCode === undefined || designCode === null ? undefined : normalizeDesignCode(designCode);
+  const matching = items.filter((item) => {
+    if (Number(item.code) !== Number(familyCode) || item.colorId !== colorId) return false;
+    if (wantedDesign === undefined) return true;
+    return normalizeDesignCode(item.designCode ?? '') === wantedDesign;
+  });
 
   const byBranch = new Map<string, BranchStockRow>();
 
@@ -765,6 +765,40 @@ export const aggregatePieceBreakdown = (rows: BranchStockRow[], branchId?: strin
 /** @deprecated Use formatMetersAmount */
 export const formatPieceLength = formatMetersAmount;
 
+const escapeLabelText = (value: string) =>
+  value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+
+/** Printed shelf tag: the QR image and the item code only. */
+export const buildInventoryLabelHtml = (itemId: string, qrDataUrl: string) => {
+  const safeId = escapeLabelText(itemId);
+  const safeQr = escapeLabelText(qrDataUrl);
+  return `<!DOCTYPE html>
+<html>
+  <head>
+    <title>${safeId}</title>
+    <style>
+      body { font-family: Arial, sans-serif; margin: 24px; color: #111; }
+      .label { border: 2px solid #111; border-radius: 16px; padding: 16px; max-width: 280px; }
+      .qr { display: flex; justify-content: center; }
+      .qr img { width: 240px; height: 240px; }
+      .id { margin-top: 12px; text-align: center; font-size: 14px; font-weight: 700; word-break: break-all; }
+      @media print { body { margin: 0; } .label { border: none; } }
+    </style>
+  </head>
+  <body>
+    <div class="label">
+      <div class="qr"><img src="${safeQr}" alt="${safeId}" /></div>
+      <div class="id">${safeId}</div>
+    </div>
+    <script>window.onload = () => { window.print(); };</script>
+  </body>
+</html>`;
+};
+
 export const printInventoryLabel = (input: {
   itemId: string;
   qrDataUrl: string;
@@ -785,42 +819,12 @@ export const printInventoryLabel = (input: {
     destination: string;
   };
 }) => {
-  const subCodeLabel = formatCurrency(input.subCode);
-  const popup = window.open('', '_blank', 'width=480,height=720');
+  const popup = window.open('', '_blank', 'width=420,height=560');
   if (!popup) {
     return false;
   }
 
-  popup.document.write(`<!DOCTYPE html>
-<html>
-  <head>
-    <title>Print ${input.itemId}</title>
-    <style>
-      body { font-family: Arial, sans-serif; margin: 24px; color: #111; }
-      .label { border: 2px solid #111; border-radius: 16px; padding: 20px; max-width: 360px; }
-      .title { font-size: 18px; font-weight: 700; margin-bottom: 12px; }
-      .row { display: flex; justify-content: space-between; margin: 6px 0; font-size: 14px; }
-      .qr { display: flex; justify-content: center; margin: 16px 0; }
-      .qr img { width: 220px; height: 220px; }
-      .id { text-align: center; font-size: 13px; font-weight: 700; word-break: break-all; }
-      @media print { body { margin: 0; } }
-    </style>
-  </head>
-  <body>
-    <div class="label">
-      <div class="title">${input.labels.title}</div>
-      <div class="row"><span>${input.labels.familyCode}</span><strong>${input.familyCode}</strong></div>
-      <div class="row"><span>${input.labels.subCode}</span><strong>${subCodeLabel}</strong></div>
-      <div class="row"><span>${input.labels.type}</span><strong>${input.typeLabel}</strong></div>
-      <div class="row"><span>${input.labels.amount}</span><strong>${input.amountLabel}</strong></div>
-      <div class="row"><span>${input.labels.color}</span><strong>${input.colorName}</strong></div>
-      <div class="row"><span>${input.labels.destination}</span><strong>${input.branchLabel}</strong></div>
-      <div class="qr"><img src="${input.qrDataUrl}" alt="QR code" /></div>
-      <div class="id">${input.itemId}</div>
-    </div>
-    <script>window.onload = () => { window.print(); };</script>
-  </body>
-</html>`);
+  popup.document.write(buildInventoryLabelHtml(input.itemId, input.qrDataUrl));
   popup.document.close();
   return true;
 };
